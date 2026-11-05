@@ -17,6 +17,8 @@ El repositorio partía de un README. Esta fase añade documentación de diseño,
 - [Importación local, nubes, OPDS y guía Kindle](docs/IMPORTACION_Y_NUBES.md).
 - [Preparación del PC, compilación, instalación y pruebas](docs/PC_Y_VALIDACION.md).
 - [Hito 1: guía paso a paso para Pop!_OS y Quest 3](docs/HITO1_GUIA.md).
+- [Hito 2: enfoque propuesto para páginas EPUB en 3D](docs/HITO2_ENFOQUE.md) — pendiente de aprobación (incluye una decisión de licencia).
+- [Muestras pequeñas](tests/fixtures/LEEME.md) y [generadores de archivos gigantes](tools/test-data/LEEME.md).
 
 ## Objetivo del producto
 
@@ -170,5 +172,9 @@ Estantería VR/passthrough, carpetas, renombrar, búsqueda e índice enriquecido
 ## Próxima conversación
 
 Leer este archivo y los documentos enlazados, revisar `git status` y respetar el trabajo existente. Usar la copia de este repositorio en `/workspace`; la tarea cloud ya está aislada y no necesita un worktree nuevo.
+
+**Pendientes del usuario:** (1) probar el Hito 1 en el visor; (2) aprobar el enfoque del Hito 2 y decidir la licencia (MuPDF es AGPL; ver `docs/HITO2_ENFOQUE.md`).
+
+Avance sin depender del visor (5 de noviembre de 2026, rama `fase-1/preparacion`): muestras en `tests/fixtures/` (EPUB válido según epubcheck 5.3.0, CBZ, manga RTL, TXT en 4 codificaciones) y `tools/test-data/gigantes.py` (PDF de 100.001 páginas verificado con poppler y qpdf, TXT, CBZ y EPUB de estrés). Esto adelanta parte del generador previsto para la Fase 4.
 
 **Esperar la confirmación del usuario sobre el Hito 1 (prueba en el visor).** Si falla, corregir a partir de su registro (`adb logcat`) y del paso de `docs/HITO1_GUIA.md` donde se detuvo. Si funciona: anotar las versiones reales, unir la rama y plantear el enfoque del Hito 2 (EPUB en textura 3D) antes de programarlo. Obtener antes de instalar en el PC su versión de Pop!_OS, CPU/GPU/RAM y espacio libre; no son datos necesarios para cerrar esta Fase 0. Actualizar aquí resultados, decisiones, limitaciones, instrucciones y checklist al cerrar cada fase.
