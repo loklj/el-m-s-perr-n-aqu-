@@ -1,10 +1,12 @@
 # Folio XR — progreso y plan
 
-Última actualización: 5 de noviembre de 2026. Nombre de trabajo propio y provisional; no se ha comprobado su disponibilidad comercial. Repositorio: `loklj/el-m-s-perr-n-aqu-`.
+Última actualización: 5 de noviembre de 2026 (Hito 1). Nombre de trabajo propio y provisional; no se ha comprobado su disponibilidad comercial. Repositorio: `loklj/el-m-s-perr-n-aqu-`.
 
 ## Punto de reanudación
 
-**Fase 0 completada como entrega documental: arquitectura y planificación.** No hay aplicación, proyecto Unity, APK ni implementación de lectores. No comenzar la Fase 1 sin el OK explícito del usuario.
+**Fase 0 completada como entrega documental: arquitectura y planificación.**
+
+**Fase 1 en curso — Hito 1 escrito, pendiente de prueba en el visor.** El usuario dio el OK para la Fase 1 por hitos, con su confirmación entre cada uno. La rama `hito-1/libro-pdf` contiene el código del Hito 1 (escrito por Claude el 5 de noviembre de 2026 mientras Codex estaba sin cupo de uso). **No se ha compilado ni probado**: en la nube no hay Unity ni visor. El usuario debe seguir [la guía del Hito 1](docs/HITO1_GUIA.md) y confirmar el resultado. **No empezar el Hito 2 sin esa confirmación.**
 
 El repositorio partía de un README. Esta fase añade documentación de diseño, evaluación de dependencias, riesgos, estructura propuesta y procedimientos de validación. Las instrucciones de compilación e instalación describen trabajo futuro en el PC; no acreditan pruebas realizadas.
 
@@ -14,6 +16,7 @@ El repositorio partía de un README. Esta fase añade documentación de diseño,
 - [Formatos, bibliotecas y licencias](docs/FORMATOS_Y_LICENCIAS.md).
 - [Importación local, nubes, OPDS y guía Kindle](docs/IMPORTACION_Y_NUBES.md).
 - [Preparación del PC, compilación, instalación y pruebas](docs/PC_Y_VALIDACION.md).
+- [Hito 1: guía paso a paso para Pop!_OS y Quest 3](docs/HITO1_GUIA.md).
 
 ## Objetivo del producto
 
@@ -85,6 +88,37 @@ Entregables de documentación en este repositorio. Evaluación con fuentes prima
 
 Salida: APK reproducible y una sesión real con los tres formatos, tres libros, biblioteca duradera, recuperación de un fallo e instrucciones actualizadas con las versiones efectivamente usadas. Sin esta evidencia no marcar el MVP como completado.
 
+#### Hito 1 — libro 3D con un PDF (código listo, sin probar)
+
+Alcance acordado con el usuario: proyecto mínimo Unity + Android que muestre páginas de un PDF de prueba propio en un libro 3D simple, con VR/passthrough, Touch y manos, más instrucciones exactas para compilar en Pop!_OS e instalar con adb.
+
+Decisiones tomadas para este hito (revisables):
+
+| Tema | Decisión del Hito 1 | Motivo |
+| --- | --- | --- |
+| Editor | Unity 6.3 LTS (soporte hasta diciembre de 2027), plantilla Universal 3D | LTS vigente; Meta exige 6000.0.66f2 o superior y recomienda 6.1+ |
+| XR | Meta XR All-in-One SDK + Unity OpenXR Plugin + Building Blocks (Camera Rig, Passthrough, Controller/Hand Tracking) + Grab Quick Action | Camino oficial de Meta; un principiante puede configurarlo sin escribir YAML de escenas |
+| PDF | `android.graphics.pdf.PdfRenderer` en un hilo propio, página a PNG en caché y `Texture2D.LoadImage` | Evita compilar PDFium/NDK solo para validar la cadena; PDFium sigue planificado para el lector completo |
+| Módulo Android | Clase Java en `Assets/Plugins/Android` (Unity la compila) | Más simple que un AAR Kotlin para el primer APK; migrar a `android/reader` cuando se integre Room |
+| Proyecto Unity | Lo crea el usuario con Unity Hub en `unity/`; los archivos del hito están en `hito1/Assets` y se copian | Unity Hub no crea proyectos en carpetas que ya tienen contenido |
+| Paquete | `com.loklj.folioxr`, nombre «Folio XR» | Lo fija el menú del Editor |
+| Controles | A/X siguiente doble página, B/Y anterior, clic del stick derecho recoloca el libro; agarre con manos y mandos vía Interaction SDK | Pasar página con las manos queda para un hito posterior |
+| PDF propio | `adb push` a `/sdcard/Android/data/com.loklj.folioxr/files/libro.pdf` | Evita permisos de almacenamiento antes de tener SAF |
+| Persistencia | Ninguna en este hito (no se usa PlayerPrefs) | Room y la biblioteca llegan en el paso 3 de esta fase |
+
+Limitaciones conocidas: sin PDF con contraseña (PdfRenderer no los abre en esta versión), un solo libro, PNG intermedio que añade latencia al pasar página (aceptable para validar; se optimiza en Fase 4), sin medición de memoria todavía.
+
+Verificaciones pendientes del usuario (marcar al probar):
+
+- [ ] Unity 6.3 LTS instala y abre en Pop!_OS (anotar versión exacta del Editor y del SDK de Meta).
+- [ ] El proyecto compila sin errores y el menú Folio XR aparece.
+- [ ] El APK se instala con adb y abre en el Quest 3.
+- [ ] Se ve el passthrough y el libro con la portada del PDF.
+- [ ] A/X y B/Y cambian de doble página; el texto inferior coincide.
+- [ ] Se agarra el libro con manos y con mandos; el clic del stick lo recoloca.
+- [ ] El texto de 10–12 puntos se lee a ~45 cm.
+- [ ] Un PDF propio copiado con adb se abre.
+
 ### Fase 2 — ampliar formatos
 
 TXT con detección de codificación y corrección manual, CBR RAR4/RAR5, MOBI/AZW/AZW3 sin DRM, DOCX/ODT/RTF. DOC binario requiere evaluación independiente; no prometer soporte fiel mediante un parser de texto. KFX conserva diagnóstico explícito hasta que exista un lector sin DRM técnicamente viable y revisado. Registrar por separado soportado, experimental y no compatible; no afirmar que todos los formatos ya funcionan.
@@ -137,4 +171,4 @@ Estantería VR/passthrough, carpetas, renombrar, búsqueda e índice enriquecido
 
 Leer este archivo y los documentos enlazados, revisar `git status` y respetar el trabajo existente. Usar la copia de este repositorio en `/workspace`; la tarea cloud ya está aislada y no necesita un worktree nuevo.
 
-**Esperar el OK del usuario para la Fase 1.** Después, empezar por versiones y los prototipos de Android/EPUB 3D. Obtener antes de instalar en el PC su versión de Pop!_OS, CPU/GPU/RAM y espacio libre; no son datos necesarios para cerrar esta Fase 0. Actualizar aquí resultados, decisiones, limitaciones, instrucciones y checklist al cerrar cada fase.
+**Esperar la confirmación del usuario sobre el Hito 1 (prueba en el visor).** Si falla, corregir a partir de su registro (`adb logcat`) y del paso de `docs/HITO1_GUIA.md` donde se detuvo. Si funciona: anotar las versiones reales, unir la rama y plantear el enfoque del Hito 2 (EPUB en textura 3D) antes de programarlo. Obtener antes de instalar en el PC su versión de Pop!_OS, CPU/GPU/RAM y espacio libre; no son datos necesarios para cerrar esta Fase 0. Actualizar aquí resultados, decisiones, limitaciones, instrucciones y checklist al cerrar cada fase.

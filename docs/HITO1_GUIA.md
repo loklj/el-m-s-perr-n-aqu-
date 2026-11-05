@@ -1,0 +1,168 @@
+# Hito 1 — Guía paso a paso (Pop!_OS + Quest 3)
+
+Objetivo: instalar en el Quest 3 una app mínima que muestre un **libro 3D con páginas de un PDF**, con passthrough, mandos Touch y manos, y que se pueda **agarrar y mover**.
+
+> **Estado:** el código de esta rama lo escribió Claude el 5 de noviembre de 2026, mientras Codex estaba sin cupo de uso. **No se ha compilado ni probado** porque en la nube no hay Unity ni visor. Lo vas a probar tú por primera vez. Si algo falla, anota en qué paso y qué mensaje apareció.
+
+Tiempo estimado: 1–2 horas la primera vez (casi todo es descarga e instalación). Espacio en disco: unos 15–20 GB.
+
+---
+
+## Qué trae esta rama
+
+| Archivo | Para qué sirve |
+| --- | --- |
+| `hito1/Assets/FolioXR/Scripts/Reading/FolioBook.cs` | El libro: carga el PDF, muestra dos páginas, botones para avanzar y retroceder |
+| `hito1/Assets/FolioXR/Scripts/Reading/PdfPageRenderer.cs` | Puente entre Unity y el plugin de Android |
+| `hito1/Assets/Plugins/Android/FolioPdfRenderer.java` | Dibuja las páginas con el lector de PDF de Android, en un hilo aparte |
+| `hito1/Assets/FolioXR/Editor/FolioXRHito1Setup.cs` | Agrega el menú **Folio XR** al Editor de Unity |
+| `hito1/Assets/StreamingAssets/folio-prueba.pdf` | PDF de prueba de 8 páginas, con contenido propio |
+| `tools/generar_pdf_prueba.py` | Script que generó ese PDF |
+
+Los scripts no dependen del SDK de Meta: compilan aunque el SDK todavía no esté instalado.
+
+---
+
+## Paso 1 — Bajar el repositorio
+
+En una terminal:
+
+```bash
+sudo apt install git curl
+git clone https://github.com/loklj/el-m-s-perr-n-aqu-.git ~/folio-xr
+cd ~/folio-xr
+git checkout hito-1/libro-pdf
+```
+
+## Paso 2 — Instalar Unity Hub (comandos oficiales para Ubuntu)
+
+Unity solo da soporte oficial a Ubuntu 22.04/24.04. Pop!_OS se basa en Ubuntu, así que normalmente funciona, pero no está garantizado.
+
+```bash
+sudo install -d /etc/apt/keyrings
+curl -fsSL https://hub.unity3d.com/linux/keys/public | sudo gpg --dearmor -o /etc/apt/keyrings/unityhub.gpg
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/unityhub.gpg] https://hub.unity3d.com/linux/repos/deb stable main" | sudo tee /etc/apt/sources.list.d/unityhub.list
+sudo apt update
+sudo apt install unityhub
+```
+
+Abre Unity Hub e inicia sesión con una cuenta de Unity (la licencia Personal es gratis si cumples sus condiciones).
+
+> **Si usas Pop!_OS 24.04 con el escritorio COSMIC:** Unity está pensado para GNOME sobre X11. Si el Editor se ve mal o se cierra, anótalo; la alternativa documentada es usar Ubuntu 24.04 LTS.
+
+## Paso 3 — Instalar el Editor
+
+En Unity Hub: **Installs → Install Editor →** la versión más reciente de **Unity 6.3 LTS**. En módulos, marca:
+
+- **Android Build Support**
+  - **OpenJDK**
+  - **Android SDK & NDK Tools**
+
+## Paso 4 — Crear el proyecto dentro del repositorio
+
+En Unity Hub: **Projects → New project**
+
+- Plantilla: **Universal 3D**
+- Project name: `unity`
+- Location: la carpeta del repositorio (`~/folio-xr`)
+
+Así el proyecto queda en `~/folio-xr/unity`. Cierra Unity cuando termine de abrirse por primera vez.
+
+## Paso 5 — Copiar los archivos del Hito 1 al proyecto
+
+```bash
+cd ~/folio-xr
+cp -r hito1/Assets/. unity/Assets/
+```
+
+Vuelve a abrir el proyecto en Unity Hub. En la barra de menú debe aparecer **Folio XR**.
+
+## Paso 6 — Configurar Unity para el Quest
+
+Son los pasos de la guía oficial de Meta (*Manual Project Setup*):
+
+1. **File → Build Profiles** → elige **Meta Quest** (o **Android** si no aparece) → **Switch Platform**.
+2. **Edit → Project Settings → XR Plug-in Management** → si lo pide, **Install XR Plugin Management**. En la pestaña de **Meta Quest/Android**, marca **OpenXR**.
+3. En el navegador, entra a la Unity Asset Store, busca **Meta XR All-in-One SDK** y toca **Add to My Assets**.
+4. En Unity: **Window → Package Management → Package Manager → My Assets → Meta XR All-in-One SDK → Install**. Si pide reiniciar el Editor, acepta. Si pregunta por *OpenXR Hand Skeleton*, elige **Use OpenXR Hand**.
+5. **Project Settings → XR Plug-in Management → OpenXR**, pestaña Android: activa el grupo de funciones **Meta XR**.
+6. Abre el **Project Setup Tool** (menú **Meta XR Tools** o **Window → Meta → Meta XR SDK**) y toca **Fix All** y luego **Apply All**.
+
+## Paso 7 — Armar la escena
+
+1. Abre la escena de la plantilla (`Assets/Scenes/SampleScene`).
+2. Borra **Main Camera** de la jerarquía.
+3. Abre **Building Blocks** (desde la ventana Meta XR SDK) y agrega, en este orden: **Camera Rig**, **Passthrough**, **Controller Tracking** y **Hand Tracking**.
+4. Menú **Folio XR → Crear libro de prueba (Hito 1)**. Aparece el libro y se fija el identificador del paquete en `com.loklj.folioxr`.
+5. Clic derecho sobre **Libro de prueba (Folio XR)** → **Interaction SDK → Add Grab Interaction** → **Fix All** → **Create**. Esto lo hace agarrable con manos y mandos.
+6. Guarda la escena (**Ctrl+S**).
+7. Menú **Folio XR → Comprobar Hito 1**. Todo debe salir **OK**.
+
+> Si al agregar un bloque aparece un segundo **Camera Rig**, borra el duplicado y deja solo uno.
+
+## Paso 8 — Compilar el APK
+
+1. **File → Build Profiles**: revisa que la escena esté en la lista (**Open Scene List → Add Open Scenes**).
+2. Marca **Development Build** (en este hito es más fácil de diagnosticar).
+3. **Build** → guarda como `~/folio-xr/Builds/FolioXR-hito1.apk`.
+
+## Paso 9 — Instalar en el Quest 3
+
+Con el modo desarrollador activo (ver `docs/PC_Y_VALIDACION.md`), conecta el visor por USB y acepta la depuración USB dentro del visor:
+
+```bash
+sudo apt install adb                          # si no tienes adb
+adb devices -l                                # debe decir "device"
+adb install -r ~/folio-xr/Builds/FolioXR-hito1.apk
+```
+
+En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
+
+## Paso 10 — Qué probar
+
+| Prueba | Resultado esperado |
+| --- | --- |
+| Abrir la app | Ves tu habitación (passthrough) y un libro frente a ti |
+| Portada | La página izquierda muestra la portada azul «Folio XR» |
+| A o X | Avanza dos páginas; el texto de abajo dice «Páginas 3-4 de 8» |
+| B o Y | Retrocede dos páginas |
+| Página 2 y 4 | Se distinguen los tamaños de letra (8 a 18 puntos) |
+| Agarrar con la mano o el gatillo de agarre | El libro se mueve contigo |
+| Clic en el stick derecho | El libro vuelve frente a tu vista |
+
+## Paso 11 (opcional) — Probar con tu propio PDF
+
+```bash
+adb push mi-libro.pdf /sdcard/Android/data/com.loklj.folioxr/files/libro.pdf
+```
+
+Cierra la app y ábrela de nuevo. Si existe `libro.pdf`, se abre ese en vez del de prueba. Para volver al de prueba:
+
+```bash
+adb shell rm /sdcard/Android/data/com.loklj.folioxr/files/libro.pdf
+```
+
+> PDF con contraseña: el lector de PDF de Android no los abre, y la app lo indica con un mensaje.
+
+## Si algo falla
+
+Guarda el registro mientras reproduces el problema y termínalo con Ctrl+C:
+
+```bash
+adb logcat -s Unity FolioXR AndroidRuntime > folio-hito1.log
+```
+
+Anota qué paso falló y qué mensaje viste (en Unity, en la terminal o dentro del visor).
+
+| Síntoma | Qué revisar |
+| --- | --- |
+| No aparece el menú Folio XR | Que `unity/Assets/FolioXR` exista y la consola de Unity no tenga errores en rojo |
+| El libro sale en blanco con «No se pudo preparar el PDF» | Que exista `unity/Assets/StreamingAssets/folio-prueba.pdf` |
+| Los botones A/B/X/Y no hacen nada | En OpenXR → Android, que esté activo un perfil de interacción de los mandos Touch (el Project Setup Tool suele activarlo) |
+| No hay passthrough (fondo negro) | Que esté el bloque **Passthrough** y que el Project Setup Tool no muestre pendientes |
+| `adb devices` dice `no permissions` o no muestra el visor | Desconecta y conecta el cable, acepta el aviso dentro del visor y revisa los permisos USB de Linux: <https://developer.android.com/studio/run/device> |
+| Error de clase Java no encontrada en el log | Si activaste Minify, marca **Custom Proguard File** en Publishing Settings |
+
+## Después
+
+Cuando confirmes que funciona en el visor, el siguiente paso es el **Hito 2: prototipo de página EPUB en el libro 3D**. Codex debe partir de esta rama y de `PROGRESO.md`.

@@ -1,0 +1,5 @@
+# Folio XR: Unity llama a esta clase por nombre (JNI). Si se activa la
+# minificación (Publishing Settings > Minify), mantenerla para que no se elimine.
+# Para que Unity use este archivo: Player Settings > Publishing Settings >
+# "Custom Proguard File".
+-keep class com.loklj.folioxr.** { *; }

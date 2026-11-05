@@ -1,0 +1,37 @@
+# Proyecto Unity (en unity/). Unity regenera estas carpetas.
+unity/[Ll]ibrary/
+unity/[Tt]emp/
+unity/[Oo]bj/
+unity/[Bb]uild/
+unity/[Bb]uilds/
+unity/[Ll]ogs/
+unity/[Uu]ser[Ss]ettings/
+unity/[Mm]emoryCaptures/
+unity/[Rr]ecordings/
+unity/*.csproj
+unity/*.sln
+unity/*.slnx
+unity/.vs/
+unity/.vscode/
+unity/.idea/
+
+# Compilados e instaladores
+*.apk
+*.aab
+*.apks
+*.unitypackage
+Builds/
+
+# Módulo Android (cuando exista)
+android/.gradle/
+android/**/build/
+android/local.properties
+
+# Logs de pruebas, libros personales y corpus grandes (nunca en Git)
+*.log
+pruebas-personales/
+tools/test-data/salida/
+
+# Sistema
+.DS_Store
+Thumbs.db
