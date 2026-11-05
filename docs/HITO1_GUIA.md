@@ -31,7 +31,7 @@ En una terminal:
 sudo apt install git curl
 git clone https://github.com/loklj/el-m-s-perr-n-aqu-.git ~/folio-xr
 cd ~/folio-xr
-git checkout hito-1/libro-pdf
+git checkout fase-1/preparacion   # incluye el Hito 1, los archivos de prueba y el paso 12
 ```
 
 ## Paso 2 — Instalar Unity Hub (comandos oficiales para Ubuntu)
