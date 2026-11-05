@@ -149,6 +149,20 @@ Salida: generadores, informes reales, límites de memoria aplicados y degradaci�
 
 Estantería VR/passthrough, carpetas, renombrar, búsqueda e índice enriquecidos, noche/sepia, fuentes y tamaño, panel 2D clásico, más de tres libros solo si las mediciones lo permiten, accesibilidad y pulido. Fichas para abrir un lector web externo como Kindle para la web: baja prioridad, mediante navegador y sin extraer contenido protegido. Los básicos de búsqueda, índice y marcadores pueden adelantarse cuando un formato los necesite.
 
+## Publicación comercial (decisión del usuario, 5 de noviembre de 2026)
+
+La app se venderá en la **Meta Horizon Store a USD 4,99**, con **código cerrado**. Consecuencias para todo el proyecto:
+
+| Tema | Regla |
+| --- | --- |
+| Licencias | Solo bibliotecas permisivas (BSD, MIT, Apache-2.0) o del sistema. **Nada AGPL ni GPL** (por eso MuPDF queda fuera). LGPL (libmobi) solo si se cumplen sus condiciones (enlace dinámico, aviso y código de la biblioteca); si no, MOBI/AZW3 se resuelve de otra forma. Mantener el inventario de licencias y una pantalla de créditos. |
+| EPUB | WebView del sistema + Readium (BSD-3), ver `docs/HITO2_ENFOQUE.md`. |
+| Google Drive | Leer los archivos que el usuario ya tiene (`drive.readonly`) es un permiso restringido: exige verificación de Google y una evaluación de seguridad anual (CASA) de terceros. Alternativa sin esa evaluación: permiso `drive.file` con el selector de archivos de Google (*Google Picker*), que solo da acceso a los archivos que el usuario elige. Decidir antes de la Fase 3. |
+| Dropbox | Las apps en modo desarrollo tienen un límite de usuarios; pedir aprobación de producción antes de publicar. |
+| Tienda | Cuenta de organización de desarrollador en Meta, requisitos técnicos de la tienda (VRC), política de privacidad, clasificación por edades (IARC) e imágenes y textos de la ficha. Meta retiene el 30 % de cada venta. |
+| Marca | No usar el nombre, logo, textos ni capturas de Livro, tampoco en la ficha de la tienda. Verificar que el nombre final (hoy «Folio XR», provisional) no choque con marcas existentes. |
+| DRM | Igual que antes: solo archivos sin DRM; nunca eludir protecciones. |
+
 ## Archivos de varios GB (5 GB requeridos, pruebas hasta 20 GB)
 
 Reglas de diseño, válidas para todos los formatos:
@@ -205,7 +219,7 @@ Pendiente en el visor: abrir los **PDF reales del usuario (hasta 20 GB)** y los 
 
 Leer este archivo y los documentos enlazados, revisar `git status` y respetar el trabajo existente. Usar la copia de este repositorio en `/workspace`; la tarea cloud ya está aislada y no necesita un worktree nuevo.
 
-**Pendientes del usuario:** (1) probar el Hito 1 en el visor; (2) aprobar el enfoque del Hito 2 y decidir la licencia (MuPDF es AGPL; ver `docs/HITO2_ENFOQUE.md`).
+**Pendientes del usuario:** (1) probar el Hito 1 en el visor. La licencia ya está decidida: venta en la Meta Horizon Store con código cerrado, así que el Hito 2 usará WebView (ver [Publicación comercial](#publicación-comercial-decisión-del-usuario-5-de-noviembre-de-2026)).
 
 Avance sin depender del visor (5 de noviembre de 2026, rama `fase-1/preparacion`): muestras en `tests/fixtures/` (EPUB válido según epubcheck 5.3.0, CBZ, manga RTL, TXT en 4 codificaciones) y `tools/test-data/gigantes.py` (PDF de 100.001 páginas verificado con poppler y qpdf, TXT, CBZ y EPUB de estrés). Esto adelanta parte del generador previsto para la Fase 4.
 

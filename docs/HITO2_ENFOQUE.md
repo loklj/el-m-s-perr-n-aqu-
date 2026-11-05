@@ -2,12 +2,13 @@
 
 Estado: **propuesta para aprobar antes de programar** (5 de noviembre de 2026, escrita por Claude). No hay código del Hito 2 todavía.
 
+> **Decisión del usuario (5 de noviembre de 2026):** la app se venderá en la Meta Horizon Store a USD 4,99, con código cerrado. Por eso **MuPDF queda descartado** (AGPL-3.0: exigiría publicar todo el código de la app o pagar una licencia comercial a Artifex). **Se adopta la opción A (WebView del sistema) para EPUB**, y PDFium/PdfRenderer para PDF, como en la Fase 0. La medición de MuPDF queda solo como referencia de rendimiento; `tools/prototipos/medir_epub_mupdf.py` es una herramienta de desarrollo y no se incluye en la app.
+
 ## En pocas líneas
 
 - El problema: un PDF ya trae páginas, pero un EPUB es texto que se acomoda al tamaño de la página. Hay que **maquetarlo** (decidir qué texto cabe en cada página) y **dibujar cada página como imagen** para ponerla en el libro 3D, igual que en el Hito 1.
 - Hay cuatro caminos (tabla abajo). Probé uno en el PC con nuestros EPUB de prueba: **MuPDF funciona muy bien** (texto nítido, tildes, sangrías, títulos; ~6–20 ms por página; cambiar el tamaño de letra vuelve a paginar al instante).
-- **Recomendación:** prototipar el Hito 2 con **MuPDF** y tener **WebView** como plan B.
-- **Decisión que necesito de ti:** MuPDF es **AGPL**. Si la app es solo para ti, o la publicas con su código abierto, no hay problema. Si algún día quieres venderla con código cerrado, habría que pagar una licencia comercial a Artifex o usar el plan B. **¿Cuál es tu caso?**
+- ~~Recomendación: prototipar con MuPDF.~~ **Decidido: WebView del sistema (opción A)**, porque la app será comercial y de código cerrado. Ver el recuadro de arriba.
 
 ## Las cuatro opciones
 
@@ -37,7 +38,7 @@ Script: `tools/prototipos/medir_epub_mupdf.py`. MuPDF 1.28.6, página A5 (420×5
 
 Lectura: con libros normales es instantáneo. Un capítulo de 30 MB (caso extremo) tarda unos segundos la primera vez y usa ~600 MB. Hay que repetir la medición en el Quest 3, donde la CPU es más lenta. La memoria con capítulos enormes es el punto a vigilar, junto al límite de ~5,75 GiB del visor y el presupuesto interno de 1,5 GiB de la arquitectura.
 
-## Plan del prototipo (si apruebas C)
+## Plan que se habría seguido con MuPDF (descartado por licencia)
 
 1. Añadir la librería Android de MuPDF (AAR) en `Assets/Plugins/Android` y una clase Java parecida a `FolioPdfRenderer`: abrir el EPUB, maquetar con el tamaño de página y de letra, y dibujar la página N a imagen en un hilo propio.
 2. Reutilizar `FolioBook` del Hito 1: el libro no necesita saber si la página viene de un PDF o de un EPUB.
@@ -52,9 +53,9 @@ Criterios para aprobar el Hito 2:
 - [ ] El EPUB con capítulo de 30 MB abre con indicador de progreso y sin cerrarse por memoria.
 - [ ] Tildes, eñes, cursivas, títulos, la imagen y la lista del EPUB de prueba se ven bien.
 
-## Si eliges el plan B (WebView)
+## Plan del prototipo con WebView (decidido)
 
-Prototipo equivalente con un WebView fuera de pantalla: `enableSlowWholeDocumentDraw()` antes de crear el WebView, maquetado por columnas CSS del ancho de la página, `draw()` sobre un `Bitmap` y la misma entrega a textura del Hito 1. Se descarta MuPDF para EPUB y se mantiene PDFium/PdfRenderer para PDF, como en la Fase 0.
+Prototipo con un WebView fuera de pantalla: `enableSlowWholeDocumentDraw()` antes de crear el WebView, maquetado por columnas CSS del ancho de la página, `draw()` sobre un `Bitmap` y la misma entrega a textura del Hito 1. Se descarta MuPDF para EPUB y se mantiene PDFium/PdfRenderer para PDF, como en la Fase 0.
 
 ## Referencias
 
