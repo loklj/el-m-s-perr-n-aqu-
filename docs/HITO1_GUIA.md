@@ -144,6 +144,46 @@ adb shell rm /sdcard/Android/data/com.loklj.folioxr/files/libro.pdf
 
 > PDF con contraseña: el lector de PDF de Android no los abre, y la app lo indica con un mensaje.
 
+## Paso 12 (opcional) — Probar un PDF de 5 GB
+
+El lector debe abrir archivos de hasta 5 GB. Esta prueba comprueba si el lector de PDF de Android del Quest acepta un archivo de más de 4 GB.
+
+1. Revisa que el visor tenga al menos **6 GB libres**:
+
+   ```bash
+   adb shell df -h /sdcard
+   ```
+
+2. Genera el PDF de 5 GB en tu PC (ocupa 5,4 GB; se crea en menos de un minuto):
+
+   ```bash
+   cd ~/folio-xr
+   sudo apt install python3-pil
+   python3 tools/test-data/gigantes.py --solo pdf-gb --gb 5
+   ```
+
+3. Cópialo al visor como `libro.pdf`. Por USB tarda unos minutos:
+
+   ```bash
+   adb push tools/test-data/salida/pdf-5gb-imagenes.pdf /sdcard/Android/data/com.loklj.folioxr/files/libro.pdf
+   ```
+
+4. Abre la app con el registro activo:
+
+   ```bash
+   adb logcat -s Unity FolioXR AndroidRuntime > folio-5gb.log
+   ```
+
+**Resultado esperado:** aparece la página «Página 1 de 5.659» sobre un fondo de ruido de colores (es a propósito: así el archivo pesa 5 GB). Con A/X avanzas. Anota cuánto tardó en aparecer la primera página.
+
+Si en vez de eso aparece un error, guarda `folio-5gb.log`: dice si el límite está en el lector de PDF de Android, y en ese caso se cambiará de motor de PDF.
+
+Al terminar, bórralo para liberar espacio:
+
+```bash
+adb shell rm /sdcard/Android/data/com.loklj.folioxr/files/libro.pdf
+```
+
 ## Si algo falla
 
 Guarda el registro mientras reproduces el problema y termínalo con Ctrl+C:

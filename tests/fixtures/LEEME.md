@@ -5,7 +5,7 @@ Archivos de prueba **con contenido original del proyecto Folio XR** (texto e im√
 Se regeneran con:
 
 ```bash
-pip install pillow reportlab
+sudo apt install python3-pil python3-reportlab   # o pip dentro de un entorno virtual
 python3 tools/test-data/fixtures.py
 python3 tools/generar_pdf_prueba.py tests/fixtures/pdf-prueba.pdf
 ```

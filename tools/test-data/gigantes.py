@@ -14,6 +14,12 @@ Ejemplos:
     # Prueba rápida con tamaños pequeños:
     python3 tools/test-data/gigantes.py --pdf-paginas 2000 --txt-mb 5 --cbz-imagenes 50 --epub-kb 1024
 
+    # Archivos de 5 GB (PDF de páginas con imágenes y CBZ con ZIP64):
+    python3 tools/test-data/gigantes.py --solo pdf-gb --solo cbz-gb --gb 5 --limite-gb 12
+
+    # TXT de 5 GB:
+    python3 tools/test-data/gigantes.py --solo txt --txt-mb 5120 --limite-gb 6
+
 Copiar al visor (ejemplo):
     adb push tools/test-data/salida/pdf-100001-paginas.pdf /sdcard/Download/
 
@@ -198,6 +204,106 @@ def generar_cbz(ruta, imagenes, semilla):
 
 
 # ---------------------------------------------------------------------------
+# Archivos de varios GB (páginas con imágenes que no se pueden comprimir)
+
+def _pool_jpeg(semilla, cantidad=8, ancho=1000, alto=1414, calidad=80):
+    """Imágenes de ruido (~1 MB cada una) para alcanzar tamaños grandes rápido."""
+    from PIL import Image
+    import io
+    rnd = random.Random(semilla)
+    pool = []
+    for _ in range(cantidad):
+        img = Image.frombytes("RGB", (ancho, alto), rnd.randbytes(ancho * alto * 3))
+        buf = io.BytesIO()
+        img.save(buf, "JPEG", quality=calidad)
+        pool.append(buf.getvalue())
+    return pool, ancho, alto
+
+
+def generar_pdf_gb(ruta, gb, semilla):
+    """PDF de `gb` GiB: cada página es una imagen de ~1 MB con su número encima.
+
+    Comprueba que el lector use desplazamientos de 64 bits (el archivo supera 4 GiB).
+    """
+    pool, iw, ih = _pool_jpeg(semilla)
+    objetivo = int(gb * 1024 ** 3)
+    media = sum(len(j) for j in pool) / len(pool)
+    paginas = max(1, int(objetivo / (media + 700)) + 1)
+    por_nodo = 500
+    nodos = (paginas + por_nodo - 1) // por_nodo
+    base = 4 + nodos
+    total_objetos = base + 3 * paginas
+    offsets = [0] * total_objetos
+    ancho, alto = 420, 595
+
+    inicio = time.time()
+    with open(ruta, "wb") as f:
+        def obj(numero, *partes):
+            offsets[numero] = f.tell()
+            f.write(f"{numero} 0 obj\n".encode("ascii"))
+            for parte in partes:
+                f.write(parte)
+            f.write(b"\nendobj\n")
+
+        f.write(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+        obj(1, b"<< /Type /Catalog /Pages 2 0 R >>")
+        kids = " ".join(f"{4 + n} 0 R" for n in range(nodos))
+        obj(2, f"<< /Type /Pages /Kids [{kids}] /Count {paginas} >>".encode("ascii"))
+        obj(3, b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
+        for n in range(nodos):
+            desde, hasta = n * por_nodo, min(paginas, (n + 1) * por_nodo)
+            hijos = " ".join(f"{base + 3 * i} 0 R" for i in range(desde, hasta))
+            obj(4 + n, f"<< /Type /Pages /Parent 2 0 R /Kids [{hijos}] /Count {hasta - desde} >>".encode("ascii"))
+
+        for i in range(paginas):
+            num = i + 1
+            pagina, contenido_n, imagen_n = base + 3 * i, base + 3 * i + 1, base + 3 * i + 2
+            jpeg = pool[i % len(pool)]
+            contenido = (b"q %d 0 0 %d 0 0 cm /Im Do Q\n" % (ancho, alto)
+                         + b"1 g 30 500 360 60 re f 0 g BT /F1 28 Tf 40 520 Td ("
+                         + _pdf_texto(f"Página {num:,} de {paginas:,}".replace(",", ".")) + b") Tj ET\n")
+            obj(pagina, (f"<< /Type /Page /Parent {4 + i // por_nodo} 0 R /MediaBox [0 0 {ancho} {alto}] "
+                         f"/Resources << /Font << /F1 3 0 R >> /XObject << /Im {imagen_n} 0 R >> >> "
+                         f"/Contents {contenido_n} 0 R >>").encode("ascii"))
+            obj(contenido_n, b"<< /Length %d >>\nstream\n" % len(contenido), contenido, b"endstream")
+            obj(imagen_n, (f"<< /Type /XObject /Subtype /Image /Width {iw} /Height {ih} /ColorSpace /DeviceRGB "
+                           f"/BitsPerComponent 8 /Filter /DCTDecode /Length {len(jpeg)} >>\nstream\n").encode("ascii"),
+                jpeg, b"\nendstream")
+            if num % 100 == 0 or num == paginas:
+                progreso("PDF GB", num, paginas, inicio)
+
+        xref = f.tell()
+        f.write(f"xref\n0 {total_objetos}\n".encode("ascii"))
+        f.write(b"0000000000 65535 f \n")
+        for n in range(1, total_objetos):
+            f.write(b"%010d 00000 n \n" % offsets[n])
+        f.write(f"trailer\n<< /Size {total_objetos} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode("ascii"))
+    print()
+    return {"paginas": paginas, "supera_4_gib": os.path.getsize(ruta) > 4 * 1024 ** 3}
+
+
+def generar_cbz_gb(ruta, gb, semilla):
+    """CBZ de `gb` GiB con imágenes de ~1 MB. Usa ZIP64 automáticamente al pasar de 4 GiB."""
+    pool, _, _ = _pool_jpeg(semilla + 1)
+    objetivo = int(gb * 1024 ** 3)
+    escritos, n = 0, 0
+    inicio = time.time()
+    with zipfile.ZipFile(ruta, "w", allowZip64=True) as z:
+        while escritos < objetivo:
+            n += 1
+            datos = pool[n % len(pool)]
+            info = zipfile.ZipInfo(f"{n:05d}.jpg", date_time=(2026, 11, 5, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_STORED
+            z.writestr(info, datos)
+            escritos += len(datos) + 100
+            if n % 200 == 0:
+                progreso("CBZ GB", escritos, objetivo, inicio)
+    progreso("CBZ GB", objetivo, objetivo, inicio)
+    print()
+    return {"imagenes": n, "zip64": os.path.getsize(ruta) > 4 * 1024 ** 3}
+
+
+# ---------------------------------------------------------------------------
 # EPUB con un capítulo enorme
 
 def generar_epub(ruta, kb):
@@ -214,15 +320,16 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--salida", default=os.path.join(AQUI, "salida"))
     p.add_argument("--semilla", type=int, default=20261105)
-    p.add_argument("--solo", choices=["pdf", "txt", "cbz", "epub"], action="append",
-                   help="Generar solo estos tipos (se puede repetir).")
+    p.add_argument("--solo", choices=["pdf", "txt", "cbz", "epub", "pdf-gb", "cbz-gb"], action="append",
+                   help="Generar solo estos tipos (se puede repetir). pdf-gb y cbz-gb solo se generan si se piden.")
+    p.add_argument("--gb", type=float, default=5, help="Tamaño en GiB de pdf-gb y cbz-gb.")
     p.add_argument("--pdf-paginas", type=int, default=100_001)
     p.add_argument("--txt-mb", type=float, default=300)
     p.add_argument("--txt-codificaciones", default="utf-8",
                    help="Lista separada por comas: utf-8, utf-16, cp1252.")
     p.add_argument("--cbz-imagenes", type=int, default=3000)
     p.add_argument("--epub-kb", type=int, default=30_000, help="Tamaño del capítulo enorme en KiB.")
-    p.add_argument("--limite-gb", type=float, default=5.0,
+    p.add_argument("--limite-gb", type=float, default=12.0,
                    help="No generar si el total estimado supera este límite.")
     a = p.parse_args()
 
@@ -242,6 +349,9 @@ def main():
         estimado += a.cbz_imagenes * 90_000
     if "epub" in tipos:
         estimado += a.epub_kb * 1024 // 3
+    for grande in ("pdf-gb", "cbz-gb"):
+        if grande in tipos:
+            estimado += int(a.gb * 1024 ** 3 * 1.01)
     os.makedirs(a.salida, exist_ok=True)
     libre = shutil.disk_usage(a.salida).free
     print(f"Estimado: {estimado / 1e9:.2f} GB | libre: {libre / 1e9:.1f} GB | límite: {a.limite_gb} GB")
@@ -271,6 +381,12 @@ def main():
     if "epub" in tipos:
         nombre = f"epub-capitulo-{a.epub_kb}kb.epub"
         registrar(nombre, generar_epub(os.path.join(a.salida, nombre), a.epub_kb))
+    if "pdf-gb" in tipos:
+        nombre = f"pdf-{a.gb:g}gb-imagenes.pdf"
+        registrar(nombre, generar_pdf_gb(os.path.join(a.salida, nombre), a.gb, a.semilla))
+    if "cbz-gb" in tipos:
+        nombre = f"cbz-{a.gb:g}gb.cbz"
+        registrar(nombre, generar_cbz_gb(os.path.join(a.salida, nombre), a.gb, a.semilla))
 
     manifiesto = {
         "generador": "tools/test-data/gigantes.py",

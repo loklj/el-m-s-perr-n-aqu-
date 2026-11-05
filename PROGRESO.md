@@ -24,6 +24,8 @@ El repositorio partía de un README. Esta fase añade documentación de diseño,
 
 Lector personal para Meta Quest 3: libros, cómics y manga como objetos 3D agarrables, movibles y con páginas que se pueden pasar. Tres libros abiertos simultáneamente como objetivo base; ampliar esa cantidad solo después de medir. Lectura sentado, de pie o acostado, controles Touch y manos, VR inmersiva y passthrough. La biblioteca y el progreso deben sobrevivir a cierres, reinicios y actualizaciones compatibles.
 
+**Tamaño de archivo (requisito añadido por el usuario el 5 de noviembre de 2026):** debe abrir archivos de **hasta 5 GB**, además de documentos de más de 100.000 páginas. Ver la sección [Archivos de 5 GB](#archivos-de-5-gb).
+
 Se toman requisitos funcionales como referencia, sin copiar código, marca, logo, interfaz gráfica ni assets de Livro. Todos los recursos deberán ser originales o tener una licencia documentada.
 
 ## Decisiones registradas
@@ -147,6 +149,31 @@ Salida: generadores, informes reales, límites de memoria aplicados y degradaci�
 
 Estantería VR/passthrough, carpetas, renombrar, búsqueda e índice enriquecidos, noche/sepia, fuentes y tamaño, panel 2D clásico, más de tres libros solo si las mediciones lo permiten, accesibilidad y pulido. Fichas para abrir un lector web externo como Kindle para la web: baja prioridad, mediante navegador y sin extraer contenido protegido. Los básicos de búsqueda, índice y marcadores pueden adelantarse cuando un formato los necesite.
 
+## Archivos de 5 GB
+
+Reglas de diseño, válidas para todos los formatos:
+
+1. **Desplazamientos de 64 bits en toda la cadena** (Java/Kotlin `long`, C/C++ `int64_t`/`off64_t`, C# `long`). Ningún tamaño ni posición de archivo en `int` de 32 bits.
+2. **Nunca leer el archivo completo** a memoria ni recorrerlo entero para mostrar la primera página. PDF y ZIP permiten ir directo al índice del final del archivo.
+3. **No obligar a copiar 5 GB.** Importar debe ofrecer «abrir en su ubicación» (permiso persistente o ruta propia de la app) y «copiar a la biblioteca», en este caso con comprobación de espacio libre antes de empezar, progreso, cancelación y archivo temporal que solo se renombra al terminar.
+4. **Descargas de la nube reanudables** (peticiones por rangos), con comprobación de espacio y de tamaño final; el hash completo es opcional y en segundo plano (calcular SHA-256 de 5 GB toma tiempo en el visor).
+5. Los índices propios (páginas de un TXT, entradas de un ZIP, posiciones de EPUB) se guardan en disco (SQLite), no en memoria.
+
+Puntos a verificar por formato:
+
+| Formato | Riesgo con más de 4 GB | Qué hacer |
+| --- | --- | --- |
+| PDF (PdfRenderer/PDFium) | La estructura `FPDF_FILEACCESS` de PDFium declara el tamaño en un `unsigned long`: 64 bits en Android ARM64 (Quest 3), pero 32 bits en Windows | Probar en el visor `pdf-5gb-imagenes.pdf`; si falla, abrir con `FPDF_LoadDocument` o con MuPDF |
+| PDF (MuPDF) | — | **Verificado en PC (Linux 64 bits):** abre el PDF de 5 GiB y dibuja su última página en 0,2 s con 62 MB de memoria |
+| CBZ/EPUB (ZIP) | Pasado 4 GiB el ZIP necesita la extensión ZIP64 | `java.util.zip` de Android incluye ZIP64 desde hace años y libarchive también; probar en el visor `cbz-5gb.cbz` |
+| CBR (RAR sólido) | Para leer la página N hay que descomprimir todo lo anterior | Extraer a caché en disco con cuota y progreso, o avisar; no prometer páginas instantáneas |
+| TXT | Decodificar 5 GB tarda | Índice de páginas por bloques en segundo plano; mostrar la primera página antes de terminar |
+| EPUB (texto) | Un capítulo gigante usa mucha memoria al maquetar (~600 MB por un capítulo de 30 MB con MuPDF en PC) | Ver `docs/HITO2_ENFOQUE.md`; los EPUB de 5 GB suelen ser imágenes, no texto |
+
+Archivos de prueba (5 de noviembre de 2026): `tools/test-data/gigantes.py --solo pdf-gb --solo cbz-gb --gb 5` genera en 13 s, con 53 MB de memoria, un PDF de 5.659 páginas (5,37 GB) y un CBZ ZIP64 de 5.662 imágenes (5,37 GB). Verificación: `pdfinfo` cuenta las páginas, `qpdf --check` no encuentra errores y poppler dibuja las páginas 1, 2.829 y 5.659. En el CBZ, `unzip -t` no da errores y la última imagen, que empieza en el byte 5.367.717.314 (más allá de 4 GiB), se lee y es válida.
+
+Pendiente en el visor: abrir ambos archivos en el Quest 3 (ver la prueba opcional del Hito 1 en `docs/HITO1_GUIA.md`).
+
 ## Riesgos que guían el orden
 
 | Riesgo | Cómo se resuelve o contiene | Momento |
@@ -157,6 +184,7 @@ Estantería VR/passthrough, carpetas, renombrar, búsqueda e índice enriquecido
 | LGPL y componentes con licencias distintas | Inventario por versión, avisos y obligaciones de redistribución antes de integrar/publicar | Fases 1–3 |
 | OAuth Drive no funciona en navegador Quest con cliente elegido | Prototipo en visor con la configuración oficial vigente; no presentar un workaround no autorizado como solución | Inicio del conector, Fase 3 |
 | Pérdida de archivo o progreso por suspensión/cierre | Copias privadas, commit transaccional, guardado por página y recuperación; pruebas de interrupción | Fase 1 |
+| Archivos de 5 GB: límites de 32 bits en alguna librería, copias completas o falta de espacio | Pruebas con `pdf-5gb-imagenes.pdf` y `cbz-5gb.cbz` en el visor; abrir sin copiar; comprobar espacio antes de copiar o descargar | Desde Fase 1 (PDF); Fases 2–4 |
 | Presión de memoria con tres libros/texturas | Presupuesto global, LRU, resolución adaptable, límites de trabajos y cierre ordenado | Desde Fase 1 |
 | Libro hostil, comprimido desmesurado o parser nativo fallando | Cuotas, validación, rutas seguras, aislamiento cuando sea viable y diagnóstico sin falsos positivos | Desde Fase 1 |
 
