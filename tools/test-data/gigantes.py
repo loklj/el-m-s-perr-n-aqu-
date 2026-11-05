@@ -17,6 +17,9 @@ Ejemplos:
     # Archivos de 5 GB (PDF de páginas con imágenes y CBZ con ZIP64):
     python3 tools/test-data/gigantes.py --solo pdf-gb --solo cbz-gb --gb 5 --limite-gb 12
 
+    # PDF de 20 GB:
+    python3 tools/test-data/gigantes.py --solo pdf-gb --gb 20 --limite-gb 25
+
     # TXT de 5 GB:
     python3 tools/test-data/gigantes.py --solo txt --txt-mb 5120 --limite-gb 6
 
@@ -220,10 +223,31 @@ def _pool_jpeg(semilla, cantidad=8, ancho=1000, alto=1414, calidad=80):
     return pool, ancho, alto
 
 
+def _escribir_xref_stream(f, offsets, total_objetos):
+    """Índice como «xref stream» (PDF 1.5): admite posiciones de más de 10 dígitos.
+
+    La tabla xref clásica escribe cada posición con 10 dígitos, así que no sirve
+    pasado ~9,3 GiB. Con /W [1 5 2] cada posición ocupa 5 bytes (hasta 1 TiB).
+    """
+    numero = total_objetos  # el propio índice es el último objeto
+    tamano = total_objetos + 1
+    posicion = f.tell()
+    filas = [b"\x00" + (0).to_bytes(5, "big") + (65535).to_bytes(2, "big")]
+    for n in range(1, total_objetos):
+        filas.append(b"\x01" + offsets[n].to_bytes(5, "big") + b"\x00\x00")
+    filas.append(b"\x01" + posicion.to_bytes(5, "big") + b"\x00\x00")
+    datos = b"".join(filas)
+    f.write((f"{numero} 0 obj\n<< /Type /XRef /Size {tamano} /W [1 5 2] /Root 1 0 R "
+             f"/Length {len(datos)} >>\nstream\n").encode("ascii"))
+    f.write(datos)
+    f.write(f"\nendstream\nendobj\nstartxref\n{posicion}\n%%EOF\n".encode("ascii"))
+
+
 def generar_pdf_gb(ruta, gb, semilla):
     """PDF de `gb` GiB: cada página es una imagen de ~1 MB con su número encima.
 
     Comprueba que el lector use desplazamientos de 64 bits (el archivo supera 4 GiB).
+    Usa un índice «xref stream» (PDF 1.5) para poder pasar de ~9,3 GiB.
     """
     pool, iw, ih = _pool_jpeg(semilla)
     objetivo = int(gb * 1024 ** 3)
@@ -245,7 +269,7 @@ def generar_pdf_gb(ruta, gb, semilla):
                 f.write(parte)
             f.write(b"\nendobj\n")
 
-        f.write(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+        f.write(b"%PDF-1.5\n%\xe2\xe3\xcf\xd3\n")
         obj(1, b"<< /Type /Catalog /Pages 2 0 R >>")
         kids = " ".join(f"{4 + n} 0 R" for n in range(nodos))
         obj(2, f"<< /Type /Pages /Kids [{kids}] /Count {paginas} >>".encode("ascii"))
@@ -272,14 +296,10 @@ def generar_pdf_gb(ruta, gb, semilla):
             if num % 100 == 0 or num == paginas:
                 progreso("PDF GB", num, paginas, inicio)
 
-        xref = f.tell()
-        f.write(f"xref\n0 {total_objetos}\n".encode("ascii"))
-        f.write(b"0000000000 65535 f \n")
-        for n in range(1, total_objetos):
-            f.write(b"%010d 00000 n \n" % offsets[n])
-        f.write(f"trailer\n<< /Size {total_objetos} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode("ascii"))
+        _escribir_xref_stream(f, offsets, total_objetos)
     print()
-    return {"paginas": paginas, "supera_4_gib": os.path.getsize(ruta) > 4 * 1024 ** 3}
+    return {"paginas": paginas, "supera_4_gib": os.path.getsize(ruta) > 4 * 1024 ** 3,
+            "indice": "xref stream (PDF 1.5)"}
 
 
 def generar_cbz_gb(ruta, gb, semilla):

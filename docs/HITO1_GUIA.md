@@ -144,45 +144,63 @@ adb shell rm /sdcard/Android/data/com.loklj.folioxr/files/libro.pdf
 
 > PDF con contraseña: el lector de PDF de Android no los abre, y la app lo indica con un mensaje.
 
-## Paso 12 (opcional) — Probar un PDF de 5 GB
+## Paso 12 (opcional) — Probar con tus PDF grandes (hasta 20 GB)
 
-El lector debe abrir archivos de hasta 5 GB. Esta prueba comprueba si el lector de PDF de Android del Quest acepta un archivo de más de 4 GB.
+El lector debe abrir archivos de varios GB. Esta prueba usa los PDF grandes que ya tienes en el visor.
 
-1. Revisa que el visor tenga al menos **6 GB libres**:
+> **Importante:** mientras el PDF esté dentro de la carpeta de la app, **desinstalar Folio XR lo borra**. Actualizar con `adb install -r` no lo borra. Al terminar, devuélvelo a su lugar (punto 5).
 
-   ```bash
-   adb shell df -h /sdcard
-   ```
+1. Abre Folio XR una vez para que exista su carpeta de datos y ciérrala.
 
-2. Genera el PDF de 5 GB en tu PC (ocupa 5,4 GB; se crea en menos de un minuto):
+2. Busca tus PDF de más de 1 GB y anota la ruta exacta:
 
    ```bash
-   cd ~/folio-xr
-   sudo apt install python3-pil
-   python3 tools/test-data/gigantes.py --solo pdf-gb --gb 5
+   adb shell "find /sdcard -iname '*.pdf' -size +2000000 2>/dev/null"
    ```
 
-3. Cópialo al visor como `libro.pdf`. Por USB tarda unos minutos:
+3. **Mueve** (no copies) uno a la carpeta de la app con el nombre `libro.pdf`. Usa comillas si el nombre tiene espacios:
 
    ```bash
-   adb push tools/test-data/salida/pdf-5gb-imagenes.pdf /sdcard/Android/data/com.loklj.folioxr/files/libro.pdf
+   adb shell mv "/sdcard/Download/Mi PDF grande.pdf" /sdcard/Android/data/com.loklj.folioxr/files/libro.pdf
    ```
 
-4. Abre la app con el registro activo:
+   Dentro del mismo almacenamiento debería ser instantáneo. Si demora, se está copiando y necesita espacio libre igual al tamaño del PDF. Si `mv` da error, avísame: hay otra forma.
+
+4. Abre la app con el registro activo y prueba:
 
    ```bash
-   adb logcat -s Unity FolioXR AndroidRuntime > folio-5gb.log
+   adb logcat -s Unity FolioXR AndroidRuntime > folio-pdf-grande.log
    ```
 
-**Resultado esperado:** aparece la página «Página 1 de 5.659» sobre un fondo de ruido de colores (es a propósito: así el archivo pesa 5 GB). Con A/X avanzas. Anota cuánto tardó en aparecer la primera página.
+   Anota los resultados en esta tabla:
 
-Si en vez de eso aparece un error, guarda `folio-5gb.log`: dice si el límite está en el lector de PDF de Android, y en ese caso se cambiará de motor de PDF.
+   | Archivo | Tamaño | Páginas | Segundos hasta ver la 1.ª página | ¿Pasan las páginas con A/X? | Errores |
+   | --- | --- | --- | --- | --- | --- |
+   | | | | | | |
 
-Al terminar, bórralo para liberar espacio:
+5. **Devuélvelo a su lugar** al terminar:
+
+   ```bash
+   adb shell mv /sdcard/Android/data/com.loklj.folioxr/files/libro.pdf "/sdcard/Download/Mi PDF grande.pdf"
+   ```
+
+Qué esperar y qué significa cada caso:
+
+- **Abre y pasan las páginas:** el lector de PDF de Android del Quest soporta ese tamaño.
+- **«La página es demasiado grande para la memoria disponible»:** el archivo abrió, pero esa página trae una imagen gigante (típico de escaneos). Anota el número de página.
+- **«No se pudo abrir el archivo…» u otro error:** guarda `folio-pdf-grande.log`. Dice si el límite está en el lector de PDF de Android; en ese caso se cambia de motor (MuPDF ya abrió un PDF de 20 GB en las pruebas en PC).
+
+**Alternativa sin tus archivos:** genera un PDF de prueba en tu PC y cópialo al visor como `libro.pdf` (necesita espacio libre en el visor igual a su tamaño):
 
 ```bash
-adb shell rm /sdcard/Android/data/com.loklj.folioxr/files/libro.pdf
+cd ~/folio-xr
+sudo apt install python3-pil
+python3 tools/test-data/gigantes.py --solo pdf-gb --gb 5                    # 5 GB, ~1 minuto
+python3 tools/test-data/gigantes.py --solo pdf-gb --gb 20 --limite-gb 25    # 20 GB
+adb push tools/test-data/salida/pdf-5gb-imagenes.pdf /sdcard/Android/data/com.loklj.folioxr/files/libro.pdf
 ```
+
+Sus páginas son ruido de colores con «Página N de M» encima: es a propósito, para que el archivo realmente pese lo indicado. Bórralo al terminar con `adb shell rm /sdcard/Android/data/com.loklj.folioxr/files/libro.pdf`.
 
 ## Si algo falla
 

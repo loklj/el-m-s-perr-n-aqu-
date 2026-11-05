@@ -24,7 +24,7 @@ El repositorio partía de un README. Esta fase añade documentación de diseño,
 
 Lector personal para Meta Quest 3: libros, cómics y manga como objetos 3D agarrables, movibles y con páginas que se pueden pasar. Tres libros abiertos simultáneamente como objetivo base; ampliar esa cantidad solo después de medir. Lectura sentado, de pie o acostado, controles Touch y manos, VR inmersiva y passthrough. La biblioteca y el progreso deben sobrevivir a cierres, reinicios y actualizaciones compatibles.
 
-**Tamaño de archivo (requisito añadido por el usuario el 5 de noviembre de 2026):** debe abrir archivos de **hasta 5 GB**, además de documentos de más de 100.000 páginas. Ver la sección [Archivos de 5 GB](#archivos-de-5-gb).
+**Tamaño de archivo (requisito añadido por el usuario el 5 de noviembre de 2026):** debe abrir archivos de **hasta 5 GB**, además de documentos de más de 100.000 páginas. El usuario tiene en el visor **PDF reales de hasta 20 GB** para las pruebas, así que el diseño apunta a 20 GB o más. Ver la sección [Archivos de varios GB](#archivos-de-varios-gb-5-gb-requeridos-pruebas-hasta-20-gb).
 
 Se toman requisitos funcionales como referencia, sin copiar código, marca, logo, interfaz gráfica ni assets de Livro. Todos los recursos deberán ser originales o tener una licencia documentada.
 
@@ -149,7 +149,7 @@ Salida: generadores, informes reales, límites de memoria aplicados y degradaci�
 
 Estantería VR/passthrough, carpetas, renombrar, búsqueda e índice enriquecidos, noche/sepia, fuentes y tamaño, panel 2D clásico, más de tres libros solo si las mediciones lo permiten, accesibilidad y pulido. Fichas para abrir un lector web externo como Kindle para la web: baja prioridad, mediante navegador y sin extraer contenido protegido. Los básicos de búsqueda, índice y marcadores pueden adelantarse cuando un formato los necesite.
 
-## Archivos de 5 GB
+## Archivos de varios GB (5 GB requeridos, pruebas hasta 20 GB)
 
 Reglas de diseño, válidas para todos los formatos:
 
@@ -164,7 +164,9 @@ Puntos a verificar por formato:
 | Formato | Riesgo con más de 4 GB | Qué hacer |
 | --- | --- | --- |
 | PDF (PdfRenderer/PDFium) | La estructura `FPDF_FILEACCESS` de PDFium declara el tamaño en un `unsigned long`: 64 bits en Android ARM64 (Quest 3), pero 32 bits en Windows | Probar en el visor `pdf-5gb-imagenes.pdf`; si falla, abrir con `FPDF_LoadDocument` o con MuPDF |
-| PDF (MuPDF) | — | **Verificado en PC (Linux 64 bits):** abre el PDF de 5 GiB y dibuja su última página en 0,2 s con 62 MB de memoria |
+| PDF (MuPDF) | — | **Verificado en PC (Linux 64 bits):** abre el PDF de 5 GiB y dibuja su última página en 0,2 s con 62 MB; con el de 20 GiB, 1,4 s y 82 MB, sin reparar el archivo |
+| PDF de más de ~9,3 GiB | El índice clásico (`xref`) escribe cada posición con 10 dígitos y no llega más allá de 9.999.999.999 bytes. Estos PDF usan un índice comprimido en *xref stream* (PDF 1.5) | El lector debe aceptar *xref streams*: PDFium, MuPDF y poppler lo hacen. Si un PDF enorme viene con un índice clásico roto, el lector lo reconstruye recorriendo todo el archivo: lento, mostrar progreso |
+| PDF escaneados enormes | Una página puede traer una imagen gigante (por ejemplo, 10.000×14.000 px son ~560 MB sin comprimir) y agotar la memoria al decodificarla | El Hito 1 ya captura la falta de memoria y muestra «La página es demasiado grande…». Registrar qué archivo y página fallan para decidir el motor y los límites |
 | CBZ/EPUB (ZIP) | Pasado 4 GiB el ZIP necesita la extensión ZIP64 | `java.util.zip` de Android incluye ZIP64 desde hace años y libarchive también; probar en el visor `cbz-5gb.cbz` |
 | CBR (RAR sólido) | Para leer la página N hay que descomprimir todo lo anterior | Extraer a caché en disco con cuota y progreso, o avisar; no prometer páginas instantáneas |
 | TXT | Decodificar 5 GB tarda | Índice de páginas por bloques en segundo plano; mostrar la primera página antes de terminar |
@@ -172,7 +174,9 @@ Puntos a verificar por formato:
 
 Archivos de prueba (5 de noviembre de 2026): `tools/test-data/gigantes.py --solo pdf-gb --solo cbz-gb --gb 5` genera en 13 s, con 53 MB de memoria, un PDF de 5.659 páginas (5,37 GB) y un CBZ ZIP64 de 5.662 imágenes (5,37 GB). Verificación: `pdfinfo` cuenta las páginas, `qpdf --check` no encuentra errores y poppler dibuja las páginas 1, 2.829 y 5.659. En el CBZ, `unzip -t` no da errores y la última imagen, que empieza en el byte 5.367.717.314 (más allá de 4 GiB), se lee y es válida.
 
-Pendiente en el visor: abrir ambos archivos en el Quest 3 (ver la prueba opcional del Hito 1 en `docs/HITO1_GUIA.md`).
+PDF de 20 GiB (mismo día): `--solo pdf-gb --gb 20` genera en 27 s, con 56 MB de memoria, un PDF 1.5 de 22.635 páginas (21,47 GB) con índice *xref stream*. `pdfinfo` y `qpdf --show-npages` leen el índice al instante y sin reparaciones; poppler dibuja las páginas 1, 11.317 y 22.635, y MuPDF la última en 1,4 s con 82 MB. `qpdf --check` completo (lee los 20 GB) no terminó en 10 minutos; no indica un error.
+
+Pendiente en el visor: abrir los **PDF reales del usuario (hasta 20 GB)** y los generados en el Quest 3 (prueba opcional del Hito 1 en `docs/HITO1_GUIA.md`).
 
 ## Riesgos que guían el orden
 
