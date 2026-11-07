@@ -1,6 +1,6 @@
 # Folio XR — progreso y plan
 
-Última actualización: 5 de noviembre de 2026 (Hito 1). Nombre de trabajo propio y provisional; no se ha comprobado su disponibilidad comercial. Repositorio: `loklj/el-m-s-perr-n-aqu-`.
+Última actualización: 7 de noviembre de 2026 (licencias para la tienda). Nombre de trabajo propio y provisional; no se ha comprobado su disponibilidad comercial. Repositorio: `loklj/el-m-s-perr-n-aqu-`.
 
 ## Punto de reanudación
 
@@ -14,6 +14,7 @@ El repositorio partía de un README. Esta fase añade documentación de diseño,
 
 - [Arquitectura y estructura propuesta](docs/ARQUITECTURA.md).
 - [Formatos, bibliotecas y licencias](docs/FORMATOS_Y_LICENCIAS.md).
+- [Licencias para vender la app en la Meta Horizon Store](docs/LICENCIAS_Y_TIENDA.md): Unity, SDK de Meta, comisión e inventario de componentes (7 de noviembre de 2026).
 - [Importación local, nubes, OPDS y guía Kindle](docs/IMPORTACION_Y_NUBES.md).
 - [Preparación del PC, compilación, instalación y pruebas](docs/PC_Y_VALIDACION.md).
 - [Hito 1: guía paso a paso para Pop!_OS y Quest 3](docs/HITO1_GUIA.md).
@@ -155,7 +156,7 @@ La app se venderá en la **Meta Horizon Store a USD 4,99**, con **código cerrad
 
 | Tema | Regla |
 | --- | --- |
-| Licencias | Solo bibliotecas permisivas (BSD, MIT, Apache-2.0) o del sistema. **Nada AGPL ni GPL** (por eso MuPDF queda fuera). LGPL (libmobi) solo si se cumplen sus condiciones (enlace dinámico, aviso y código de la biblioteca); si no, MOBI/AZW3 se resuelve de otra forma. Mantener el inventario de licencias y una pantalla de créditos. |
+| Licencias | Solo bibliotecas permisivas (BSD, MIT, Apache-2.0) o del sistema. **Nada AGPL, GPL ni LGPL**: la licencia del SDK de Meta prohíbe usarlo de forma que quede sujeto a una licencia abierta. MuPDF queda fuera y libmobi también (7 de noviembre de 2026): MOBI/AZW/AZW3 se leerán con un parser propio. Unity Personal sirve (menos de USD 200.000 al año; sin pantalla obligatoria en Unity 6). Inventario completo y pantalla de licencias de terceros: ver [docs/LICENCIAS_Y_TIENDA.md](docs/LICENCIAS_Y_TIENDA.md). |
 | EPUB | WebView del sistema + Readium (BSD-3), ver `docs/HITO2_ENFOQUE.md`. |
 | Google Drive | Leer los archivos que el usuario ya tiene (`drive.readonly`) es un permiso restringido: exige verificación de Google y una evaluación de seguridad anual (CASA) de terceros. Alternativa sin esa evaluación: permiso `drive.file` con el selector de archivos de Google (*Google Picker*), que solo da acceso a los archivos que el usuario elige. Decidir antes de la Fase 3. |
 | Dropbox | Las apps en modo desarrollo tienen un límite de usuarios; pedir aprobación de producción antes de publicar. |

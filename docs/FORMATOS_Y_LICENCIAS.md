@@ -102,6 +102,8 @@ No encontrar un indicador de cifrado **no demuestra** que el archivo esté libre
 
 **Decisión:** evaluación de Fase 2, bloqueada para producción hasta demostrar memoria acotada y una forma viable de cumplir LGPL. Alternativa: conversión local en el PC de archivos sin DRM a EPUB, sin enviar libros a servidores públicos.
 
+**Actualización (7 de noviembre de 2026):** con la venta en tienda y código cerrado, libmobi queda **descartado para producción**. MOBI/AZW/AZW3 se leerán con un parser propio, que además puede leer por partes. Ver [LICENCIAS_Y_TIENDA.md](LICENCIAS_Y_TIENDA.md).
+
 ## 4. Documentos de oficina y texto
 
 DOCX y ODT son contenedores ZIP/XML: reconocer el ZIP no basta. Analizar las partes necesarias por streaming con entidades externas desactivadas y recursos con límites. Definir explícitamente el subconjunto de estilos y tablas admitido y avisar cuando la conversión pierda información relevante. No ejecutar macros, vínculos remotos, objetos OLE ni scripts del documento.
