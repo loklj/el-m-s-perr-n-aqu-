@@ -220,6 +220,8 @@ Anota qué paso falló y qué mensaje viste (en Unity, en la terminal o dentro d
 | No hay passthrough (fondo negro) | Que esté el bloque **Passthrough** y que el Project Setup Tool no muestre pendientes |
 | `adb devices` dice `no permissions` o no muestra el visor | Desconecta y conecta el cable, acepta el aviso dentro del visor y revisa los permisos USB de Linux: <https://developer.android.com/studio/run/device> |
 | Error de clase Java no encontrada en el log | Si activaste Minify, marca **Custom Proguard File** en Publishing Settings |
+| El build falla con `.../NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++: not found` | El módulo **Android SDK & NDK Tools** quedó a medias (pasó el 7 de noviembre de 2026 en el PC de pruebas). Con Unity cerrado, reemplazar la carpeta `.../PlaybackEngines/AndroidPlayer/NDK` por el NDK **r27c** oficial: `https://dl.google.com/android/repository/android-ndk-r27c-linux.zip`, descomprimido con `unzip` (conserva los enlaces simbólicos) |
+| El disco del sistema se llena al instalar paquetes o compilar | En Unity 6 la caché de paquetes está en `~/.cache/Unity` (no en `~/.config/unity3d/cache`); moverla al disco grande y dejar un enlace simbólico. Unity Hub descarga en su «Ubicación de descargas» (Ajustes → Instalaciones), no en `TMPDIR` |
 
 ## Después
 
