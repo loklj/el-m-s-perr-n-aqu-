@@ -117,10 +117,12 @@ Verificaciones pendientes del usuario (marcar al probar):
 
 - [x] Unity 6.3 LTS instala y abre en Pop!_OS (7 de noviembre de 2026): **Unity Hub 3.22.5, Editor 6000.3.28f1, Meta XR All-in-One SDK 207, NDK r27c, OpenJDK 17.0.18, SDK build-tools 36.0.0**. Editor, proyecto y cachés en el disco `/media/dimitrov/almacenamiento` (el disco del sistema tiene 75 GB y estaba casi lleno).
 - [x] El menú Folio XR aparece y «Comprobar Hito 1» da todo OK (Meta Quest activo, PDF, plugin Java, libro, cámara del Camera Rig, paquete `com.loklj.folioxr`).
-- [ ] El APK compila. Primer intento fallido: el NDK de Unity Hub quedó sin `clang++`; se reemplazó por el NDK r27c oficial de Google. Pendiente el segundo intento.
-- [ ] El APK se instala con adb y abre en el Quest 3.
-- [ ] Se ve el passthrough y el libro con la portada del PDF.
-- [ ] A/X y B/Y cambian de doble página; el texto inferior coincide.
+- [x] El APK compila (7 de noviembre de 2026). Primer intento fallido: el NDK de Unity Hub quedó sin `clang++`; se reemplazó por el NDK r27c oficial de Google.
+- [x] El APK se instala con adb y abre en el Quest 3.
+- [x] Se ve el passthrough y el libro con páginas reales del PDF (captura del usuario: páginas 3-4, viñetas y letra grande).
+- [x] A/X y B/Y cambian de doble página; el texto inferior coincide.
+- [ ] **Calidad de imagen: el usuario la califica de «horrible»** (texto borroso). Hito 1.1: renderScale 1,4 y MSAA 4× al iniciar, páginas a 1800 px, filtrado anisotrópico 8× y sesgo de mipmap −0,5. Si no basta, probar capas del compositor (OVROverlay), la técnica que Meta recomienda para texto.
+- [ ] Manos: el seguimiento funciona, pero «no se puede hacer nada con ellas». Hito 1.1 añade pellizco derecho/izquierdo lejos del libro para pasar página y registra en el log cuántos interactores de agarre hay (para diagnosticar el agarre con la mano).
 - [ ] Se agarra el libro con manos y con mandos; el clic del stick lo recoloca.
 - [ ] El texto de 10–12 puntos se lee a ~45 cm.
 - [ ] Un PDF propio copiado con adb se abre.

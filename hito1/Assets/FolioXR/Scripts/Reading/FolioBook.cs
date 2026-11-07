@@ -5,9 +5,15 @@
 //   A o X              -> siguiente doble pagina
 //   B o Y              -> doble pagina anterior
 //   Clic del stick der. -> volver a poner el libro frente a la vista
-// Con las manos se puede agarrar y mover el libro (lo configura la Grab Quick
-// Action de Meta, ver docs/HITO1_GUIA.md). Pasar pagina con las manos llega
-// en un hito posterior.
+// Con las manos (Hito 1.1):
+//   Pellizco de la mano derecha (indice + pulgar) lejos del libro -> siguiente
+//   Pellizco de la mano izquierda lejos del libro                 -> anterior
+//   Cerca del libro el pellizco se deja para agarrarlo (Grab Quick Action de
+//   Meta, ver docs/HITO1_GUIA.md). Pasar la hoja tomandola llega mas adelante.
+//
+// Nitidez (Hito 1.1): al iniciar en el visor sube la resolucion de render
+// (renderScale de URP) y activa MSAA; las texturas de pagina usan filtrado
+// anisotropico y un sesgo de mipmap negativo.
 //
 // PDF que se abre:
 //   1) <persistentDataPath>/libro.pdf si existe (se puede copiar con adb), o
@@ -17,6 +23,8 @@ using System.Collections;
 using System.IO;
 using UnityEngine;
 using UnityEngine.Networking;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.XR;
 
 namespace FolioXR.Reading
@@ -39,8 +47,21 @@ namespace FolioXR.Reading
         public float pageHeight = 0.26f;
         [Tooltip("Separación entre páginas (lomo) en metros.")]
         public float gutter = 0.008f;
-        [Tooltip("Ancho en píxeles con que se dibuja cada página.")]
+        [Tooltip("Ancho en píxeles con que se dibuja cada página (mínimo 1800).")]
         public int renderWidthPixels = 1400;
+
+        [Header("Nitidez (se aplica al iniciar, solo en el visor)")]
+        [Tooltip("Resolución de render respecto de la que propone el visor. 1 = la del sistema; " +
+                 "1,4 se acerca a la pantalla real del Quest 3.")]
+        [Range(1f, 2f)] public float renderScale = 1.4f;
+        [Tooltip("Muestras de antialiasing MSAA: 1, 2, 4 u 8.")]
+        public int msaaSamples = 4;
+
+        [Header("Pasar página con las manos")]
+        public bool pinchToTurnPages = true;
+        [Tooltip("Si la muñeca está más cerca que esto (metros) del libro, el pellizco se " +
+                 "toma como agarre y no pasa página.")]
+        public float pinchIgnoreNearBook = 0.15f;
 
         [Header("Colocación")]
         public bool placeInFrontOfViewOnStart = true;
@@ -59,6 +80,21 @@ namespace FolioXR.Reading
         private bool _prevWasDown;
         private bool _recenterWasDown;
 
+        // Las escenas del Hito 1 ya guardaron 1400; se sube sin rehacer el libro.
+        private const int MinRenderWidth = 1800;
+        private const float PinchCooldownSeconds = 0.4f;
+
+        private OVRHand _leftHand;
+        private OVRHand _rightHand;
+        private bool _leftPinchWas;
+        private bool _rightPinchWas;
+        private float _nextPinchTime;
+
+        private void Awake()
+        {
+            ApplyRenderQuality();
+        }
+
         private IEnumerator Start()
         {
             ApplyLayout();
@@ -70,6 +106,9 @@ namespace FolioXR.Reading
                 yield return new WaitForSeconds(1.0f);
                 PlaceInFrontOfView();
             }
+
+            FindHands();
+            LogGrabSetup();
 
             string pdfPath = null;
             string copyError = null;
@@ -118,6 +157,94 @@ namespace FolioXR.Reading
             _nextWasDown = next;
             _prevWasDown = prev;
             _recenterWasDown = recenter;
+
+            if (pinchToTurnPages) UpdatePinchPageTurn();
+        }
+
+        private void UpdatePinchPageTurn()
+        {
+            bool left = IsPinching(_leftHand);
+            bool right = IsPinching(_rightHand);
+
+            if (Time.time >= _nextPinchTime)
+            {
+                if (right && !_rightPinchWas && !NearBook(_rightHand))
+                {
+                    NextSpread();
+                    _nextPinchTime = Time.time + PinchCooldownSeconds;
+                }
+                else if (left && !_leftPinchWas && !NearBook(_leftHand))
+                {
+                    PreviousSpread();
+                    _nextPinchTime = Time.time + PinchCooldownSeconds;
+                }
+            }
+
+            _leftPinchWas = left;
+            _rightPinchWas = right;
+        }
+
+        private static bool IsPinching(OVRHand hand)
+        {
+            return hand != null && hand.isActiveAndEnabled && hand.IsTracked && hand.IsDataHighConfidence &&
+                   !hand.IsSystemGestureInProgress && hand.GetFingerIsPinching(OVRHand.HandFinger.Index);
+        }
+
+        private bool NearBook(OVRHand hand)
+        {
+            if (bookCollider == null || hand == null) return false;
+            Vector3 wrist = hand.transform.position;
+            return Vector3.Distance(bookCollider.ClosestPoint(wrist), wrist) < pinchIgnoreNearBook;
+        }
+
+        private void FindHands()
+        {
+            OVRHand[] hands = FindObjectsByType<OVRHand>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (OVRHand hand in hands)
+            {
+                OVRPlugin.Hand side = hand.GetHand();
+                if (side == OVRPlugin.Hand.HandLeft && _leftHand == null) _leftHand = hand;
+                else if (side == OVRPlugin.Hand.HandRight && _rightHand == null) _rightHand = hand;
+            }
+            Debug.Log("[FolioXR] Manos para pasar página: " + hands.Length + " OVRHand, izquierda=" +
+                      (_leftHand != null) + ", derecha=" + (_rightHand != null));
+        }
+
+        /// <summary>Deja en el registro qué piezas de agarre hay en la escena (diagnóstico).</summary>
+        private static void LogGrabSetup()
+        {
+            int handInteractors = 0, controllerInteractors = 0, handInteractables = 0, grabInteractables = 0;
+            MonoBehaviour[] all = FindObjectsByType<MonoBehaviour>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (MonoBehaviour behaviour in all)
+            {
+                if (behaviour == null) continue;
+                switch (behaviour.GetType().Name)
+                {
+                    case "HandGrabInteractor": handInteractors++; break;
+                    case "GrabInteractor": controllerInteractors++; break;
+                    case "HandGrabInteractable": handInteractables++; break;
+                    case "GrabInteractable": grabInteractables++; break;
+                }
+            }
+            Debug.Log("[FolioXR] Agarre: HandGrabInteractor=" + handInteractors + ", GrabInteractor=" +
+                      controllerInteractors + ", HandGrabInteractable=" + handInteractables +
+                      ", GrabInteractable=" + grabInteractables);
+        }
+
+        private void ApplyRenderQuality()
+        {
+            // En el Editor no se toca: cambiaría el asset de URP guardado en el proyecto.
+            if (Application.isEditor) return;
+
+            var urp = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
+            if (urp == null)
+            {
+                Debug.LogWarning("[FolioXR] No se encontró el asset de URP; no se ajusta la nitidez.");
+                return;
+            }
+            urp.renderScale = Mathf.Clamp(renderScale, 1f, 2f);
+            urp.msaaSampleCount = Mathf.ClosestPowerOfTwo(Mathf.Clamp(msaaSamples, 1, 8));
+            Debug.Log("[FolioXR] Nitidez: renderScale=" + urp.renderScale + ", MSAA=" + urp.msaaSampleCount);
         }
 
         [ContextMenu("Siguiente doble página")]
@@ -176,7 +303,8 @@ namespace FolioXR.Reading
             PdfResult leftResult = null;
             PdfResult rightResult = null;
 
-            yield return _renderer.RenderPage(leftIndex, renderWidthPixels, (t, r) =>
+            int width = Mathf.Max(renderWidthPixels, MinRenderWidth);
+            yield return _renderer.RenderPage(leftIndex, width, (t, r) =>
             {
                 left = t;
                 leftResult = r;
@@ -184,7 +312,7 @@ namespace FolioXR.Reading
 
             if (leftResult.Ok && leftIndex + 1 < _pageCount)
             {
-                yield return _renderer.RenderPage(leftIndex + 1, renderWidthPixels, (t, r) =>
+                yield return _renderer.RenderPage(leftIndex + 1, width, (t, r) =>
                 {
                     right = t;
                     rightResult = r;
@@ -220,8 +348,8 @@ namespace FolioXR.Reading
                     ? string.Empty
                     : "Vista previa del Editor: el PDF real solo se dibuja en el Quest.\n";
                 SetStatus(preview + "Páginas " + (leftIndex + 1) +
-                          (right != null ? "-" + shownRight : string.Empty) +
-                          " de " + _pageCount + "   (A/X siguiente, B/Y anterior)");
+                          (right != null ? "-" + shownRight : string.Empty) + " de " + _pageCount +
+                          "\nSiguiente: A/X o pellizco derecho · Anterior: B/Y o pellizco izquierdo");
             }
 
             _busy = false;

@@ -196,7 +196,8 @@ namespace FolioXR.Reading
         {
             texture.wrapMode = TextureWrapMode.Clamp;
             texture.filterMode = FilterMode.Trilinear;
-            texture.anisoLevel = 4; // texto mas nitido al mirar la pagina en angulo
+            texture.anisoLevel = 8;        // texto mas nitido al mirar la pagina en angulo
+            texture.mipMapBias = -0.5f;    // usa un mipmap mas detallado: letras menos borrosas
         }
 
         private static void TryDelete(string path)

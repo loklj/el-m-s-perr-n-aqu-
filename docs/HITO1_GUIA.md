@@ -129,6 +129,13 @@ En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
 | Página 2 y 4 | Se distinguen los tamaños de letra (8 a 18 puntos) |
 | Agarrar con la mano o el gatillo de agarre | El libro se mueve contigo |
 | Clic en el stick derecho | El libro vuelve frente a tu vista |
+| Pellizco (índice + pulgar) con la mano **derecha**, lejos del libro (Hito 1.1) | Avanza dos páginas |
+| Pellizco con la mano **izquierda**, lejos del libro (Hito 1.1) | Retrocede dos páginas |
+| Nitidez (Hito 1.1) | Texto de 14 puntos legible a ~45 cm; comparar con la primera versión |
+
+### Actualizar a una versión nueva del código (por ejemplo, el Hito 1.1)
+
+Con Unity cerrado: `git pull`, volver a copiar `hito1/Assets` al proyecto (paso 5), abrir Unity, **Build** y reinstalar (paso 9). La escena y los Building Blocks se conservan.
 
 ## Paso 11 (opcional) — Probar con tu propio PDF
 
