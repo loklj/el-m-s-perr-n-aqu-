@@ -1,12 +1,12 @@
 # Folio XR — progreso y plan
 
-Última actualización: 7 de noviembre de 2026 (licencias para la tienda). Nombre de trabajo propio y provisional; no se ha comprobado su disponibilidad comercial. Repositorio: `loklj/el-m-s-perr-n-aqu-`.
+Última actualización: 7 de noviembre de 2026 (Hito 1.2: nitidez ajustable). Nombre de trabajo propio y provisional; no se ha comprobado su disponibilidad comercial. Repositorio: `loklj/el-m-s-perr-n-aqu-`.
 
 ## Punto de reanudación
 
 **Fase 0 completada como entrega documental: arquitectura y planificación.**
 
-**Fase 1 en curso — Hito 1 escrito, pendiente de prueba en el visor.** El usuario dio el OK para la Fase 1 por hitos, con su confirmación entre cada uno. La rama `hito-1/libro-pdf` contiene el código del Hito 1 (escrito por Claude el 5 de noviembre de 2026 mientras Codex estaba sin cupo de uso). **No se ha compilado ni probado**: en la nube no hay Unity ni visor. El usuario debe seguir [la guía del Hito 1](docs/HITO1_GUIA.md) y confirmar el resultado. **No empezar el Hito 2 sin esa confirmación.**
+**Fase 1 en curso — Hito 1 terminado y probado en Quest 3 por el usuario.** La base confirmada está en `fase-1/preparacion`; el usuario también confirmó que la nitidez del Hito 1.1 mejoró con renderScale 1,4 y MSAA 4×. El Hito 1.2, en `hito-1.2/nitidez`, añade el ajuste de nitidez dentro de la app y queda pendiente de su prueba específica en el visor. Aquí solo se revisa el código a mano: no hay Unity ni visor. Ver [la guía del Hito 1](docs/HITO1_GUIA.md). **El Hito 2 no está iniciado ni autorizado.**
 
 El repositorio partía de un README. Esta fase añade documentación de diseño, evaluación de dependencias, riesgos, estructura propuesta y procedimientos de validación. Las instrucciones de compilación e instalación describen trabajo futuro en el PC; no acreditan pruebas realizadas.
 
@@ -82,7 +82,7 @@ Entregables de documentación en este repositorio. Evaluación con fuentes prima
 - [x] Documentar preparación, compilación, instalación y validación en PC/Quest.
 - [x] Documentar riesgos y comprobaciones pendientes sin presentarlas como resultados.
 
-### Fase 1 — MVP local y biblioteca persistente (pendiente de OK)
+### Fase 1 — MVP local y biblioteca persistente (en curso, por hitos)
 
 1. Fijar versiones compatibles de Unity LTS, Meta XR, paquetes XR, JDK/SDK/NDK/Gradle y bibliotecas. Guardar versiones y lockfiles; compilar un proyecto mínimo Android ARM64 con IL2CPP en Pop!_OS y probar VR, passthrough, Touch y manos en Quest 3.
 2. Resolver el prototipo de página EPUB en una textura 3D legible. Evaluar Readium en Android y su integración gráfica antes de construir el lector completo; una vista Android plana no cumple el requisito del libro 3D.
@@ -93,7 +93,7 @@ Entregables de documentación en este repositorio. Evaluación con fuentes prima
 
 Salida: APK reproducible y una sesión real con los tres formatos, tres libros, biblioteca duradera, recuperación de un fallo e instrucciones actualizadas con las versiones efectivamente usadas. Sin esta evidencia no marcar el MVP como completado.
 
-#### Hito 1 — libro 3D con un PDF (código listo, sin probar)
+#### Hito 1 — libro 3D con un PDF (terminado y probado por el usuario)
 
 Alcance acordado con el usuario: proyecto mínimo Unity + Android que muestre páginas de un PDF de prueba propio en un libro 3D simple, con VR/passthrough, Touch y manos, más instrucciones exactas para compilar en Pop!_OS e instalar con adb.
 
@@ -107,13 +107,13 @@ Decisiones tomadas para este hito (revisables):
 | Módulo Android | Clase Java en `Assets/Plugins/Android` (Unity la compila) | Más simple que un AAR Kotlin para el primer APK; migrar a `android/reader` cuando se integre Room |
 | Proyecto Unity | Lo crea el usuario con Unity Hub en `unity/`; los archivos del hito están en `hito1/Assets` y se copian | Unity Hub no crea proyectos en carpetas que ya tienen contenido |
 | Paquete | `com.loklj.folioxr`, nombre «Folio XR» | Lo fija el menú del Editor |
-| Controles | A/X siguiente doble página, B/Y anterior, clic del stick derecho recoloca el libro; agarre con manos y mandos vía Interaction SDK | Pasar página con las manos queda para un hito posterior |
+| Controles | A/X siguiente doble página, B/Y anterior, clic del stick derecho recoloca el libro; agarre con manos y mandos vía Interaction SDK; stick izquierdo arriba/abajo ajusta la nitidez (Hito 1.2) | Hito 1.1 añade pellizcos para pasar página; su prueba específica con manos sigue pendiente |
 | PDF propio | `adb push` a `/sdcard/Android/data/com.loklj.folioxr/files/libro.pdf` | Evita permisos de almacenamiento antes de tener SAF |
-| Persistencia | Ninguna en este hito (no se usa PlayerPrefs) | Room y la biblioteca llegan en el paso 3 de esta fase |
+| Persistencia | Solo la nitidez con PlayerPrefs (`folioxr.renderScale`, Hito 1.2) | Room, biblioteca y progreso de lectura llegan en el paso 3 de esta fase |
 
 Limitaciones conocidas: sin PDF con contraseña (PdfRenderer no los abre en esta versión), un solo libro, PNG intermedio que añade latencia al pasar página (aceptable para validar; se optimiza en Fase 4), sin medición de memoria todavía.
 
-Verificaciones pendientes del usuario (marcar al probar):
+Implementación y verificaciones del usuario (las pruebas detalladas sin confirmación específica siguen pendientes):
 
 - [x] Unity 6.3 LTS instala y abre en Pop!_OS (7 de noviembre de 2026): **Unity Hub 3.22.5, Editor 6000.3.28f1, Meta XR All-in-One SDK 207, NDK r27c, OpenJDK 17.0.18, SDK build-tools 36.0.0**. Editor, proyecto y cachés en el disco `/media/dimitrov/almacenamiento` (el disco del sistema tiene 75 GB y estaba casi lleno).
 - [x] El menú Folio XR aparece y «Comprobar Hito 1» da todo OK (Meta Quest activo, PDF, plugin Java, libro, cámara del Camera Rig, paquete `com.loklj.folioxr`).
@@ -121,7 +121,8 @@ Verificaciones pendientes del usuario (marcar al probar):
 - [x] El APK se instala con adb y abre en el Quest 3.
 - [x] Se ve el passthrough y el libro con páginas reales del PDF (captura del usuario: páginas 3-4, viñetas y letra grande).
 - [x] A/X y B/Y cambian de doble página; el texto inferior coincide.
-- [ ] **Calidad de imagen: el usuario la califica de «horrible»** (texto borroso). Hito 1.1: renderScale 1,4 y MSAA 4× al iniciar, páginas a 1800 px, filtrado anisotrópico 8× y sesgo de mipmap −0,5. Si no basta, probar capas del compositor (OVROverlay), la técnica que Meta recomienda para texto.
+- [x] Calidad de imagen del Hito 1.1: el usuario confirmó que mejoró en Quest 3. RenderScale 1,4 y MSAA 4× al iniciar, páginas a 1800 px, filtrado anisotrópico 8× y sesgo de mipmap −0,5; esto no acredita todavía la prueba de letra de 10–12 puntos a ~45 cm.
+- [x] Hito 1.2 implementado: nitidez ajustable de 1,4 a 1,8 con el stick izquierdo, pasos de 0,1 por movimiento, guardado en PlayerPrefs y aviso temporal. **Pendiente de prueba específica en Quest 3.**
 - [ ] Manos: el seguimiento funciona, pero «no se puede hacer nada con ellas». Hito 1.1 añade pellizco derecho/izquierdo lejos del libro para pasar página y registra en el log cuántos interactores de agarre hay (para diagnosticar el agarre con la mano).
 - [ ] Se agarra el libro con manos y con mandos; el clic del stick lo recoloca.
 - [ ] El texto de 10–12 puntos se lee a ~45 cm.
@@ -215,7 +216,7 @@ Pendiente en el visor: abrir los **PDF reales del usuario (hasta 20 GB)** y los 
 - Se ha inspeccionado la copia local, inicialmente limpia y con solo `README.md`.
 - El entorno cloud dispone de Linux y Java; no se detectaron Unity, `adb` ni Gradle en el PATH. No hay un Quest conectado ni un proyecto compilable.
 - Se consultaron repositorios oficiales accesibles para contrastar bibliotecas y ejemplos. Algunos portales de documentación oficiales devolvieron HTTP 403 por la política de red; se documenta esa limitación junto a las fuentes.
-- La revisión realizada aquí es documental. No se ejecutaron pruebas de renderizado, OAuth, persistencia de la aplicación ni rendimiento; no existe aún esa aplicación.
+- La revisión inicial de Fase 0 fue documental. El Hito 1 se compiló y probó después en el Quest 3 del usuario; el Hito 1.2 se revisa manualmente aquí, sin compilar Unity ni ejecutar pruebas en el visor. No se han verificado OAuth, persistencia de biblioteca ni rendimiento.
 - Validación documental: seis archivos Markdown legibles en UTF-8, nueve enlaces locales válidos, bloques de código cerrados y ausencia de espacios finales; `git diff --check` sin errores. Revisión cruzada de fases y requisitos completada.
 - No se solicitaron ni guardaron credenciales. No se modificó la política de red ni se instalaron toolchains para fases futuras.
 
@@ -223,8 +224,8 @@ Pendiente en el visor: abrir los **PDF reales del usuario (hasta 20 GB)** y los 
 
 Leer este archivo y los documentos enlazados, revisar `git status` y respetar el trabajo existente. Usar la copia de este repositorio en `/workspace`; la tarea cloud ya está aislada y no necesita un worktree nuevo.
 
-**Pendientes del usuario:** (1) probar el Hito 1 en el visor. La licencia ya está decidida: venta en la Meta Horizon Store con código cerrado, así que el Hito 2 usará WebView (ver [Publicación comercial](#publicación-comercial-decisión-del-usuario-5-de-noviembre-de-2026)).
+**Pendientes del usuario:** probar el ajuste de nitidez del Hito 1.2 en el visor y completar las verificaciones detalladas aún abiertas del checklist. La licencia ya está decidida: venta en la Meta Horizon Store con código cerrado; el enfoque propuesto del Hito 2 usa WebView (ver [Publicación comercial](#publicación-comercial-decisión-del-usuario-5-de-noviembre-de-2026)), pero su implementación no está autorizada.
 
 Avance sin depender del visor (5 de noviembre de 2026, rama `fase-1/preparacion`): muestras en `tests/fixtures/` (EPUB válido según epubcheck 5.3.0, CBZ, manga RTL, TXT en 4 codificaciones) y `tools/test-data/gigantes.py` (PDF de 100.001 páginas verificado con poppler y qpdf, TXT, CBZ y EPUB de estrés). Esto adelanta parte del generador previsto para la Fase 4.
 
-**Esperar la confirmación del usuario sobre el Hito 1 (prueba en el visor).** Si falla, corregir a partir de su registro (`adb logcat`) y del paso de `docs/HITO1_GUIA.md` donde se detuvo. Si funciona: anotar las versiones reales, unir la rama y plantear el enfoque del Hito 2 (EPUB en textura 3D) antes de programarlo. Obtener antes de instalar en el PC su versión de Pop!_OS, CPU/GPU/RAM y espacio libre; no son datos necesarios para cerrar esta Fase 0. Actualizar aquí resultados, decisiones, limitaciones, instrucciones y checklist al cerrar cada fase.
+**El Hito 1 ya está confirmado; no empezar el Hito 2.** La rama `hito-1.2/nitidez` queda para revisión y unión por Claude y prueba del ajuste en Quest 3 por el usuario. Si falla, corregir a partir de su registro (`adb logcat`) y del paso de `docs/HITO1_GUIA.md` donde se detuvo. Actualizar aquí resultados, decisiones, limitaciones, instrucciones y checklist al cerrar cada hito.

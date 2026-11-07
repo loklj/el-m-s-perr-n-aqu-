@@ -2,7 +2,7 @@
 
 Objetivo: instalar en el Quest 3 una app mínima que muestre un **libro 3D con páginas de un PDF**, con passthrough, mandos Touch y manos, y que se pueda **agarrar y mover**.
 
-> **Estado:** el código de esta rama lo escribió Claude el 5 de noviembre de 2026, mientras Codex estaba sin cupo de uso. **No se ha compilado ni probado** porque en la nube no hay Unity ni visor. Lo vas a probar tú por primera vez. Si algo falla, anota en qué paso y qué mensaje apareció.
+> **Estado:** el Hito 1 está terminado y probado en Quest 3 por el usuario; la base está en `fase-1/preparacion`. La nitidez del Hito 1.1 mejoró en el visor. Esta rama, `hito-1.2/nitidez`, añade el ajuste con el stick izquierdo, pendiente de prueba específica en Quest 3; en la nube solo se revisa el código a mano, sin compilar Unity. Si algo falla, anota en qué paso y qué mensaje apareció.
 
 Tiempo estimado: 1–2 horas la primera vez (casi todo es descarga e instalación). Espacio en disco: unos 15–20 GB.
 
@@ -31,7 +31,7 @@ En una terminal:
 sudo apt install git curl
 git clone https://github.com/loklj/el-m-s-perr-n-aqu-.git ~/folio-xr
 cd ~/folio-xr
-git checkout fase-1/preparacion   # incluye el Hito 1, los archivos de prueba y el paso 12
+git checkout hito-1.2/nitidez     # incluye el Hito 1 y el ajuste de nitidez del Hito 1.2
 ```
 
 ## Paso 2 — Instalar Unity Hub (comandos oficiales para Ubuntu)
@@ -129,11 +129,12 @@ En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
 | Página 2 y 4 | Se distinguen los tamaños de letra (8 a 18 puntos) |
 | Agarrar con la mano o el gatillo de agarre | El libro se mueve contigo |
 | Clic en el stick derecho | El libro vuelve frente a tu vista |
+| Stick izquierdo arriba/abajo (Hito 1.2) | Sube/baja la nitidez entre 1,4 y 1,8, de 0,1 en 0,1: un paso por movimiento, sin repetición al mantenerlo inclinado; vuelve al centro para rearmarlo. El valor inicial es 1,4 y el elegido se conserva al cerrar y abrir la app. Muestra «Nitidez: 1,6x (stick izquierdo arriba/abajo). Más nitidez usa más batería.» durante 2,5 s y vuelve al estado actual de páginas; un error visible tiene prioridad |
 | Pellizco (índice + pulgar) con la mano **derecha**, lejos del libro (Hito 1.1) | Avanza dos páginas |
 | Pellizco con la mano **izquierda**, lejos del libro (Hito 1.1) | Retrocede dos páginas |
 | Nitidez (Hito 1.1) | Texto de 14 puntos legible a ~45 cm; comparar con la primera versión |
 
-### Actualizar a una versión nueva del código (por ejemplo, el Hito 1.1)
+### Actualizar a una versión nueva del código (por ejemplo, el Hito 1.2)
 
 Con Unity cerrado: `git pull`, volver a copiar `hito1/Assets` al proyecto (paso 5), abrir Unity, **Build** y reinstalar (paso 9). La escena y los Building Blocks se conservan.
 
@@ -232,4 +233,4 @@ Anota qué paso falló y qué mensaje viste (en Unity, en la terminal o dentro d
 
 ## Después
 
-Cuando confirmes que funciona en el visor, el siguiente paso es el **Hito 2: prototipo de página EPUB en el libro 3D**. Codex debe partir de esta rama y de `PROGRESO.md`.
+El Hito 1 ya está confirmado. Prueba el ajuste de nitidez del Hito 1.2 y registra el resultado en `PROGRESO.md`. El **Hito 2: prototipo de página EPUB en el libro 3D** no está iniciado ni autorizado.

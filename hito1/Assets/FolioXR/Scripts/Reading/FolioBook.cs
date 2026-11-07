@@ -5,6 +5,7 @@
 //   A o X              -> siguiente doble pagina
 //   B o Y              -> doble pagina anterior
 //   Clic del stick der. -> volver a poner el libro frente a la vista
+//   Stick izq. arriba/abajo -> subir/bajar nitidez (1,4 a 1,8, Hito 1.2)
 // Con las manos (Hito 1.1):
 //   Pellizco de la mano derecha (indice + pulgar) lejos del libro -> siguiente
 //   Pellizco de la mano izquierda lejos del libro                 -> anterior
@@ -20,6 +21,7 @@
 //   2) StreamingAssets/folio-prueba.pdf, incluido en la app.
 
 using System.Collections;
+using System.Globalization;
 using System.IO;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -34,6 +36,9 @@ namespace FolioXR.Reading
     {
         public const string BundledPdfName = "folio-prueba.pdf";
         public const string UserPdfName = "libro.pdf";
+        public const float MinRenderScale = 1.4f;
+        public const float MaxRenderScale = 1.8f;
+        public const float RenderScaleStep = 0.1f;
 
         [Header("Partes del libro (las asigna el menu Folio XR)")]
         public Renderer leftPage;
@@ -50,10 +55,10 @@ namespace FolioXR.Reading
         [Tooltip("Ancho en píxeles con que se dibuja cada página (mínimo 1800).")]
         public int renderWidthPixels = 1400;
 
-        [Header("Nitidez (se aplica al iniciar, solo en el visor)")]
-        [Tooltip("Resolución de render respecto de la que propone el visor. 1 = la del sistema; " +
-                 "1,4 se acerca a la pantalla real del Quest 3.")]
-        [Range(1f, 2f)] public float renderScale = 1.4f;
+        [Header("Nitidez (stick izquierdo arriba/abajo, solo se aplica en el visor)")]
+        [Tooltip("Resolución inicial si no hay un ajuste guardado. De 1,4 a 1,8 en pasos de 0,1. " +
+                 "Más nitidez usa más batería.")]
+        [Range(MinRenderScale, MaxRenderScale)] public float renderScale = MinRenderScale;
         [Tooltip("Muestras de antialiasing MSAA: 1, 2, 4 u 8.")]
         public int msaaSamples = 4;
 
@@ -80,6 +85,14 @@ namespace FolioXR.Reading
         private bool _prevWasDown;
         private bool _recenterWasDown;
 
+        private const string RenderScalePrefsKey = "folioxr.renderScale";
+        private const float RenderScaleStatusSeconds = 2.5f;
+        private float _currentRenderScale;
+        private bool _renderScaleStickLatched;
+        private float _renderScaleStatusUntil;
+        private string _lastPageStatus = string.Empty;
+        private bool _statusIsError;
+
         // Las escenas del Hito 1 ya guardaron 1400; se sube sin rehacer el libro.
         private const int MinRenderWidth = 1800;
         private const float PinchCooldownSeconds = 0.4f;
@@ -92,7 +105,14 @@ namespace FolioXR.Reading
 
         private void Awake()
         {
+            renderScale = ClampRenderScale(renderScale);
+            _currentRenderScale = ClampRenderScale(PlayerPrefs.GetFloat(RenderScalePrefsKey, renderScale));
             ApplyRenderQuality();
+        }
+
+        private void OnValidate()
+        {
+            renderScale = ClampRenderScale(renderScale);
         }
 
         private IEnumerator Start()
@@ -115,7 +135,7 @@ namespace FolioXR.Reading
             yield return ResolvePdfPath(p => pdfPath = p, e => copyError = e);
             if (pdfPath == null && PdfPageRenderer.IsRealRendererAvailable)
             {
-                SetStatus("No se pudo preparar el PDF.\n" + copyError);
+                SetStatus("No se pudo preparar el PDF.\n" + copyError, true);
                 yield break;
             }
 
@@ -135,7 +155,7 @@ namespace FolioXR.Reading
             }
             if (_pageCount <= 0)
             {
-                SetStatus("El PDF no tiene páginas.");
+                SetStatus("El PDF no tiene páginas.", true);
                 yield break;
             }
 
@@ -159,6 +179,50 @@ namespace FolioXR.Reading
             _recenterWasDown = recenter;
 
             if (pinchToTurnPages) UpdatePinchPageTurn();
+            UpdateRenderScaleInput();
+            UpdateRenderScaleStatus();
+        }
+
+        private void UpdateRenderScaleInput()
+        {
+            float y = ReadAxis(XRNode.LeftHand, CommonUsages.primary2DAxis).y;
+            if (Mathf.Abs(y) < 0.3f) _renderScaleStickLatched = false;
+            if (_renderScaleStickLatched || Mathf.Abs(y) <= 0.7f) return;
+
+            // Un paso por movimiento; solo volver al centro permite otro paso.
+            _renderScaleStickLatched = true;
+            float next = ClampRenderScale(_currentRenderScale + (y > 0f ? RenderScaleStep : -RenderScaleStep));
+            if (Mathf.Approximately(next, _currentRenderScale)) return;
+
+            _currentRenderScale = next;
+            ApplyRenderQuality();
+            PlayerPrefs.SetFloat(RenderScalePrefsKey, _currentRenderScale);
+            PlayerPrefs.Save();
+
+            string value = _currentRenderScale.ToString("F1", CultureInfo.InvariantCulture);
+            Debug.Log("[FolioXR] Nitidez: renderScale=" + value + " (guardado).");
+            if (_statusIsError) return;
+
+            _renderScaleStatusUntil = Time.unscaledTime + RenderScaleStatusSeconds;
+            if (statusText != null)
+                statusText.text = "Nitidez: " + value.Replace('.', ',') +
+                    "x (stick izquierdo arriba/abajo). Más nitidez usa más batería.";
+        }
+
+        private void UpdateRenderScaleStatus()
+        {
+            if (_renderScaleStatusUntil <= 0f || Time.unscaledTime < _renderScaleStatusUntil) return;
+            _renderScaleStatusUntil = 0f;
+            if (!_statusIsError) SetStatus(_lastPageStatus);
+        }
+
+        private static float ClampRenderScale(float value)
+        {
+            if (float.IsNaN(value)) return MinRenderScale;
+            value = Mathf.Clamp(value, MinRenderScale, MaxRenderScale);
+            // Ajustar a pasos evita acumular errores al subir y bajar repetidamente.
+            float steps = Mathf.Round((value - MinRenderScale) / RenderScaleStep);
+            return Mathf.Clamp(MinRenderScale + steps * RenderScaleStep, MinRenderScale, MaxRenderScale);
         }
 
         private void UpdatePinchPageTurn()
@@ -242,7 +306,7 @@ namespace FolioXR.Reading
                 Debug.LogWarning("[FolioXR] No se encontró el asset de URP; no se ajusta la nitidez.");
                 return;
             }
-            urp.renderScale = Mathf.Clamp(renderScale, 1f, 2f);
+            urp.renderScale = ClampRenderScale(_currentRenderScale);
             urp.msaaSampleCount = Mathf.ClosestPowerOfTwo(Mathf.Clamp(msaaSamples, 1, 8));
             Debug.Log("[FolioXR] Nitidez: renderScale=" + urp.renderScale + ", MSAA=" + urp.msaaSampleCount);
         }
@@ -347,9 +411,10 @@ namespace FolioXR.Reading
                 string preview = PdfPageRenderer.IsRealRendererAvailable
                     ? string.Empty
                     : "Vista previa del Editor: el PDF real solo se dibuja en el Quest.\n";
-                SetStatus(preview + "Páginas " + (leftIndex + 1) +
+                _lastPageStatus = preview + "Páginas " + (leftIndex + 1) +
                           (right != null ? "-" + shownRight : string.Empty) + " de " + _pageCount +
-                          "\nSiguiente: A/X o pellizco derecho · Anterior: B/Y o pellizco izquierdo");
+                          "\nSiguiente: A/X o pellizco derecho · Anterior: B/Y o pellizco izquierdo";
+                SetStatus(_lastPageStatus);
             }
 
             _busy = false;
@@ -430,12 +495,16 @@ namespace FolioXR.Reading
                     break;
             }
             Debug.LogWarning("[FolioXR] " + result.ErrorKind + ": " + result.ErrorDetail);
-            SetStatus(message + "\n" + result.ErrorDetail);
+            SetStatus(message + "\n" + result.ErrorDetail, true);
         }
 
-        private void SetStatus(string message)
+        private void SetStatus(string message, bool isError = false)
         {
-            if (statusText != null) statusText.text = message;
+            _statusIsError = isError;
+            // Los errores cancelan el aviso; las páginas se actualizan sin ocultarlo.
+            if (isError) _renderScaleStatusUntil = 0f;
+            if (statusText != null && Time.unscaledTime >= _renderScaleStatusUntil)
+                statusText.text = message;
             if (!string.IsNullOrEmpty(message)) Debug.Log("[FolioXR] " + message.Replace('\n', ' '));
         }
 
@@ -443,6 +512,12 @@ namespace FolioXR.Reading
         {
             InputDevice device = InputDevices.GetDeviceAtXRNode(node);
             return device.isValid && device.TryGetFeatureValue(usage, out bool value) && value;
+        }
+
+        private static Vector2 ReadAxis(XRNode node, InputFeatureUsage<Vector2> usage)
+        {
+            InputDevice device = InputDevices.GetDeviceAtXRNode(node);
+            return device.isValid && device.TryGetFeatureValue(usage, out Vector2 value) ? value : Vector2.zero;
         }
 
         /// <summary>
