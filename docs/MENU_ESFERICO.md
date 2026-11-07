@@ -6,7 +6,7 @@ Fecha: 7 de noviembre de 2026. Basado en el boceto del usuario («Menú esféric
 
 | Tema | Decisión |
 | --- | --- |
-| Cómo aparece | Botón de menú (☰) del mando izquierdo, o la **palma izquierda hacia arriba** si se usan las manos |
+| Cómo aparece | Botón de menú (☰) del mando izquierdo. Con las manos: **con la palma izquierda hacia arriba, cerrar y abrir la mano** (el mismo gesto la cierra) |
 | Segundo nivel | **Otro anillo en la esfera**: al elegir una categoría, la esfera gira hacia arriba y muestra un anillo con sus opciones |
 | Categorías | **Biblioteca, Entornos, Ajustes, Importar y nubes, Hora** |
 
@@ -14,7 +14,12 @@ Fecha: 7 de noviembre de 2026. Basado en el boceto del usuario («Menú esféric
 
 **Aparecer y desaparecer**
 - Mando: el botón ☰ izquierdo abre y cierra. En Unity XR es `CommonUsages.menuButton` del `XRNode.LeftHand`, por flanco.
-- Manos: la esfera aparece cuando la palma izquierda mira hacia la cabeza (ángulo menor a 40°) durante 0,3 s, y se oculta cuando la palma deja de mirar durante 0,5 s. Los tiempos evitan parpadeos.
+- Manos (aclaración del usuario: «tiene que cerrar y abrir la palma izquierda hacia arriba»): con la palma izquierda hacia arriba, cerrar la mano en puño y volver a abrirla abre el menú, y el mismo gesto lo cierra. Girar la mano no lo cierra: la esfera sigue a la mano hasta que se repite el gesto o se pulsa ☰.
+  - Palma hacia arriba: la normal de la palma forma menos de 45° con el eje vertical del mundo. La normal se calcula con el producto cruz entre muñeca→nudillo del índice y muñeca→nudillo del meñique de `OVRSkeleton`, con el signo correcto para la mano izquierda. Escribe el ángulo en el registro para comprobarlo en el visor.
+  - Puño: la distancia media de las puntas de índice, medio, anular y meñique al centro de la palma (punto medio entre la muñeca y el nudillo del dedo medio) baja de 5,5 cm. La mano está abierta cuando esa distancia supera 8 cm; la diferencia entre ambos umbrales evita parpadeos.
+  - Secuencia válida: mano abierta → puño durante al menos 0,15 s → mano abierta antes de 1,2 s, con la palma hacia arriba todo el tiempo. Después de cambiar, espera 0,8 s antes de aceptar otro gesto.
+  - El gesto solo cuenta si la mano está rastreada con confianza alta (`IsTracked`, `IsDataHighConfidence`) y no hay un gesto del sistema en curso (`IsSystemGestureInProgress`).
+  - Mientras la palma izquierda esté hacia arriba, el pellizco izquierdo no pasa páginas. Así, al cerrar la mano no se retrocede una página por accidente.
 - Animación de 0,2 s al aparecer y desaparecer (escala de 0 a 1).
 
 **Posición**

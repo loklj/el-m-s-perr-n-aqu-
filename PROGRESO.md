@@ -179,7 +179,7 @@ La app se venderá en la **Meta Horizon Store a USD 4,99**, con **código cerrad
 
 ## Menú esférico 3D (decisión del usuario, 7 de noviembre de 2026)
 
-Esfera azul anclada al mando o la mano izquierda, que se abre con ☰ o con la palma arriba y se gira con la mano derecha. Las opciones aparecen en un segundo anillo. Categorías: Biblioteca, Entornos, Ajustes, Importar y nubes, Hora. Especificación completa: [docs/MENU_ESFERICO.md](docs/MENU_ESFERICO.md). Se programa después de revisar el entorno de prueba.
+Esfera azul anclada al mando o la mano izquierda, que se abre con ☰ o, con las manos, cerrando y abriendo la mano izquierda con la palma hacia arriba y se gira con la mano derecha. Las opciones aparecen en un segundo anillo. Categorías: Biblioteca, Entornos, Ajustes, Importar y nubes, Hora. Especificación completa: [docs/MENU_ESFERICO.md](docs/MENU_ESFERICO.md). Se programa después de revisar el entorno de prueba.
 
 ## Archivos de varios GB (5 GB requeridos, pruebas hasta 20 GB)
 
