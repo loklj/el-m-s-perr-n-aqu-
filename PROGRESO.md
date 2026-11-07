@@ -14,6 +14,7 @@ El repositorio partía de un README. Esta fase añade documentación de diseño,
 
 - [Arquitectura y estructura propuesta](docs/ARQUITECTURA.md).
 - [Formatos, bibliotecas y licencias](docs/FORMATOS_Y_LICENCIAS.md).
+- [Menú esférico 3D: diseño acordado](docs/MENU_ESFERICO.md).
 - [Licencias para vender la app en la Meta Horizon Store](docs/LICENCIAS_Y_TIENDA.md): Unity, SDK de Meta, comisión e inventario de componentes (7 de noviembre de 2026).
 - [Importación local, nubes, OPDS y guía Kindle](docs/IMPORTACION_Y_NUBES.md).
 - [Preparación del PC, compilación, instalación y pruebas](docs/PC_Y_VALIDACION.md).
@@ -174,6 +175,11 @@ La app se venderá en la **Meta Horizon Store a USD 4,99**, con **código cerrad
 - **Modelos 3D hechos en código** (por Codex/GPT-6 Astra, revisados por Claude): sin paquetes comprados ni recursos de terceros, así no hay licencias que cumplir.
 - **Ahora solo uno de prueba** para medir rendimiento en el Quest 3; los otros 19 después de que el lector de EPUB funcione.
 - Forma de trabajo pedida por el usuario: **Codex/GPT-6 Astra escribe el código y Claude lo revisa y corrige** antes de que el usuario compile.
+- Estado (7 de noviembre de 2026, 12:35): Codex programó el entorno de prueba en la rama `entornos/prueba-1`, pero se le acabó el cupo de uso antes de subirlo; se restablece a las 17:11.
+
+## Menú esférico 3D (decisión del usuario, 7 de noviembre de 2026)
+
+Esfera azul anclada al mando o la mano izquierda, que se abre con ☰ o con la palma arriba y se gira con la mano derecha. Las opciones aparecen en un segundo anillo. Categorías: Biblioteca, Entornos, Ajustes, Importar y nubes, Hora. Especificación completa: [docs/MENU_ESFERICO.md](docs/MENU_ESFERICO.md). Se programa después de revisar el entorno de prueba.
 
 ## Archivos de varios GB (5 GB requeridos, pruebas hasta 20 GB)
 
