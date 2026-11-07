@@ -81,10 +81,10 @@ Vuelve a abrir el proyecto en Unity Hub. En la barra de menú debe aparecer **Fo
 
 Son los pasos de la guía oficial de Meta (*Manual Project Setup*):
 
-1. **File → Build Profiles** → elige **Meta Quest** (o **Android** si no aparece) → **Switch Platform**.
+1. **File → Build Profiles** → elige **Meta Quest** → **Enable Platform** (si pide instalar `com.unity.xr.openxr`, **Install**) → luego **Switch Platform**. En versiones anteriores a Unity 6.1, si no aparece Meta Quest, elige **Android**.
 2. **Edit → Project Settings → XR Plug-in Management** → si lo pide, **Install XR Plugin Management**. En la pestaña de **Meta Quest/Android**, marca **OpenXR**.
-3. En el navegador, entra a la Unity Asset Store, busca **Meta XR All-in-One SDK** y toca **Add to My Assets**.
-4. En Unity: **Window → Package Management → Package Manager → My Assets → Meta XR All-in-One SDK → Install**. Si pide reiniciar el Editor, acepta. Si pregunta por *OpenXR Hand Skeleton*, elige **Use OpenXR Hand**.
+3. En Unity: **Window → Package Management → Package Manager** → botón **+** → **Add package by name** → escribe `com.meta.xr.sdk.all` → **Add**. No hace falta pasar por la Asset Store.
+4. Si pide activar el conjunto de funciones Meta XR, **Enable**. Si pide reiniciar el Editor, acepta. Si pregunta por *OpenXR Hand Skeleton*, elige **Use OpenXR Hand**.
 5. **Project Settings → XR Plug-in Management → OpenXR**, pestaña Android: activa el grupo de funciones **Meta XR**.
 6. Abre el **Project Setup Tool** (menú **Meta XR Tools** o **Window → Meta → Meta XR SDK**) y toca **Fix All** y luego **Apply All**.
 
