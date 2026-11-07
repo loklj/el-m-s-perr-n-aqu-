@@ -1,5 +1,7 @@
 # Menú esférico 3D — diseño acordado
 
+Hay una alternativa para quien prefiera algo más directo: el [menú simple](MENU_SIMPLE.md), un panel plano. Se elige en Ajustes.
+
 Fecha: 7 de noviembre de 2026. Basado en el boceto del usuario («Menú esférico 3D, Meta Quest 3»): una esfera azul flotante anclada al mando izquierdo, con categorías alrededor, que se gira con la mano derecha. Este documento es la especificación para que Codex (GPT-6 Astra) lo programe y Claude lo revise.
 
 ## Decisiones del usuario
@@ -49,7 +51,7 @@ Fecha: 7 de noviembre de 2026. Basado en el boceto del usuario («Menú esféric
 | --- | --- | --- |
 | Biblioteca | Ícono de libros | Libro abierto ahora y «Próximamente: tu biblioteca» (llega en el paso 3 de la Fase 1) |
 | Entornos | Ícono de casa | «Passthrough», «Casa moderna cálida» (entorno 1) y, si hay un entorno activo, sus lugares: sofá, biblioteca, dormitorio, balcón y terraza. Los otros 19 entornos se agregan como casillas nuevas |
-| Ajustes | Engranaje | Nitidez 1,4 · 1,5 · 1,6 · 1,7 · 1,8, con el valor actual marcado. Más adelante: tamaño del libro, mano dominante y sonido |
+| Ajustes | Engranaje | Nitidez 1,4 · 1,5 · 1,6 · 1,7 · 1,8, con el valor actual marcado, y «Estilo de menú: Esfera / Simple». Más adelante: tamaño del libro, mano dominante y sonido |
 | Importar y nubes | Nube | «Próximamente» (Fase 3: archivos del visor, Google Drive, Dropbox y MEGA) |
 | Hora | **Hora actual (HH:MM) y batería**, actualizadas cada minuto | Temporizador de lectura: 15, 30, 45 o 60 min, y «Apagar». Al terminar, un aviso suave, sin cerrar el libro |
 
@@ -68,6 +70,7 @@ Fecha: 7 de noviembre de 2026. Basado en el boceto del usuario («Menú esféric
 
 ## Integración técnica
 
+- Las opciones salen de un modelo compartido con el [menú simple](MENU_SIMPLE.md) (`MenuModel`). Esta esfera es una de las dos vistas, `SphereMenuView`, y `MenuController` decide cuál se muestra.
 - Código nuevo en `hito1/Assets/FolioXR/Scripts/Menu/`, con el namespace `FolioXR.Menu`. Se crea solo con `[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]`, sin tocar la escena.
 - Interfaces públicas que hay que agregar:
   - `FolioBook`: `float RenderScale { get; }`, `void SetRenderScale(float value)` (guarda en PlayerPrefs y muestra el aviso) y `bool InputPaused { get; set; }`.
@@ -78,5 +81,5 @@ Fecha: 7 de noviembre de 2026. Basado en el boceto del usuario («Menú esféric
 ## Orden
 
 1. Terminar y revisar el entorno de prueba (rama `entornos/prueba-1`, hecho por Codex). Quedó sin subir porque se acabó el cupo de Codex; se reanuda cuando se restablezca.
-2. Programar el menú con esta especificación (Codex) y revisarlo (Claude).
-3. Probarlo en el Quest 3 (usuario).
+2. Programar el modelo compartido y el [menú simple](MENU_SIMPLE.md) (Codex), revisarlo (Claude) y probarlo (usuario).
+3. Programar esta esfera sobre el mismo modelo (Codex), revisarla (Claude) y probarla en el Quest 3 (usuario).

@@ -15,6 +15,7 @@ El repositorio partía de un README. Esta fase añade documentación de diseño,
 - [Arquitectura y estructura propuesta](docs/ARQUITECTURA.md).
 - [Formatos, bibliotecas y licencias](docs/FORMATOS_Y_LICENCIAS.md).
 - [Menú esférico 3D: diseño acordado](docs/MENU_ESFERICO.md).
+- [Menú simple (alternativa a la esfera)](docs/MENU_SIMPLE.md).
 - [Licencias para vender la app en la Meta Horizon Store](docs/LICENCIAS_Y_TIENDA.md): Unity, SDK de Meta, comisión e inventario de componentes (7 de noviembre de 2026).
 - [Importación local, nubes, OPDS y guía Kindle](docs/IMPORTACION_Y_NUBES.md).
 - [Preparación del PC, compilación, instalación y pruebas](docs/PC_Y_VALIDACION.md).
@@ -179,7 +180,9 @@ La app se venderá en la **Meta Horizon Store a USD 4,99**, con **código cerrad
 
 ## Menú esférico 3D (decisión del usuario, 7 de noviembre de 2026)
 
-Esfera azul anclada al mando o la mano izquierda, que se abre con ☰ o, con las manos, cerrando y abriendo la mano izquierda con la palma hacia arriba y se gira con la mano derecha. Las opciones aparecen en un segundo anillo. Categorías: Biblioteca, Entornos, Ajustes, Importar y nubes, Hora. Especificación completa: [docs/MENU_ESFERICO.md](docs/MENU_ESFERICO.md). Se programa después de revisar el entorno de prueba.
+Esfera azul anclada al mando o la mano izquierda, que se abre con ☰ o, con las manos, cerrando y abriendo la mano izquierda con la palma hacia arriba y se gira con la mano derecha. Las opciones aparecen en un segundo anillo. Categorías: Biblioteca, Entornos, Ajustes, Importar y nubes, Hora. Especificación completa: [docs/MENU_ESFERICO.md](docs/MENU_ESFERICO.md).
+
+También habrá un **menú simple** para quien no quiera la esfera: un panel plano con las mismas opciones, que se toca con el dedo o se apunta con el rayo del mando. Se elige en Ajustes, y la esfera queda por defecto. Especificación: [docs/MENU_SIMPLE.md](docs/MENU_SIMPLE.md). Orden: entorno de prueba, luego el menú simple con el modelo compartido y después la esfera.
 
 ## Archivos de varios GB (5 GB requeridos, pruebas hasta 20 GB)
 
