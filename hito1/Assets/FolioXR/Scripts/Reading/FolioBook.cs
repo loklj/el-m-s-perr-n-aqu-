@@ -192,21 +192,25 @@ namespace FolioXR.Reading
             // Un paso por movimiento; solo volver al centro permite otro paso.
             _renderScaleStickLatched = true;
             float next = ClampRenderScale(_currentRenderScale + (y > 0f ? RenderScaleStep : -RenderScaleStep));
-            if (Mathf.Approximately(next, _currentRenderScale)) return;
+            bool changed = !Mathf.Approximately(next, _currentRenderScale);
+            string value = next.ToString("F1", CultureInfo.InvariantCulture);
 
-            _currentRenderScale = next;
-            ApplyRenderQuality();
-            PlayerPrefs.SetFloat(RenderScalePrefsKey, _currentRenderScale);
-            PlayerPrefs.Save();
-
-            string value = _currentRenderScale.ToString("F1", CultureInfo.InvariantCulture);
-            Debug.Log("[FolioXR] Nitidez: renderScale=" + value + " (guardado).");
+            if (changed)
+            {
+                _currentRenderScale = next;
+                ApplyRenderQuality();
+                PlayerPrefs.SetFloat(RenderScalePrefsKey, _currentRenderScale);
+                PlayerPrefs.Save();
+                Debug.Log("[FolioXR] Nitidez: renderScale=" + value + " (guardado).");
+            }
             if (_statusIsError) return;
 
+            // En el límite también se avisa, para que se note que el stick respondió.
+            string limit = !changed ? (y > 0f ? " (máximo)" : " (mínimo)") : string.Empty;
             _renderScaleStatusUntil = Time.unscaledTime + RenderScaleStatusSeconds;
             if (statusText != null)
-                statusText.text = "Nitidez: " + value.Replace('.', ',') +
-                    "x (stick izquierdo arriba/abajo). Más nitidez usa más batería.";
+                statusText.text = "Nitidez: " + value.Replace('.', ',') + "x" + limit +
+                    " (stick izquierdo arriba/abajo). Más nitidez usa más batería.";
         }
 
         private void UpdateRenderScaleStatus()
@@ -501,6 +505,8 @@ namespace FolioXR.Reading
         private void SetStatus(string message, bool isError = false)
         {
             _statusIsError = isError;
+            // El último texto normal (cargando, páginas) se recupera al terminar el aviso de nitidez.
+            if (!isError) _lastPageStatus = message ?? string.Empty;
             // Los errores cancelan el aviso; las páginas se actualizan sin ocultarlo.
             if (isError) _renderScaleStatusUntil = 0f;
             if (statusText != null && Time.unscaledTime >= _renderScaleStatusUntil)

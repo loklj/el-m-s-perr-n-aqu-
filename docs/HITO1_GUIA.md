@@ -2,7 +2,7 @@
 
 Objetivo: instalar en el Quest 3 una app mínima que muestre un **libro 3D con páginas de un PDF**, con passthrough, mandos Touch y manos, y que se pueda **agarrar y mover**.
 
-> **Estado:** el Hito 1 está terminado y probado en Quest 3 por el usuario; la base está en `fase-1/preparacion`. La nitidez del Hito 1.1 mejoró en el visor. Esta rama, `hito-1.2/nitidez`, añade el ajuste con el stick izquierdo, pendiente de prueba específica en Quest 3; en la nube solo se revisa el código a mano, sin compilar Unity. Si algo falla, anota en qué paso y qué mensaje apareció.
+> **Estado:** el Hito 1 está terminado y probado en Quest 3 por el usuario; la base está en `fase-1/preparacion`. La nitidez del Hito 1.1 mejoró en el visor. El Hito 1.2 (ya unido a `fase-1/preparacion`) añade el ajuste con el stick izquierdo, pendiente de prueba específica en Quest 3; en la nube solo se revisa el código a mano, sin compilar Unity. Si algo falla, anota en qué paso y qué mensaje apareció.
 
 Tiempo estimado: 1–2 horas la primera vez (casi todo es descarga e instalación). Espacio en disco: unos 15–20 GB.
 
@@ -31,7 +31,7 @@ En una terminal:
 sudo apt install git curl
 git clone https://github.com/loklj/el-m-s-perr-n-aqu-.git ~/folio-xr
 cd ~/folio-xr
-git checkout hito-1.2/nitidez     # incluye el Hito 1 y el ajuste de nitidez del Hito 1.2
+git checkout fase-1/preparacion   # incluye el Hito 1, el 1.1 y el 1.2
 ```
 
 ## Paso 2 — Instalar Unity Hub (comandos oficiales para Ubuntu)

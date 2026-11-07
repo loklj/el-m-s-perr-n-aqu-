@@ -6,7 +6,7 @@
 
 **Fase 0 completada como entrega documental: arquitectura y planificación.**
 
-**Fase 1 en curso — Hito 1 terminado y probado en Quest 3 por el usuario.** La base confirmada está en `fase-1/preparacion`; el usuario también confirmó que la nitidez del Hito 1.1 mejoró con renderScale 1,4 y MSAA 4×. El Hito 1.2, en `hito-1.2/nitidez`, añade el ajuste de nitidez dentro de la app y queda pendiente de su prueba específica en el visor. Aquí solo se revisa el código a mano: no hay Unity ni visor. Ver [la guía del Hito 1](docs/HITO1_GUIA.md). **El Hito 2 no está iniciado ni autorizado.**
+**Fase 1 en curso — Hito 1 terminado y probado en Quest 3 por el usuario.** La base confirmada está en `fase-1/preparacion`; el usuario también confirmó que la nitidez del Hito 1.1 mejoró con renderScale 1,4 y MSAA 4×. El Hito 1.2 (escrito por Codex/GPT-6 Astra, revisado y unido por Claude a `fase-1/preparacion`) añade el ajuste de nitidez dentro de la app y queda pendiente de su prueba específica en el visor. Aquí solo se revisa el código a mano: no hay Unity ni visor. Ver [la guía del Hito 1](docs/HITO1_GUIA.md). **El Hito 2 no está iniciado ni autorizado.**
 
 El repositorio partía de un README. Esta fase añade documentación de diseño, evaluación de dependencias, riesgos, estructura propuesta y procedimientos de validación. Las instrucciones de compilación e instalación describen trabajo futuro en el PC; no acreditan pruebas realizadas.
 
@@ -168,6 +168,13 @@ La app se venderá en la **Meta Horizon Store a USD 4,99**, con **código cerrad
 | Marca | No usar el nombre, logo, textos ni capturas de Livro, tampoco en la ficha de la tienda. Verificar que el nombre final (hoy «Folio XR», provisional) no choque con marcas existentes. |
 | DRM | Igual que antes: solo archivos sin DRM; nunca eludir protecciones. |
 
+## Entornos virtuales (decisión del usuario, 7 de noviembre de 2026)
+
+- **20 entornos**, cada uno una **casa de 2 pisos** con **terraza, biblioteca, balcón, sala de estar y dormitorio**, en estilos distintos.
+- **Modelos 3D hechos en código** (por Codex/GPT-6 Astra, revisados por Claude): sin paquetes comprados ni recursos de terceros, así no hay licencias que cumplir.
+- **Ahora solo uno de prueba** para medir rendimiento en el Quest 3; los otros 19 después de que el lector de EPUB funcione.
+- Forma de trabajo pedida por el usuario: **Codex/GPT-6 Astra escribe el código y Claude lo revisa y corrige** antes de que el usuario compile.
+
 ## Archivos de varios GB (5 GB requeridos, pruebas hasta 20 GB)
 
 Reglas de diseño, válidas para todos los formatos:
@@ -228,4 +235,4 @@ Leer este archivo y los documentos enlazados, revisar `git status` y respetar el
 
 Avance sin depender del visor (5 de noviembre de 2026, rama `fase-1/preparacion`): muestras en `tests/fixtures/` (EPUB válido según epubcheck 5.3.0, CBZ, manga RTL, TXT en 4 codificaciones) y `tools/test-data/gigantes.py` (PDF de 100.001 páginas verificado con poppler y qpdf, TXT, CBZ y EPUB de estrés). Esto adelanta parte del generador previsto para la Fase 4.
 
-**El Hito 1 ya está confirmado; no empezar el Hito 2.** La rama `hito-1.2/nitidez` queda para revisión y unión por Claude y prueba del ajuste en Quest 3 por el usuario. Si falla, corregir a partir de su registro (`adb logcat`) y del paso de `docs/HITO1_GUIA.md` donde se detuvo. Actualizar aquí resultados, decisiones, limitaciones, instrucciones y checklist al cerrar cada hito.
+**El Hito 1 ya está confirmado; no empezar el Hito 2.** El Hito 1.2 ya está unido a `fase-1/preparacion`; falta la prueba del ajuste en el Quest 3. Si falla, corregir a partir de su registro (`adb logcat`) y del paso de `docs/HITO1_GUIA.md` donde se detuvo. Actualizar aquí resultados, decisiones, limitaciones, instrucciones y checklist al cerrar cada hito.
