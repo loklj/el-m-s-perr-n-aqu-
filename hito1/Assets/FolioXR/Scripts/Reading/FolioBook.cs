@@ -31,6 +31,7 @@ using UnityEngine.XR;
 
 namespace FolioXR.Reading
 {
+    [DefaultExecutionOrder(200)]
     [DisallowMultipleComponent]
     public sealed class FolioBook : MonoBehaviour
     {
@@ -103,6 +104,10 @@ namespace FolioXR.Reading
         private bool _rightPinchWas;
         private float _nextPinchTime;
 
+        public float RenderScale => _currentRenderScale;
+        public bool InputPaused { get; set; }
+        public bool LeftPinchSuppressed { get; set; }
+
         private void Awake()
         {
             renderScale = ClampRenderScale(renderScale);
@@ -172,16 +177,17 @@ namespace FolioXR.Reading
                         Pressed(XRNode.LeftHand, CommonUsages.secondaryButton);
             bool recenter = Pressed(XRNode.RightHand, CommonUsages.primary2DAxisClick);
 
-            if (next && !_nextWasDown) NextSpread();
-            if (prev && !_prevWasDown) PreviousSpread();
-            if (recenter && !_recenterWasDown) PlaceInFrontOfView();
+            if (!InputPaused && next && !_nextWasDown) NextSpread();
+            if (!InputPaused && prev && !_prevWasDown) PreviousSpread();
+            if (!InputPaused && recenter && !_recenterWasDown) PlaceInFrontOfView();
 
             _nextWasDown = next;
             _prevWasDown = prev;
             _recenterWasDown = recenter;
 
             if (pinchToTurnPages) UpdatePinchPageTurn();
-            UpdateRenderScaleInput();
+            if (!InputPaused) UpdateRenderScaleInput();
+            else _renderScaleStickLatched = true;
             UpdateRenderScaleStatus();
         }
 
@@ -193,9 +199,15 @@ namespace FolioXR.Reading
 
             // Un paso por movimiento; solo volver al centro permite otro paso.
             _renderScaleStickLatched = true;
-            float next = ClampRenderScale(_currentRenderScale + (y > 0f ? RenderScaleStep : -RenderScaleStep));
+            SetRenderScale(_currentRenderScale + (y > 0f ? RenderScaleStep : -RenderScaleStep));
+        }
+
+        /// <summary>Mismo camino para el stick y las vistas del menú.</summary>
+        public void SetRenderScale(float value)
+        {
+            float next = ClampRenderScale(value);
             bool changed = !Mathf.Approximately(next, _currentRenderScale);
-            string value = next.ToString("F1", CultureInfo.InvariantCulture);
+            string displayValue = next.ToString("F1", CultureInfo.InvariantCulture);
 
             if (changed)
             {
@@ -203,15 +215,15 @@ namespace FolioXR.Reading
                 ApplyRenderQuality();
                 PlayerPrefs.SetFloat(RenderScalePrefsKey, _currentRenderScale);
                 PlayerPrefs.Save();
-                Debug.Log("[FolioXR] Nitidez: renderScale=" + value + " (guardado).");
+                Debug.Log("[FolioXR] Nitidez: renderScale=" + displayValue + " (guardado).");
             }
             if (_statusIsError) return;
 
             // En el límite también se avisa, para que se note que el stick respondió.
-            string limit = !changed ? (y > 0f ? " (máximo)" : " (mínimo)") : string.Empty;
+            string limit = !changed ? (next >= MaxRenderScale ? " (máximo)" : next <= MinRenderScale ? " (mínimo)" : string.Empty) : string.Empty;
             _renderScaleStatusUntil = Time.unscaledTime + RenderScaleStatusSeconds;
             if (statusText != null)
-                statusText.text = "Nitidez: " + value.Replace('.', ',') + "x" + limit +
+                statusText.text = "Nitidez: " + displayValue.Replace('.', ',') + "x" + limit +
                     " (stick izquierdo arriba/abajo). Más nitidez usa más batería.";
         }
 
@@ -236,14 +248,14 @@ namespace FolioXR.Reading
             bool left = IsPinching(_leftHand);
             bool right = IsPinching(_rightHand);
 
-            if (Time.time >= _nextPinchTime)
+            if (!InputPaused && Time.time >= _nextPinchTime)
             {
                 if (right && !_rightPinchWas && !NearBook(_rightHand))
                 {
                     NextSpread();
                     _nextPinchTime = Time.time + PinchCooldownSeconds;
                 }
-                else if (left && !_leftPinchWas && !NearBook(_leftHand))
+                else if (!LeftPinchSuppressed && left && !_leftPinchWas && !NearBook(_leftHand))
                 {
                     PreviousSpread();
                     _nextPinchTime = Time.time + PinchCooldownSeconds;

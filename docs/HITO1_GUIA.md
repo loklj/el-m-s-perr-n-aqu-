@@ -137,6 +137,23 @@ En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
 | Pellizco (índice + pulgar) con la mano **derecha**, lejos del libro (Hito 1.1) | Avanza dos páginas |
 | Pellizco con la mano **izquierda**, lejos del libro (Hito 1.1) | Retrocede dos páginas |
 | Nitidez (Hito 1.1) | Texto de 14 puntos legible a ~45 cm; comparar con la primera versión |
+| ☰ del mando izquierdo (menú simple) | Abre/cierra una vez por pulsación. Panel de 40 × 28 cm, a 45 cm y 10 cm bajo los ojos, inclinado 15°, con fundido de 0,15 s. Conserva la última categoría; al reabrir tras alejarte más de 1,5 m o mirar a otro lado, reaparece delante |
+| Palma izquierda arriba, cerrar en puño y abrir | Abierta → puño mantenido ≥0,15 s → abierta antes de 1,2 s alterna el menú; espera 0,8 s entre gestos. Con palma inclinada ≥45°, baja confianza o gesto del sistema no actúa. El log muestra ángulo y aperturas/cierres. El pellizco izquierdo no retrocede páginas mientras la palma está arriba |
+| X del panel | Cierra el menú. La pausa continúa hasta soltar botones/pellizcos y centrar el stick izquierdo |
+| B o Y con el menú abierto | Cierra sin retroceder página, incluso manteniéndolo pulsado. Tras soltar, una pulsación nueva vuelve a servir para pasar página |
+| Índice izquierdo contra un botón | Hover y un clic al cruzar el plano desde delante; retirar el dedo antes de volver a tocar. Perder seguimiento o aparecer ya dentro del panel no pulsa un botón |
+| Índice derecho contra un botón | Mismo toque, con clic suave y fondo que se hunde brevemente; mantener el dedo dentro no repite |
+| Apuntar con el mando izquierdo y pulsar su gatillo | El rayo ilumina el botón y el flanco del gatillo izquierdo lo activa; clic y vibración breve. Mantener el gatillo al abrir no selecciona nada |
+| Apuntar con el mando derecho y pulsar su gatillo | Mismo comportamiento con rayo y gatillo derechos; el gatillo del otro mando no activa este rayo |
+| Botones Biblioteca / Entornos / Ajustes / Importar y nubes / Hora | Cambian la categoría resaltada. Biblioteca identifica el PDF actual; biblioteca futura e importación muestran «Próximamente» sin ejecutar acciones |
+| Entornos → Passthrough | Restaura el passthrough y la pose original, como el clic del stick izquierdo. Cerrar y reabrir el panel lo recoloca en la nueva posición |
+| Entornos → Casa moderna cálida | Entra una sola vez, marca la casa y muestra sus cinco lugares. Volver a pulsarla no reemplaza la pose guardada para salir |
+| Entornos → Sofá / Biblioteca / Dormitorio / Balcón / Terraza | Cada botón lleva a su punto de lectura y recoloca el libro. No exige mover el stick; los atajos del entorno quedan en pausa mientras está abierto el menú |
+| Ajustes → Nitidez 1,4 / 1,5 / 1,6 / 1,7 / 1,8 | Marca el valor actual, muestra el aviso habitual y lo conserva al reiniciar. Al cerrar, el stick sigue ajustando por pasos sin saltos por una inclinación sostenida |
+| Ajustes → Estilo de menú: Simple | Guarda `folioxr.menuStyle = simple`. «Esfera (próximamente)» está deshabilitado; cualquier preferencia anterior sigue usando el panel |
+| Hora → 15 / 30 / 45 / 60 min | Inicia/reinicia un solo temporizador y marca su duración. Al vencer, tono suave y aviso de cinco segundos, también con el menú cerrado, sin cerrar el libro. Hora HH:mm y batería visibles, actualizadas por minuto |
+| Hora → Apagar | Cancela el temporizador; no apaga el visor ni cierra el libro |
+| A/X, pellizcos y sticks mientras el menú está abierto | No cambian páginas, nitidez, lugar ni posición del libro. Agarrar el libro sigue funcionando. Cerrar con botones sostenidos no los filtra al libro; solo se reanudan tras soltarlos |
 
 El entorno de prueba ya está en `fase-1/preparacion`; consulta [instalación, presupuesto y comprobaciones pendientes](ENTORNOS.md). El eje vertical del stick izquierdo conserva el ajuste de nitidez del Hito 1.2 también dentro de la casa.
 
