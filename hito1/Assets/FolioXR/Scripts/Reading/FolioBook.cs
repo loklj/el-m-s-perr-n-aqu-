@@ -117,6 +117,8 @@ namespace FolioXR.Reading
 
         private IEnumerator Start()
         {
+            // OVRManager ya pasó por su Awake aquí; en el Awake de este script podría no existir.
+            DisableOvrDynamicResolution();
             ApplyLayout();
             SetStatus("Cargando el PDF…");
 
@@ -310,9 +312,23 @@ namespace FolioXR.Reading
                 Debug.LogWarning("[FolioXR] No se encontró el asset de URP; no se ajusta la nitidez.");
                 return;
             }
+            DisableOvrDynamicResolution();
             urp.renderScale = ClampRenderScale(_currentRenderScale);
             urp.msaaSampleCount = Mathf.ClosestPowerOfTwo(Mathf.Clamp(msaaSamples, 1, 8));
             Debug.Log("[FolioXR] Nitidez: renderScale=" + urp.renderScale + ", MSAA=" + urp.msaaSampleCount);
+        }
+
+        // El Project Setup Tool de Meta puede activar Dynamic Resolution en el OVRManager.
+        // Esa función sube y baja la resolución sola y pasa por encima de la nitidez que elige
+        // la persona, así que se desactiva y la vista queda a escala completa.
+        private static void DisableOvrDynamicResolution()
+        {
+            if (Application.isEditor) return;
+            OVRManager manager = OVRManager.instance;
+            if (manager == null || !manager.enableDynamicResolution) return;
+            manager.enableDynamicResolution = false;
+            XRSettings.renderViewportScale = 1f;
+            Debug.Log("[FolioXR] Dynamic Resolution desactivada: la nitidez la controla la app (1,4 a 1,8).");
         }
 
         [ContextMenu("Siguiente doble página")]
