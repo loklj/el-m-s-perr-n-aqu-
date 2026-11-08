@@ -14,12 +14,13 @@ Tiempo estimado: 1–2 horas la primera vez (casi todo es descarga e instalació
 | --- | --- |
 | `hito1/Assets/FolioXR/Scripts/Reading/FolioBook.cs` | El libro: carga el PDF, muestra dos páginas, botones para avanzar y retroceder |
 | `hito1/Assets/FolioXR/Scripts/Reading/PdfPageRenderer.cs` | Puente entre Unity y el plugin de Android |
+| `hito1/Assets/FolioXR/Scripts/Environments/` | Primera casa procedural de prueba, temas y controles VR/passthrough; ver [Entornos](ENTORNOS.md) |
 | `hito1/Assets/Plugins/Android/FolioPdfRenderer.java` | Dibuja las páginas con el lector de PDF de Android, en un hilo aparte |
 | `hito1/Assets/FolioXR/Editor/FolioXRHito1Setup.cs` | Agrega el menú **Folio XR** al Editor de Unity |
 | `hito1/Assets/StreamingAssets/folio-prueba.pdf` | PDF de prueba de 8 páginas, con contenido propio |
 | `tools/generar_pdf_prueba.py` | Script que generó ese PDF |
 
-Los scripts no dependen del SDK de Meta: compilan aunque el SDK todavía no esté instalado.
+El menú del Editor no depende del SDK de Meta. Los scripts de ejecución del libro y del entorno sí requieren Meta XR Core SDK (versión de esta prueba: 207), además de Unity 6000.3, URP 17 y OpenXR.
 
 ---
 
@@ -129,10 +130,15 @@ En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
 | Página 2 y 4 | Se distinguen los tamaños de letra (8 a 18 puntos) |
 | Agarrar con la mano o el gatillo de agarre | El libro se mueve contigo |
 | Clic en el stick derecho | El libro vuelve frente a tu vista |
+| Clic en el stick izquierdo (entorno de prueba) | Alterna passthrough/casa. Al entrar, aparece el sofá de la sala y el libro se recoloca; al salir, vuelve el passthrough y se restauran la pose original del rig y el fondo de la cámara. Mantener pulsado no repite la acción |
+| Stick izquierdo hacia la izquierda (dentro de la casa) | Punto de lectura anterior, en ciclo: sofá, biblioteca, dormitorio, balcón y terraza. Un cambio por movimiento con `x < -0,7`; vuelve a `abs(x) < 0,3` para rearmar. Muestra el nombre del punto unos segundos y recoloca el libro |
+| Stick izquierdo hacia la derecha (dentro de la casa) | Punto de lectura siguiente, en el mismo ciclo. Un cambio por movimiento con `x > 0,7`, sin repetir al mantenerlo; vuelve a `abs(x) < 0,3` para rearmar. En passthrough, mover el stick horizontalmente no desplaza el rig |
 | Stick izquierdo arriba/abajo (Hito 1.2) | Sube/baja la nitidez entre 1,4 y 1,8, de 0,1 en 0,1: un paso por movimiento, sin repetición al mantenerlo inclinado; vuelve al centro para rearmarlo. El valor inicial es 1,4 y el elegido se conserva al cerrar y abrir la app. Muestra «Nitidez: 1,6x (stick izquierdo arriba/abajo). Más nitidez usa más batería.» durante 2,5 s y vuelve al estado actual de páginas; un error visible tiene prioridad |
 | Pellizco (índice + pulgar) con la mano **derecha**, lejos del libro (Hito 1.1) | Avanza dos páginas |
 | Pellizco con la mano **izquierda**, lejos del libro (Hito 1.1) | Retrocede dos páginas |
 | Nitidez (Hito 1.1) | Texto de 14 puntos legible a ~45 cm; comparar con la primera versión |
+
+La prueba del entorno está en `entornos/prueba-1`; consulta [instalación, presupuesto y comprobaciones pendientes](ENTORNOS.md). El eje vertical del stick izquierdo conserva el ajuste de nitidez del Hito 1.2 también dentro de la casa.
 
 ### Actualizar a una versión nueva del código (por ejemplo, el Hito 1.2)
 
