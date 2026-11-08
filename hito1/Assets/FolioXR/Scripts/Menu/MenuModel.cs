@@ -23,14 +23,16 @@ namespace FolioXR.Menu
         public string Text { get; }
         public Func<bool> Enabled { get; }
         public Func<bool> Marked { get; }
+        public Func<bool> Visible { get; }
         public Action Action { get; }
 
-        public MenuOption(string text, Action action = null, Func<bool> enabled = null, Func<bool> marked = null)
+        public MenuOption(string text, Action action = null, Func<bool> enabled = null, Func<bool> marked = null, Func<bool> visible = null)
         {
             Text = text;
             Action = action;
             Enabled = enabled ?? (() => action != null);
             Marked = marked ?? (() => false);
+            Visible = visible ?? (() => true);
         }
     }
 
@@ -72,7 +74,7 @@ namespace FolioXR.Menu
         {
             if (index < 0 || index >= _options.Count) return;
             MenuOption option = _options[index];
-            if (!option.Enabled()) return;
+            if (!option.Enabled() || !option.Visible()) return;
             option.Action?.Invoke();
             Changed?.Invoke(); // Cambia las marcas; la vista conserva sus textos.
         }
@@ -84,7 +86,6 @@ namespace FolioXR.Menu
             if (active != _lastEnvironmentActive)
             {
                 _lastEnvironmentActive = active;
-                if (SelectedCategory == MenuCategory.Entornos) RebuildOptions();
                 Changed?.Invoke();
             }
             if (!Mathf.Approximately(scale, _lastRenderScale))
@@ -123,11 +124,12 @@ namespace FolioXR.Menu
                         () => _environment != null, () => _environment != null && !_environment.IsActive));
                     options.Add(new MenuOption("Casa moderna\ncálida", () => _environment.Enter(),
                         () => _environment != null, () => _environment != null && _environment.IsActive));
-                    if (_environment != null && _environment.IsActive)
+                    if (_environment != null)
                         for (int i = 0; i < _environment.PointNames.Count; i++)
                         {
                             int point = i;
-                            options.Add(new MenuOption(_environment.PointNames[i], () => _environment.GoToPoint(point)));
+                            options.Add(new MenuOption(_environment.PointNames[i], () => _environment.GoToPoint(point),
+                                () => _environment.IsActive, visible: () => _environment.IsActive));
                         }
                     break;
                 case MenuCategory.Ajustes:

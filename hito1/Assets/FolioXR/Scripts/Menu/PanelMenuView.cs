@@ -8,7 +8,7 @@ using UnityEngine.Rendering;
 namespace FolioXR.Menu
 {
     /// <summary>
-    /// Panel en metros, frente -Z. Ocho renderizadores como máximo, sin física:
+    /// Panel en metros, frente -Z. Ocho renderizadores activos como máximo, sin física:
     /// superficies, categorías, dos columnas, cabecera, reloj, aviso y ambos rayos.
     /// </summary>
     public sealed class PanelMenuView : MonoBehaviour, IMenuView
@@ -26,6 +26,7 @@ namespace FolioXR.Menu
         private MeshRenderer _surfaceRenderer, _rayRenderer;
         private TextMesh _categories, _optionsLeft, _optionsRight, _header, _clock, _notice;
         private TextMesh[] _panelTexts;
+        private TextMesh _environmentLeft, _environmentRight;
         private readonly List<Button> _buttons = new List<Button>();
         private readonly List<Vector3> _vertices = new List<Vector3>();
         private readonly List<Vector2> _uv = new List<Vector2>();
@@ -90,13 +91,19 @@ namespace FolioXR.Menu
             _categories = Label("Categorías", new Vector3(-0.184f, Top - 0.003f, -0.004f), 0.012f, _textMaterial);
             _optionsLeft = Label("Opciones izquierda", new Vector3(-0.027f, Top - 0.003f, -0.004f), 0.01f, _textMaterial);
             _optionsRight = Label("Opciones derecha", new Vector3(0.089f, Top - 0.003f, -0.004f), 0.01f, _textMaterial);
+            // Variante corta de Entornos: se cachea al cambiar de categoría.
+            // Solo una pareja de columnas está activa en cada momento.
+            _environmentLeft = Label("Entornos sin lugares izquierda", new Vector3(-0.027f, Top - 0.003f, -0.004f), 0.01f, _textMaterial);
+            _environmentRight = Label("Entornos sin lugares derecha", new Vector3(0.089f, Top - 0.003f, -0.004f), 0.01f, _textMaterial);
+            _environmentLeft.gameObject.SetActive(false);
+            _environmentRight.gameObject.SetActive(false);
             _header = Label("Hora y batería", new Vector3(-0.184f, 0.123f, -0.004f), 0.01f, _textMaterial);
             _clock = Label("Reloj grande", new Vector3(-0.027f, 0.083f, -0.004f), 0.018f, _textMaterial);
             _notice = Label("Aviso del temporizador", Vector3.zero, 0.012f, _noticeMaterial);
             _notice.anchor = TextAnchor.MiddleCenter;
             _notice.alignment = TextAlignment.Center;
             _notice.gameObject.SetActive(false);
-            _panelTexts = new[] { _categories, _optionsLeft, _optionsRight, _header, _clock };
+            _panelTexts = new[] { _categories, _optionsLeft, _optionsRight, _environmentLeft, _environmentRight, _header, _clock };
             _categories.text = "Biblioteca\n\nEntornos\n\nAjustes\n\nImportar y\nnubes\nHora";
             Font.textureRebuilt += OnFontRebuilt;
             OnFontRebuilt(_font);
@@ -191,17 +198,25 @@ namespace FolioXR.Menu
         public void Refresh()
         {
             if (_model == null) return;
-            bool layoutChanged = _drawnCategory != _model.SelectedCategory || _drawnCount != _model.Options.Count;
+            int visibleCount = 0;
+            foreach (MenuOption option in _model.Options) if (option.Visible()) visibleCount++;
+            bool categoryChanged = _drawnCategory != _model.SelectedCategory;
+            bool layoutChanged = categoryChanged || _drawnCount != visibleCount;
             if (layoutChanged)
             {
                 _drawnCategory = _model.SelectedCategory;
-                _drawnCount = _model.Options.Count;
+                _drawnCount = visibleCount;
                 _hover.Clear();
                 _pressed = -1;
                 BuildLayout();
-                BuildOptionTexts();
-                _clock.gameObject.SetActive(_drawnCategory == MenuCategory.Hora);
             }
+            if (categoryChanged) BuildOptionTexts();
+            bool shortEnvironment = _drawnCategory == MenuCategory.Entornos && visibleCount <= 2;
+            _optionsLeft.gameObject.SetActive(!shortEnvironment);
+            _optionsRight.gameObject.SetActive(!shortEnvironment);
+            _environmentLeft.gameObject.SetActive(shortEnvironment);
+            _environmentRight.gameObject.SetActive(shortEnvironment);
+            _clock.gameObject.SetActive(_drawnCategory == MenuCategory.Hora);
             UpdateButtons(); // Solo UV/profundidad; las marcas no reconstruyen texto.
         }
 
@@ -219,6 +234,7 @@ namespace FolioXR.Menu
             float top = _drawnCategory == MenuCategory.Hora ? Top - 0.056f : Top;
             for (int i = 0; i < _model.Options.Count; i++)
             {
+                if (!_model.Options[i].Visible()) continue;
                 int column = wide ? 0 : i % 2;
                 int row = wide ? i : i / 2;
                 AddButton(new Rect(-0.034f + column * 0.116f, top - row * RowPitch - ButtonHeight,
@@ -280,6 +296,11 @@ namespace FolioXR.Menu
             _optionsRight.transform.localPosition = new Vector3(0.089f, top - 0.003f, -0.004f);
             _optionsLeft.text = ColumnText(0, wide);
             _optionsRight.text = wide ? string.Empty : ColumnText(1, false);
+            if (_drawnCategory == MenuCategory.Entornos)
+            {
+                _environmentLeft.text = _labels[0];
+                _environmentRight.text = _labels[1];
+            }
         }
 
         private string ColumnText(int column, bool wide)

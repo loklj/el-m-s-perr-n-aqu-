@@ -52,12 +52,9 @@ namespace FolioXR.Environments
         private bool _savedBoundarySuppressed;
         private readonly List<LightSnapshot> _lights = new List<LightSnapshot>();
 
-        private readonly List<string> _pointNames = new List<string>();
-        private IReadOnlyList<string> _readOnlyPointNames;
         public bool IsActive => _active;
         public bool InputPaused { get; set; }
-        public IReadOnlyList<string> PointNames =>
-            _readOnlyPointNames ?? (_readOnlyPointNames = _pointNames.AsReadOnly());
+        public IReadOnlyList<string> PointNames => HouseGenerator.ReadingPointNames;
 
         // Las acciones del menú se ejecutan al final del cuadro, igual que los mandos.
         private int _requestedPoint = -1;
@@ -72,7 +69,7 @@ namespace FolioXR.Environments
         }
         public void GoToPoint(int index)
         {
-            if (_active && index >= 0 && index < _pointNames.Count) _requestedPoint = index;
+            if (_active && index >= 0 && index < PointNames.Count) _requestedPoint = index;
         }
 
         private struct LightSnapshot
@@ -200,8 +197,6 @@ namespace FolioXR.Environments
                     // Build devuelve la raíz desactivada. Si falla, el passthrough
                     // y la cámara siguen como estaban y se puede volver a intentar.
                     _house = HouseGenerator.Build(_theme, transform);
-                    _pointNames.Clear();
-                    foreach (ReadingPoint point in _house.ReadingPoints) _pointNames.Add(point.Name);
                 }
                 EnsurePointLabel();
                 CaptureScene();

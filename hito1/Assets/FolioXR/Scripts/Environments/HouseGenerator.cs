@@ -12,6 +12,12 @@ namespace FolioXR.Environments
     public static class HouseGenerator
     {
         public const float SkyRadius = 90f;
+        // Metadatos disponibles sin generar geometría; también los consume el menú.
+        internal static readonly IReadOnlyList<string> ReadingPointNames = Array.AsReadOnly(new[]
+        {
+            "Sofá de la sala", "Sillón de la biblioteca", "Cama del dormitorio",
+            "Silla del balcón", "Tumbona de la terraza"
+        });
 
         public static HouseBuildResult Build(EnvironmentTheme theme, Transform parent)
         {
@@ -356,11 +362,11 @@ namespace FolioXR.Environments
                 float h = _theme.StoreyHeight;
                 _result.ReadingPoints = Array.AsReadOnly(new[]
                 {
-                    Point("Sofá de la sala", new Vector3(-3.1f, 1.2f, 0.4f), Vector3.back),
-                    Point("Sillón de la biblioteca", new Vector3(1.7f, 1.2f, -1f), Vector3.forward),
-                    Point("Cama del dormitorio", new Vector3(-2.8f, h + 1.2f, 2.1f), Vector3.back),
-                    Point("Silla del balcón", new Vector3(-2.8f, h + 1.2f, -6f), Vector3.back),
-                    Point("Tumbona de la terraza", new Vector3(-3.4f, 1.32f, -7f), Vector3.back)
+                    Point(ReadingPointNames[0], new Vector3(-3.1f, 1.2f, 0.4f), Vector3.back),
+                    Point(ReadingPointNames[1], new Vector3(1.7f, 1.2f, -1f), Vector3.forward),
+                    Point(ReadingPointNames[2], new Vector3(-2.8f, h + 1.2f, 2.1f), Vector3.back),
+                    Point(ReadingPointNames[3], new Vector3(-2.8f, h + 1.2f, -6f), Vector3.back),
+                    Point(ReadingPointNames[4], new Vector3(-3.4f, 1.32f, -7f), Vector3.back)
                 });
             }
 
