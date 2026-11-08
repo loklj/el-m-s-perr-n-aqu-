@@ -52,6 +52,29 @@ namespace FolioXR.Environments
         private bool _savedBoundarySuppressed;
         private readonly List<LightSnapshot> _lights = new List<LightSnapshot>();
 
+        private readonly List<string> _pointNames = new List<string>();
+        private IReadOnlyList<string> _readOnlyPointNames;
+        public bool IsActive => _active;
+        public bool InputPaused { get; set; }
+        public IReadOnlyList<string> PointNames =>
+            _readOnlyPointNames ?? (_readOnlyPointNames = _pointNames.AsReadOnly());
+
+        // Las acciones del menú se ejecutan al final del cuadro, igual que los mandos.
+        private int _requestedPoint = -1;
+        private int _requestedMode;
+        public void Enter()
+        {
+            _requestedMode = 1;
+        }
+        public void Leave()
+        {
+            _requestedMode = -1;
+        }
+        public void GoToPoint(int index)
+        {
+            if (_active && index >= 0 && index < _pointNames.Count) _requestedPoint = index;
+        }
+
         private struct LightSnapshot
         {
             public Light Light;
@@ -68,6 +91,13 @@ namespace FolioXR.Environments
 
         private void Update()
         {
+            if (InputPaused)
+            {
+                _clickWasDown = true;
+                _axisLatched = true;
+                _requestedStep = 0;
+                return;
+            }
             InputDevice device = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
             if (!device.isValid ||
                 !device.TryGetFeatureValue(CommonUsages.primary2DAxisClick, out bool click) ||
@@ -98,6 +128,16 @@ namespace FolioXR.Environments
         {
             // OVRCameraRig actualiza los anchors en Update/FixedUpdate. Movemos su
             // raíz después, conservando intacta la pose local que entrega OpenXR.
+            if (_requestedMode != 0)
+            {
+                bool enter = _requestedMode > 0;
+                _requestedMode = 0;
+                _toggleRequested = false;
+                _requestedStep = 0;
+                if (enter && !_active) EnterEnvironment();
+                else if (!enter && _active) LeaveEnvironment();
+                return;
+            }
             if (_toggleRequested)
             {
                 _toggleRequested = false;
@@ -114,6 +154,11 @@ namespace FolioXR.Environments
                 return;
             }
 
+            if (_requestedPoint >= 0)
+            {
+                GoToReadingPoint(_requestedPoint);
+                _requestedPoint = -1;
+            }
             if (_requestedStep != 0)
             {
                 GoToReadingPoint(_pointIndex + _requestedStep);
@@ -155,6 +200,8 @@ namespace FolioXR.Environments
                     // Build devuelve la raíz desactivada. Si falla, el passthrough
                     // y la cámara siguen como estaban y se puede volver a intentar.
                     _house = HouseGenerator.Build(_theme, transform);
+                    _pointNames.Clear();
+                    foreach (ReadingPoint point in _house.ReadingPoints) _pointNames.Add(point.Name);
                 }
                 EnsurePointLabel();
                 CaptureScene();
@@ -216,6 +263,7 @@ namespace FolioXR.Environments
         private void LeaveEnvironment()
         {
             _active = false;
+            _requestedPoint = -1;
             _requestedStep = 0;
             if (_house != null && _house.Root != null) _house.Root.SetActive(false);
             if (_pointLabel != null) _pointLabel.gameObject.SetActive(false);
@@ -345,10 +393,13 @@ namespace FolioXR.Environments
             _axisLatched = true;
             _toggleRequested = false;
             _requestedStep = 0;
+            _requestedMode = 0;
+            _requestedPoint = -1;
         }
 
         private void OnDisable()
         {
+            _requestedMode = 0;
             _toggleRequested = false;
             LeaveEnvironment();
         }
