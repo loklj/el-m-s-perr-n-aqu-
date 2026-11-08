@@ -75,7 +75,8 @@ namespace FolioXR.Menu
             if (now >= _nextLog)
             {
                 Debug.Log("[FolioXR] Menú: ángulo palma izquierda=" + angle.ToString("F1") + "°");
-                _nextLog = now + 1f;
+                // Cada segundo solo cerca de la palma arriba; si no, cada 10 s para no llenar el registro.
+                _nextLog = now + (angle < 60f ? 1f : 10f);
             }
             PalmUp = angle < 45f;
             if (!PalmUp || now < _cooldownUntil) { _stage = 0; return false; }

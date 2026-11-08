@@ -26,6 +26,7 @@ namespace FolioXR.Menu
         private readonly bool[] _hasTip = new bool[2];
         private bool _menuWas = true, _backWas = true, _waitingRelease, _focused = true;
         private float _nextFind;
+        private Vector3 _lastRigPosition;
         private int _clearFrames;
         private AudioSource _audio;
         private AudioClip _click, _notice;
@@ -105,6 +106,7 @@ namespace FolioXR.Menu
             if (IsOpen)
             {
                 PauseControls(true);
+                FollowRigJump();
                 _panel.BeginPointers();
                 UpdatePointer(0, XRNode.LeftHand, _rig != null ? _rig.leftControllerAnchor : null, _left);
                 if (IsOpen) UpdatePointer(1, XRNode.RightHand, _rig != null ? _rig.rightControllerAnchor : null, _right);
@@ -140,6 +142,7 @@ namespace FolioXR.Menu
             PauseControls(true);
             for (int i = 0; i < 2; i++) { _touchArmed[i] = _hasTip[i] = false; _triggerWas[i] = true; }
             _view.SetOpen(true, camera.transform);
+            if (_rig != null) _lastRigPosition = _rig.transform.position;
             Debug.Log("[FolioXR] Menú abierto: Simple.");
         }
 
@@ -152,6 +155,17 @@ namespace FolioXR.Menu
             PauseControls(true);
             _view.SetOpen(false, Camera.main != null ? Camera.main.transform : null);
             Debug.Log("[FolioXR] Menú cerrado: esperando soltar los controles.");
+        }
+
+        // Revisión de Claude: al elegir la casa o un lugar desde el menú, el entorno mueve el rig
+        // en su LateUpdate. Sin esto el panel quedaba atrás, abierto y fuera de la vista.
+        private void FollowRigJump()
+        {
+            if (_rig == null) return;
+            Vector3 position = _rig.transform.position;
+            if ((position - _lastRigPosition).sqrMagnitude > 0.0025f && Camera.main != null)
+                _panel.PlaceInFront(Camera.main.transform);
+            _lastRigPosition = position;
         }
 
         private void PauseControls(bool paused)

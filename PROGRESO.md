@@ -184,6 +184,8 @@ La app se venderá en la **Meta Horizon Store a USD 4,99**, con **código cerrad
 
 Esfera azul anclada al mando o la mano izquierda, que se abre con ☰ o, con las manos, cerrando y abriendo la mano izquierda con la palma hacia arriba y se gira con la mano derecha. Las opciones aparecen en un segundo anillo. Categorías: Biblioteca, Entornos, Ajustes, Importar y nubes, Hora. Especificación completa: [docs/MENU_ESFERICO.md](docs/MENU_ESFERICO.md).
 
+**Estado (8 de noviembre de 2026):** el menú simple está programado por Codex (GPT-6 Astra, esfuerzo Alto), revisado por Claude e integrado en `fase-1/preparacion`; falta probarlo en el Quest 3. Se abre con ☰ o con el gesto de la palma, y hay detalles en [docs/MENU_SIMPLE.md](docs/MENU_SIMPLE.md#estado). La esfera sigue pendiente.
+
 También habrá un **menú simple** para quien no quiera la esfera: un panel plano con las mismas opciones, que se toca con el dedo o se apunta con el rayo del mando. Se elige en Ajustes, y la esfera queda por defecto. Especificación: [docs/MENU_SIMPLE.md](docs/MENU_SIMPLE.md). Orden: entorno de prueba, luego el menú simple con el modelo compartido y después la esfera.
 
 ## Archivos de varios GB (5 GB requeridos, pruebas hasta 20 GB)

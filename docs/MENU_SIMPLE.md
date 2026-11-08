@@ -80,8 +80,18 @@ El panel mide 40 × 28 cm.
 - La pausa consume A/X, B/Y, pellizcos, stick izquierdo y clic del stick derecho; el agarre sigue disponible. También pausa los atajos del entorno. Al cerrar, mantiene la pausa hasta observar dos cuadros con botones sueltos, stick izquierdo centrado y sin pellizcos. Mientras la palma izquierda está arriba, el pellizco izquierdo queda suprimido también con el menú cerrado.
 - `SetRenderScale` reutiliza el camino del stick: clamp/redondeo 1,4–1,8, PlayerPrefs, aplicación de calidad y aviso. Las acciones de entorno se procesan en `LateUpdate`, como los controles existentes; conservan la restauración de passthrough, rig, Guardian y luz ambiente. Tras un salto de entorno/lugar el panel sigue en su posición mundial: cerrar y volver a abrir lo trae al nuevo punto.
 - Hora y batería se actualizan por minuto; batería desconocida aparece como «—». El temporizador es único, de 15/30/45/60 minutos; elegir otra duración lo reinicia y «Apagar» lo cancela. Usa tiempo real monotónico, independiente de `timeScale`; no se guarda al cerrar la app. Al vencer suena un tono suave y aparece un aviso durante cinco segundos, aunque el menú esté cerrado, sin alterar el libro.
-- Presupuesto propio del menú: **ocho renderizadores de un pase como máximo**, incluidos dos rayos en una sola malla y el aviso. Panel/botones comparten una malla y una paleta generada de 8 × 1 píxeles; cada columna usa un `TextMesh`. Todos los materiales se clonan de la página URP Unlit; los de texto usan el atlas de la fuente y atienden `Font.textureRebuilt`. No se usa `Shader.Find`, paquetes adicionales ni variantes nuevas del shader. Se deshabilitan pases de profundidad, sombras y vectores de movimiento. El número real de draw calls debe medirse en el Frame Debugger/visor; no incluye libro, casa ni manos.
+- Presupuesto propio del menú: **ocho renderizadores de un pase como máximo**, incluidos dos rayos en una sola malla y el aviso. Panel/botones comparten una malla y una paleta generada de 8 × 1 píxeles; cada columna usa un `TextMesh`. Las superficies usan un material clonado de la página URP Unlit, en la cola 2999 para quedar siempre detrás del texto. Los textos usan el material propio de `LegacyRuntime.ttf`, el mismo del aviso del libro (cambio de la revisión de Claude). No se usa `Shader.Find`, paquetes adicionales ni variantes nuevas del shader. Se deshabilitan pases de profundidad, sombras y vectores de movimiento. El número real de draw calls debe medirse en el Frame Debugger/visor; no incluye libro, casa ni manos.
 - No se reconstruyen etiquetas al hacer hover, marcar una opción, abrir/cerrar o en cada cuadro. Las opciones se rehacen al cambiar de categoría o al aparecer/desaparecer los lugares de la casa; reloj/batería solo al cambiar de minuto y el aviso al vencer el temporizador.
+
+### Revisión de Claude (8 de noviembre de 2026)
+
+El código compila contra stubs de las APIs de Unity 6000.3 y Meta XR 207. Se revisaron la normal de la palma izquierda (apunta hacia arriba con la palma arriba), los huesos `Hand_*`/`XRHand_*`, la intersección del rayo y el toque. Cambios:
+
+- **Texto:** pasa a usar el material de la fuente. Con URP Unlit y el atlas Alpha8, el color podía salir negro y el texto quedaba invisible sobre el panel oscuro. La transparencia se logra con `TextMesh.color`.
+- **Orden de dibujo:** el panel y los botones van en la cola 2999, para que el texto (cola 3000) nunca quede tapado por el orden según la distancia.
+- **Panel tras un salto:** si el panel está abierto y el rig salta (al entrar a la casa, cambiar de lugar o volver al passthrough), se recoloca frente a la vista. Antes quedaba atrás, abierto y fuera de la vista.
+- **Panel derecho:** al colocarse ignora la inclinación lateral de la cabeza.
+- **Registro:** el ángulo de la palma se anota cada segundo solo cuando está cerca de arriba (menos de 60°); en otro caso, cada 10 s.
 
 ### Revisión y prueba pendiente
 

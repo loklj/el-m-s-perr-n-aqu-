@@ -19,7 +19,7 @@ namespace FolioXR.Menu
         private const float ButtonHeight = 0.04f;
         private MenuModel _model;
         private Action _close;
-        private Material _surfaceMaterial, _textMaterial, _noticeMaterial;
+        private Material _surfaceMaterial;
         private Texture2D _palette;
         private Font _font;
         private Mesh _surface, _rays;
@@ -75,8 +75,8 @@ namespace FolioXR.Menu
                 Color.white, new Color(0.4f, 0.7f, 1f, 1f) });
             _palette.Apply(false, true);
             _surfaceMaterial = Clone(source, "Superficies del menú", _palette);
-            _textMaterial = Clone(source, "Texto del menú", _font.material.mainTexture);
-            _noticeMaterial = Clone(source, "Aviso del menú", _font.material.mainTexture);
+            // Las superficies van antes que el texto (cola 3000), aunque el orden por distancia diga otra cosa.
+            _surfaceMaterial.renderQueue = (int)RenderQueue.Transparent - 1;
             _surface = new Mesh { name = "Panel y botones" };
             _surface.MarkDynamic();
             _surfaceRenderer = MeshObject("Panel y botones", _surface, _surfaceMaterial);
@@ -87,19 +87,17 @@ namespace FolioXR.Menu
             _rays.uv = _rayUv;
             _rays.triangles = new[] { 0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7 };
             _rayRenderer = MeshObject("Rayos", _rays, _surfaceMaterial);
-            _categories = Label("Categorías", new Vector3(-0.184f, Top - 0.003f, -0.004f), 0.012f, _textMaterial);
-            _optionsLeft = Label("Opciones izquierda", new Vector3(-0.027f, Top - 0.003f, -0.004f), 0.01f, _textMaterial);
-            _optionsRight = Label("Opciones derecha", new Vector3(0.089f, Top - 0.003f, -0.004f), 0.01f, _textMaterial);
-            _header = Label("Hora y batería", new Vector3(-0.184f, 0.123f, -0.004f), 0.01f, _textMaterial);
-            _clock = Label("Reloj grande", new Vector3(-0.027f, 0.083f, -0.004f), 0.018f, _textMaterial);
-            _notice = Label("Aviso del temporizador", Vector3.zero, 0.012f, _noticeMaterial);
+            _categories = Label("Categorías", new Vector3(-0.184f, Top - 0.003f, -0.004f), 0.012f);
+            _optionsLeft = Label("Opciones izquierda", new Vector3(-0.027f, Top - 0.003f, -0.004f), 0.01f);
+            _optionsRight = Label("Opciones derecha", new Vector3(0.089f, Top - 0.003f, -0.004f), 0.01f);
+            _header = Label("Hora y batería", new Vector3(-0.184f, 0.123f, -0.004f), 0.01f);
+            _clock = Label("Reloj grande", new Vector3(-0.027f, 0.083f, -0.004f), 0.018f);
+            _notice = Label("Aviso del temporizador", Vector3.zero, 0.012f);
             _notice.anchor = TextAnchor.MiddleCenter;
             _notice.alignment = TextAlignment.Center;
             _notice.gameObject.SetActive(false);
             _panelTexts = new[] { _categories, _optionsLeft, _optionsRight, _header, _clock };
             _categories.text = "Biblioteca\n\nEntornos\n\nAjustes\n\nImportar y\nnubes\nHora";
-            Font.textureRebuilt += OnFontRebuilt;
-            OnFontRebuilt(_font);
             SetVisibility(0f);
             return true;
         }
@@ -156,7 +154,7 @@ namespace FolioXR.Menu
             renderer.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
         }
 
-        private TextMesh Label(string name, Vector3 position, float height, Material material)
+        private TextMesh Label(string name, Vector3 position, float height)
         {
             var item = new GameObject(name);
             item.transform.SetParent(transform, false);
@@ -173,8 +171,12 @@ namespace FolioXR.Menu
             text.characterSize = height * 10f / Mathf.Max(1, glyph.glyphHeight);
             float lineHeight = _font.lineHeight * (64f / Mathf.Max(1, _font.fontSize));
             text.lineSpacing = (RowPitch * 0.5f) / (lineHeight * text.characterSize * 0.1f);
+            text.color = Color.white;
+            // Revisión de Claude: el material propio de la fuente (GUI/Text Shader) es el mismo
+            // que ya funciona en el aviso del libro. URP Unlit con el atlas Alpha8 podría
+            // muestrear el color como negro y dejar el texto invisible sobre el panel oscuro.
             var renderer = item.GetComponent<MeshRenderer>();
-            renderer.sharedMaterial = material;
+            renderer.sharedMaterial = _font.material;
             ConfigureRenderer(renderer);
             return text;
         }
@@ -368,9 +370,17 @@ namespace FolioXR.Menu
 
         private void Place(Transform head)
         {
-            transform.SetPositionAndRotation(head.position + head.forward * 0.45f - head.up * 0.10f,
-                head.rotation * Quaternion.Euler(15f, 0f, 0f));
+            // Sin el giro lateral (roll) de la cabeza: el panel queda derecho aunque la cabeza esté inclinada.
+            Quaternion facing = Quaternion.LookRotation(head.forward, Vector3.up);
+            transform.SetPositionAndRotation(head.position + head.forward * 0.45f - (facing * Vector3.up) * 0.10f,
+                facing * Quaternion.Euler(15f, 0f, 0f));
             _placed = true; // Nunca se parenta al rig: permanece fijo en el mundo.
+        }
+
+        /// <summary>Recoloca el panel abierto frente a la vista (por ejemplo, después de un salto del rig).</summary>
+        internal void PlaceInFront(Transform head)
+        {
+            if (_open && head != null) Place(head);
         }
 
         private void Update()
@@ -402,9 +412,12 @@ namespace FolioXR.Menu
         {
             _alpha = alpha;
             _surfaceMaterial.SetColor("_BaseColor", new Color(1f, 1f, 1f, alpha));
-            _textMaterial.SetColor("_BaseColor", new Color(1f, 1f, 1f, alpha));
             _surfaceRenderer.enabled = alpha > 0f;
-            foreach (TextMesh text in _panelTexts) text.GetComponent<MeshRenderer>().enabled = alpha > 0f;
+            foreach (TextMesh text in _panelTexts)
+            {
+                text.color = new Color(1f, 1f, 1f, alpha);
+                text.GetComponent<MeshRenderer>().enabled = alpha > 0f;
+            }
             if (alpha <= 0f) _rayRenderer.enabled = false;
         }
 
@@ -484,23 +497,12 @@ namespace FolioXR.Menu
             return true;
         }
 
-        private void OnFontRebuilt(Font font)
-        {
-            if (font != _font) return;
-            // La fuente dinámica puede cambiar de atlas al aparecer nuevos caracteres.
-            _textMaterial.mainTexture = _font.material.mainTexture;
-            _noticeMaterial.mainTexture = _font.material.mainTexture;
-        }
-
         private void OnDestroy()
         {
-            Font.textureRebuilt -= OnFontRebuilt;
             if (_model != null) _model.Changed -= Refresh;
             if (_surface != null) Destroy(_surface);
             if (_rays != null) Destroy(_rays);
             if (_surfaceMaterial != null) Destroy(_surfaceMaterial);
-            if (_textMaterial != null) Destroy(_textMaterial);
-            if (_noticeMaterial != null) Destroy(_noticeMaterial);
             if (_palette != null) Destroy(_palette);
         }
     }
