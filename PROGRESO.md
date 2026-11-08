@@ -16,6 +16,7 @@ El repositorio partía de un README. Esta fase añade documentación de diseño,
 - [Formatos, bibliotecas y licencias](docs/FORMATOS_Y_LICENCIAS.md).
 - [Menú esférico 3D: diseño acordado](docs/MENU_ESFERICO.md).
 - [Menú simple (alternativa a la esfera)](docs/MENU_SIMPLE.md).
+- [Entorno de prueba 1: casa moderna cálida](docs/ENTORNOS.md).
 - [Licencias para vender la app en la Meta Horizon Store](docs/LICENCIAS_Y_TIENDA.md): Unity, SDK de Meta, comisión e inventario de componentes (7 de noviembre de 2026).
 - [Importación local, nubes, OPDS y guía Kindle](docs/IMPORTACION_Y_NUBES.md).
 - [Preparación del PC, compilación, instalación y pruebas](docs/PC_Y_VALIDACION.md).
@@ -176,7 +177,8 @@ La app se venderá en la **Meta Horizon Store a USD 4,99**, con **código cerrad
 - **Modelos 3D hechos en código** (por Codex/GPT-6 Astra, revisados por Claude): sin paquetes comprados ni recursos de terceros, así no hay licencias que cumplir.
 - **Ahora solo uno de prueba** para medir rendimiento en el Quest 3; los otros 19 después de que el lector de EPUB funcione.
 - Forma de trabajo pedida por el usuario: **Codex/GPT-6 Astra escribe el código y Claude lo revisa y corrige** antes de que el usuario compile.
-- Estado (7 de noviembre de 2026, 12:35): Codex programó el entorno de prueba en la rama `entornos/prueba-1`, pero se le acabó el cupo de uso antes de subirlo; se restablece a las 17:11.
+- Estado (8 de noviembre de 2026): **entorno de prueba 1 integrado en `fase-1/preparacion`**. Es una casa «moderna cálida» de dos pisos, hecha por Codex con esfuerzo Alto y revisada por Claude. Claude agregó la actualización de la luz ambiente y el manejo del límite del Guardian. Controles: el clic del stick izquierdo alterna entre passthrough y la casa, y el stick izquierdo a los lados cambia entre 5 lugares para leer. Falta probarlo en el Quest 3. Detalle: [docs/ENTORNOS.md](docs/ENTORNOS.md).
+- `FolioBook` desactiva la Dynamic Resolution de Meta al arrancar, porque el Project Setup Tool la activó y pasaría por encima de la nitidez elegida.
 
 ## Menú esférico 3D (decisión del usuario, 7 de noviembre de 2026)
 

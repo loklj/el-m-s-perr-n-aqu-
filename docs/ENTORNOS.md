@@ -1,6 +1,6 @@
 # Entorno de prueba 1 — casa moderna cálida
 
-Esta rama (`entornos/prueba-1`) añade un primer entorno para medir la lectura en VR en Quest 3. La app sigue arrancando en passthrough. El objetivo es probar **una casa de las 20 previstas**; los otros 19 temas se añadirán después. Esta entrega no inicia el Hito 2 ni cambia el lector de PDF.
+Este entorno (hecho por Codex en la rama `entornos/prueba-1` e integrado en `fase-1/preparacion` el 8 de noviembre de 2026 tras la revisión de Claude) añade un primer entorno para medir la lectura en VR en Quest 3. La app sigue arrancando en passthrough. El objetivo es probar **una casa de las 20 previstas**; los otros 19 temas se añadirán después. Esta entrega no inicia el Hito 2 ni cambia el lector de PDF.
 
 La casa tiene una planta de 12 × 10 m y dos pisos comunicados por una escalera: sala de estar y biblioteca con estanterías llenas abajo, dormitorio con balcón arriba, a 3,15 m. Una terraza junto al jardín completa las zonas de lectura. El estilo usa madera clara, paredes crema, ventanales, plantas y lámparas decorativas; fuera hay pasto, vegetación y relieve de pocos polígonos bajo un cielo de día. Los ventanales se representan con huecos y marcos, sin superficies de vidrio transparente que añadan sobrepintado.
 
@@ -12,9 +12,8 @@ Partir del proyecto del Hito 1 que ya funciona con **Unity 6000.3, URP 17, Meta 
 
 ```bash
 cd ~/folio-xr
-git fetch origin
-git checkout entornos/prueba-1
-git pull --ff-only
+git checkout fase-1/preparacion
+git pull
 cp -r hito1/Assets/. unity/Assets/
 ```
 
@@ -101,7 +100,14 @@ Mientras la casa está activa se registra el promedio de FPS cada cinco segundos
 
 ## Comprobación pendiente en Unity y Quest 3
 
-Esta entrega se revisa a mano en la nube. **No se ha compilado Unity ni medido rendimiento en Quest 3.** Las métricas que imprime el código deben recogerse en el APK, no interpretarse como resultados ya obtenidos. La revisión de Claude prevista en `PROGRESO.md` también queda pendiente antes de compilar.
+Esta entrega se revisó a mano en la nube. **Todavía no se ha compilado en Unity ni se ha medido el rendimiento en Quest 3.** Las métricas que imprime el código hay que recogerlas en el APK; no son resultados ya obtenidos.
+
+**Revisión de Claude (8 de noviembre de 2026):** el código compila contra stubs de las APIs de Unity 6000.3 y Meta XR 207, y la geometría está bien orientada: cajas, cilindros, octaedros y el cielo con las caras hacia dentro. Se agregaron dos cambios:
+
+- `DynamicGI.UpdateEnvironment()` después de cambiar y de restaurar la luz ambiente.
+- Al apagar el passthrough se desactiva la supresión del límite del Guardian (`shouldBoundaryVisibilityBeSuppressed`), como pide Meta, y se restaura al salir.
+
+Riesgo principal: con nitidez 1,8, MSAA 4x y toda la pantalla sombreada con URP Lit, la casa puede bajar de 72 FPS. Hay que comparar en el registro los FPS con 1,4 y con 1,8.
 
 1. Importar los scripts y comprobar que Unity no muestra errores de compilación; compilar un APK para confirmar que los materiales y la fuente siguen incluidos.
 2. Abrir la app: debe verse el passthrough y el libro, sin casa. Pulsar el stick izquierdo: deben aparecer el sofá, el cielo de día y el libro frente a la vista.

@@ -32,7 +32,7 @@ En una terminal:
 sudo apt install git curl
 git clone https://github.com/loklj/el-m-s-perr-n-aqu-.git ~/folio-xr
 cd ~/folio-xr
-git checkout fase-1/preparacion   # incluye el Hito 1, el 1.1 y el 1.2
+git checkout fase-1/preparacion   # incluye el Hito 1, el 1.1, el 1.2 y el entorno de prueba
 ```
 
 ## Paso 2 — Instalar Unity Hub (comandos oficiales para Ubuntu)
@@ -138,7 +138,7 @@ En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
 | Pellizco con la mano **izquierda**, lejos del libro (Hito 1.1) | Retrocede dos páginas |
 | Nitidez (Hito 1.1) | Texto de 14 puntos legible a ~45 cm; comparar con la primera versión |
 
-La prueba del entorno está en `entornos/prueba-1`; consulta [instalación, presupuesto y comprobaciones pendientes](ENTORNOS.md). El eje vertical del stick izquierdo conserva el ajuste de nitidez del Hito 1.2 también dentro de la casa.
+El entorno de prueba ya está en `fase-1/preparacion`; consulta [instalación, presupuesto y comprobaciones pendientes](ENTORNOS.md). El eje vertical del stick izquierdo conserva el ajuste de nitidez del Hito 1.2 también dentro de la casa.
 
 ### Actualizar a una versión nueva del código (por ejemplo, el Hito 1.2)
 

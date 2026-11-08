@@ -48,6 +48,8 @@ namespace FolioXR.Environments
         private Color _savedAmbientGround;
         private float _savedAmbientIntensity;
         private float _savedReflectionIntensity;
+        private bool _hasBoundarySnapshot;
+        private bool _savedBoundarySuppressed;
         private readonly List<LightSnapshot> _lights = new List<LightSnapshot>();
 
         private struct LightSnapshot
@@ -157,6 +159,8 @@ namespace FolioXR.Environments
                 EnsurePointLabel();
                 CaptureScene();
                 _passthrough.enabled = false;
+                // Meta pide no suprimir el límite del Guardian mientras el passthrough está apagado.
+                if (OVRManager.instance != null) OVRManager.instance.shouldBoundaryVisibilityBeSuppressed = false;
                 _view.clearFlags = CameraClearFlags.SolidColor;
                 Color background = _theme.SkyHorizon;
                 background.a = 1f;
@@ -169,6 +173,8 @@ namespace FolioXR.Environments
                 RenderSettings.ambientIntensity = 1f;
                 // Las reflexiones del skybox de la escena no corresponden a esta casa.
                 RenderSettings.reflectionIntensity = 0f;
+                // Recalcula la sonda de luz ambiente con los colores nuevos (revisión de Claude).
+                DynamicGI.UpdateEnvironment();
                 foreach (LightSnapshot item in _lights)
                     if (item.Light != null) item.Light.shadows = LightShadows.None;
 
@@ -198,6 +204,9 @@ namespace FolioXR.Environments
             _savedAmbientGround = RenderSettings.ambientGroundColor;
             _savedAmbientIntensity = RenderSettings.ambientIntensity;
             _savedReflectionIntensity = RenderSettings.reflectionIntensity;
+            OVRManager manager = OVRManager.instance;
+            _hasBoundarySnapshot = manager != null;
+            if (_hasBoundarySnapshot) _savedBoundarySuppressed = manager.shouldBoundaryVisibilityBeSuppressed;
             _lights.Clear();
             foreach (Light light in FindObjectsByType<Light>(FindObjectsSortMode.None))
                 _lights.Add(new LightSnapshot { Light = light, Shadows = light.shadows });
@@ -226,6 +235,10 @@ namespace FolioXR.Environments
             RenderSettings.ambientGroundColor = _savedAmbientGround;
             RenderSettings.ambientIntensity = _savedAmbientIntensity;
             RenderSettings.reflectionIntensity = _savedReflectionIntensity;
+            DynamicGI.UpdateEnvironment();
+            if (_hasBoundarySnapshot && OVRManager.instance != null)
+                OVRManager.instance.shouldBoundaryVisibilityBeSuppressed = _savedBoundarySuppressed;
+            _hasBoundarySnapshot = false;
             foreach (LightSnapshot item in _lights)
                 if (item.Light != null) item.Light.shadows = item.Shadows;
             _lights.Clear();
