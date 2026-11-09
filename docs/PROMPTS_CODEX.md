@@ -35,7 +35,7 @@ Responde siempre en español. Repositorio: https://github.com/loklj/el-m-s-perr-
 | 10 | Formatos 2: TXT, CBR, MOBI/AZW/AZW3 | `fase2/formatos` | Pendiente |
 | 11 | Formatos 3: DOCX, ODT, RTF y diagnóstico de no compatibles | `fase2/documentos` | Pendiente |
 | 12 | Carga desde el PC por Wi-Fi | `fase3/wifi-pc` | Pendiente |
-| 13 | Nubes: Google Drive, Dropbox y MEGA | `fase3/nubes` | Pendiente; antes hay que decidir el permiso de Drive |
+| 13 | Nubes: Google Drive, Dropbox y MEGA | `fase3/nubes` | Pendiente; Drive con `drive.file` y Picker (decidido) |
 | 14 | OPDS (Calibre-Web, Kavita, Komga) | `fase3/opds` | Pendiente |
 | | 🧪 Prueba en el visor: formatos e importación | | |
 | 15 | Archivos gigantes y rendimiento | `fase4/rendimiento` | Pendiente |
@@ -242,11 +242,11 @@ Agrega una sección "Estado" y filas al Paso 10. Commit en fase3/wifi-pc y push.
 
 ## 13. Nubes: Google Drive, Dropbox y MEGA
 
-> ⚠️ Antes de enviarlo, el usuario debe decidir el permiso de Google Drive: `drive.file` con Google Picker (sin la evaluación CASA) o `drive.readonly` (exige verificación de Google y una evaluación anual pagada). Ver PROGRESO.md, «Publicación comercial». Además, el usuario tiene que crear las apps de desarrollador de Google, Dropbox y MEGA con su cuenta. Codex **no** debe guardar credenciales.
+> ✅ Permiso de Drive decidido por el usuario el 9 de noviembre de 2026: `drive.file` con Google Picker, sin la evaluación CASA. Antes de enviarlo, el usuario registra la app en Google, Dropbox y MEGA (gratis, una vez; Claude lo guía). Codex **no** debe guardar credenciales.
 
 ```text
 [ENCABEZADO con {RAMA} = fase3/nubes]
-Lee docs/IMPORTACION_Y_NUBES.md, PROGRESO.md (Fase 3 y Publicación comercial) y docs/LICENCIAS_Y_TIENDA.md. Decisión del usuario sobre Drive: {drive.file con Picker | drive.readonly}.
+Lee docs/IMPORTACION_Y_NUBES.md, PROGRESO.md (Fase 3 y Publicación comercial) y docs/LICENCIAS_Y_TIENDA.md. Decisión del usuario sobre Drive (9 de noviembre de 2026): permiso drive.file con el selector de archivos de Google (Google Picker); NO usar drive.readonly.
 TAREA: conectores detrás de un contrato propio (ICloudSource: listar carpetas, buscar, descargar con progreso, cancelar y reanudar).
 (1) Google Drive: OAuth 2.0 con PKCE abriendo el navegador del sistema del Quest y un redirect admitido por Google para apps Android. Primero haz un prototipo que confirme que el flujo funciona en Horizon OS y registra el resultado. No uses un flujo de TV/dispositivo que no permita explorar los archivos del usuario.
 (2) Dropbox: OAuth PKCE (sin client secret) y API v2 por HTTP.
