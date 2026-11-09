@@ -10,6 +10,9 @@ namespace FolioXR.Reading
     {
         private const float PinchDistance = 0.06f, PalmDistance = 0.08f, ControllerDistance = 0.08f;
         private const float TrackingGraceSeconds = 0.3f;
+        // Revisión de Claude: al cerrar los dedos la confianza del seguimiento suele bajar un instante.
+        // Un gesto que empieza en ese instante sigue valiendo si vuelve la confianza dentro de esta ventana.
+        private const float OnsetWindowSeconds = 0.3f;
 
         private sealed class GrabInput
         {
@@ -19,7 +22,9 @@ namespace FolioXR.Reading
             internal OVRHand Hand;
             internal OVRSkeleton Skeleton;
             internal InputDevice Device;
-            internal bool WasPinch = true, WasFist = true, WasGrip = true;
+            internal bool WasGrip = true;
+            internal bool StartConsumed = true; // Exige soltar antes del primer agarre.
+            internal float PinchSince = -1f, FistSince = -1f;
             internal bool LoggedPinch, LoggedFist;
             internal bool Pressed, Started, Reliable, Pinch, Fist, PinchBones, PalmBones;
             internal bool FistMode, PoseChanged;
@@ -106,11 +111,15 @@ namespace FolioXR.Reading
             if (_rig == null) _rig = FindFirstObjectByType<OVRCameraRig>();
             if (_rig == null) return;
             var skeletons = _rig.GetComponentsInChildren<OVRSkeleton>(true);
-            foreach (OVRHand hand in _rig.GetComponentsInChildren<OVRHand>(true))
+            OVRHand[] hands = _rig.GetComponentsInChildren<OVRHand>(true);
+            // Respaldo: manos que no cuelgan del rig.
+            if (hands.Length == 0) hands = FindObjectsByType<OVRHand>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            if (skeletons.Length == 0) skeletons = FindObjectsByType<OVRSkeleton>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (OVRHand hand in hands)
             {
                 GrabInput input = hand.GetHand() == OVRPlugin.Hand.HandLeft ? _inputs[0] : _inputs[1];
                 if (input.Hand != null && input.Hand != hand && input.Hand.isActiveAndEnabled) continue;
-                if (input.Hand != hand) input.WasPinch = input.WasFist = true;
+                if (input.Hand != hand) input.StartConsumed = true;
                 input.Hand = hand;
                 input.Skeleton = hand.GetComponent<OVRSkeleton>();
                 if (input.Skeleton == null) input.Skeleton = hand.GetComponentInChildren<OVRSkeleton>(true);
@@ -227,8 +236,13 @@ namespace FolioXR.Reading
                 ",medio=" + (middle != null) + ",anular=" + (ring != null) + ",meñique=" + (little != null) +
                 ",palma=" + (palm != null) + ",nudillo=" + (knuckle != null);
             // Sin huesos se conserva el pellizco de OVRHand y su pose; no se inventa un puño geométrico.
-            bool pinchStart = input.Pinch && !input.WasPinch;
-            bool fistStart = input.Fist && !input.WasFist;
+            float now = Time.unscaledTime;
+            if (input.Pinch) { if (input.PinchSince < 0f) input.PinchSince = now; } else input.PinchSince = -1f;
+            if (input.Fist) { if (input.FistSince < 0f) input.FistSince = now; } else input.FistSince = -1f;
+            if (!input.Pinch && !input.Fist) input.StartConsumed = false;
+            // Inicio reciente del gesto, aunque haya empezado con confianza baja.
+            bool pinchStart = input.Pinch && now - input.PinchSince <= OnsetWindowSeconds;
+            bool fistStart = input.Fist && now - input.FistSince <= OnsetWindowSeconds;
             bool held = input == _owner || input == _second;
             if (!held) input.FistMode = fistStart && (!pinchStart || DistanceToBook(input.PinchPosition) >= PinchDistance);
             bool bones = input.FistMode ? input.PalmBones : input.PinchBones;
@@ -238,9 +252,8 @@ namespace FolioXR.Reading
             input.PoseChanged = source != input.PoseSource;
             input.PoseSource = source;
             input.Pressed = input.Pinch || input.Fist;
-            input.Started = input.Reliable && (pinchStart || fistStart);
-            input.WasPinch = !input.Reliable || input.Pinch;
-            input.WasFist = !input.Reliable || input.Fist;
+            input.Started = input.Reliable && !input.StartConsumed && (pinchStart || fistStart);
+            if (input.Started) input.StartConsumed = true; // Un solo intento por gesto.
         }
 
         private float DistanceToBook(Vector3 point)
@@ -368,7 +381,7 @@ namespace FolioXR.Reading
             if (_book != null) { _book.IsGrabbed = false; _book.SaveBookScale(); _book.FreezePhysics(); }
             foreach (GrabInput input in _inputs)
             {
-                input.WasPinch = input.WasFist = input.WasGrip = true;
+                input.StartConsumed = input.WasGrip = true;
                 input.LostSince = -1f;
                 input.ClearMotion();
             }

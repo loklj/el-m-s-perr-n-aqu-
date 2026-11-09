@@ -146,7 +146,7 @@ Solo funciona dentro de la casa; en passthrough no cambia nada.
 
 ## Estado de la Tanda A
 
-Implementada en `interaccion/tanda-a`, basada en `origin/fase-1/preparacion` (9 de noviembre de 2026). Pendiente de revisión de Claude, compilación en Unity 6000.3 y prueba en Quest 3 antes de integrar. No se inició el Hito 2 ni las tandas B–E; `PROGRESO.md` permanece intacto.
+Implementada por Codex en `interaccion/tanda-a` e integrada en `fase-1/preparacion` tras la revisión de Claude (9 de noviembre de 2026). Falta compilar en Unity 6000.3 y probar en el Quest 3. No se inició el Hito 2 ni las tandas B–E; `PROGRESO.md` permanece intacto.
 
 - **Menú:** un TextMesh por botón, `MiddleCenter`, altura inicial 8 mm en categorías y 7 mm en opciones. Prueba los cortes entre palabras, elige hasta dos líneas y reduce la geometría a los límites reales del rectángulo con 3 mm de margen. Ajustes conserva lo existente y añade Física, Tamaño normal y Traer libro. Máximo previsto: 21 renderizadores incluyendo aviso/reloj/rayos, pendiente de medir draw calls en visor.
 - **Manos:** pellizco a 6 cm, puño a 8 cm con media de puntas a palma <6 cm. Reconoce huesos legacy y XRHand; busca también esqueletos hermanos dentro del rig. El respaldo utiliza `OVRHand.transform` y `GetFingerIsPinching(Index)` si faltan huesos válidos. Sin huesos no se estima el puño: sigue disponible el pellizco. Diagnóstico por inicio de gesto, tolerancia de seguimiento de 0,3 s y consumo del pellizco de agarre para no pasar páginas. El gesto de menú se rearma después de soltar el libro.
@@ -156,3 +156,17 @@ Implementada en `interaccion/tanda-a`, basada en `origin/fase-1/preparacion` (9 
 **Validación:** revisión manual de nombres y tipos contra el código publicado de `com.meta.xr.sdk.core@207.0.0` (`OVRSkeleton`, `OVRHand`, `OVRManager`, `OVRCameraRig`) y la referencia oficial de Unity 6000.3 (`PhysicsMaterial`, `PhysicsMaterialCombine`, `Rigidbody.linearVelocity`, damping, colisión continua y `Renderer.localBounds`). Análisis sintáctico de los 13 archivos C# sin errores y `git diff --check` limpio; comprobado que no se añadió `Shader.Find` y que `PROGRESO.md` no cambió. La tabla del Paso 10 de `HITO1_GUIA.md` contiene las pruebas funcionales y de regresión. No se ha compilado Unity ni ejecutado el proyecto en Quest desde este entorno.
 
 **Riesgos pendientes en visor:** comprobar la pose real de respaldo de cada mano y el umbral de puño; validar la geometría del texto y draw calls; ajustar si hiciera falta fricción/lanzamiento y contactos del libro fino contra escalones/barandas; verificar la calibración del piso real. A 4096 px aumenta el uso de memoria y la latencia del PDF: medir con documentos propios, especialmente páginas muy altas. El gesto bimanual exige una separación inicial mínima de 2 cm para evitar divisiones inestables. Los colisionadores de cilindros son cajas aproximadas y las vigas con escala no uniforme usan cajas envolventes.
+
+**Revisión de Claude (9 de noviembre de 2026).** El código compila contra stubs de Unity 6000.3 y Meta XR 207. El registro de la prueba de las 04:13 mostró:
+
+- 72 FPS estables en la casa, también con nitidez 1,8.
+- La nitidez desde el menú funciona.
+- El agarre con mando funciona.
+- Los huesos de la mano izquierda se leyeron al principio (ángulo de la palma en el registro).
+
+Cambios de la revisión:
+
+- **Inicio del gesto con confianza baja.** El agarre con manos exigía que el pellizco o el puño empezaran con seguimiento de confianza alta. Al cerrar los dedos esa confianza suele bajar un instante, así que se perdía el inicio y el agarre nunca empezaba. Ahora un gesto que empieza con confianza baja vale si la confianza vuelve antes de 0,3 s con el gesto sostenido. Sigue habiendo un solo intento por gesto, y acercarse con el gesto ya hecho no agarra.
+- **Respaldo para encontrar las manos.** Si las manos no cuelgan del rig, se buscan en toda la escena.
+- **Resolución de páginas con techo de 3072 px**, en vez de 4096. A 4096 px cada página pesaba unos 127 MB con mipmaps y Android tardaba segundos en codificar el PNG. A 3× el libro ocupa unos 60° de la vista y el visor no muestra más de unos 1800 px en ese ángulo.
+- **Origen del seguimiento.** Solo se cambia a FloorLevel si estaba en EyeLevel, para no mover un origen Stage. Después del cambio, el libro se vuelve a poner frente a la vista, porque la altura de la cabeza salta.

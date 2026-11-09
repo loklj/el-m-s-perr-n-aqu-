@@ -56,6 +56,7 @@ namespace FolioXR.Environments
         private IReadOnlyList<string> _readOnlyPointNames;
         private GameObject _passthroughFloor;
         private bool _floorOriginSet;
+        private float _replaceBookAt = -1f;
         public bool IsActive => _active;
         public float FloorHeight => _active && _house != null && _house.Root != null
             ? _house.Root.transform.position.y : _rig != null && _rig.trackingSpace != null
@@ -100,8 +101,22 @@ namespace FolioXR.Environments
             if (_rig == null || _rig.trackingSpace == null) return;
             if (!_floorOriginSet && OVRManager.instance != null)
             {
-                OVRManager.instance.trackingOriginType = OVRManager.TrackingOrigin.FloorLevel;
+                // Revisión de Claude: solo se cambia el origen a nivel de los ojos. Con FloorLevel o
+                // Stage el piso ya está bien. Al cambiar, la altura de la cabeza salta, así que
+                // el libro se vuelve a poner frente a la vista medio segundo después.
+                if (OVRManager.instance.trackingOriginType == OVRManager.TrackingOrigin.EyeLevel)
+                {
+                    OVRManager.instance.trackingOriginType = OVRManager.TrackingOrigin.FloorLevel;
+                    _replaceBookAt = Time.unscaledTime + 0.5f;
+                    Debug.Log("[FolioXR] Origen del seguimiento: EyeLevel → FloorLevel (piso real para la física).");
+                }
                 _floorOriginSet = true;
+            }
+            if (_replaceBookAt >= 0f && Time.unscaledTime >= _replaceBookAt)
+            {
+                _replaceBookAt = -1f;
+                if (_book == null) _book = FindFirstObjectByType<FolioXR.Reading.FolioBook>();
+                if (_book != null && !_active) _book.PlaceInFrontOfView();
             }
             if (_passthroughFloor == null)
             {

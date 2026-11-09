@@ -314,9 +314,13 @@ namespace FolioXR.Reading
 
         private int DesiredPageWidth()
         {
-            int baseline = Mathf.Clamp(renderWidthPixels, MinRenderWidth, 4096);
-            // Tramos de 256 px limitan trabajo y oscilaciones, con techo absoluto 4096.
-            return BookScale <= 1.5f ? baseline : Mathf.Min(4096,
+            // Revisión de Claude: techo de 3072 px. Con 4096 px cada página pesaba unos 127 MB
+            // con mipmaps y Android tardaba segundos en codificar el PNG. A 3x el libro ocupa
+            // ~60° de la vista y el Quest 3 no muestra más de ~1800 px ahí.
+            const int MaxPageWidth = 3072;
+            int baseline = Mathf.Clamp(renderWidthPixels, MinRenderWidth, MaxPageWidth);
+            // Tramos de 256 px limitan trabajo y oscilaciones.
+            return BookScale <= 1.5f ? baseline : Mathf.Min(MaxPageWidth,
                 Mathf.CeilToInt(baseline * BookScale / 256f) * 256);
         }
 
