@@ -1,5 +1,6 @@
 using FolioXR.Environments;
 using FolioXR.Reading;
+using FolioXR.Tools;
 using UnityEngine;
 using UnityEngine.XR;
 
@@ -24,7 +25,8 @@ namespace FolioXR.Menu
         private readonly bool[] _touchArmed = new bool[2];
         private readonly Vector3[] _previousTip = new Vector3[2];
         private readonly bool[] _hasTip = new bool[2];
-        private bool _menuWas = true, _backWas = true, _waitingRelease, _focused = true;
+        private bool _menuWas = true, _waitingRelease, _focused = true;
+        private readonly bool[] _backWas = { true, true };
         private float _nextFind;
         private Vector3 _lastRigPosition;
         private int _clearFrames;
@@ -93,17 +95,21 @@ namespace FolioXR.Menu
             if (!_focused) return;
             // El puño usado para sostener el libro no debe abrir/cerrar el menú al soltar.
             bool gesture = false;
-            if (_book != null && _book.IsGrabbed) _left.Reset();
+            if ((_book != null && _book.IsGrabbed) || ToolRegistry.HoldsHand(XRNode.LeftHand)) _left.Reset();
             else gesture = _left.UpdateGesture();
             if (_book != null) _book.LeftPinchSuppressed = _left.PalmUp;
             InputDevice leftDevice = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
             bool menu = Down(leftDevice, CommonUsages.menuButton);
-            bool back = Down(leftDevice, CommonUsages.secondaryButton) ||
-                Down(InputDevices.GetDeviceAtXRNode(XRNode.RightHand), CommonUsages.secondaryButton);
+            bool close = false;
+            for (int i = 0; i < 2; i++)
+            {
+                XRNode side = i == 0 ? XRNode.LeftHand : XRNode.RightHand;
+                bool back = Down(InputDevices.GetDeviceAtXRNode(side), CommonUsages.secondaryButton);
+                close |= back && !_backWas[i] && !ToolRegistry.HoldsController(side);
+                _backWas[i] = back; // Flanco real incluso si la herramienta reserva B/Y.
+            }
             bool toggle = (menu && !_menuWas) || gesture;
             _menuWas = !leftDevice.isValid || menu;
-            bool close = back && !_backWas;
-            _backWas = back;
             if (toggle) { if (IsOpen) Close(); else Open(); }
             else if (IsOpen && close) Close();
             if (IsOpen)
@@ -204,6 +210,8 @@ namespace FolioXR.Menu
             bool trigger = Down(device, CommonUsages.triggerButton);
             bool edge = trigger && !_triggerWas[slot];
             _triggerWas[slot] = !device.isValid || trigger;
+            if (ToolRegistry.HoldsController(node) || ToolRegistry.HoldsHand(node))
+            { _touchArmed[slot] = _hasTip[slot] = false; return; }
             if (hand.TryBone(OVRSkeleton.BoneId.Hand_IndexTip, out Vector3 tip))
             {
                 Vector3 local = _panel.transform.InverseTransformPoint(tip);
@@ -270,7 +278,7 @@ namespace FolioXR.Menu
         {
             _focused = focused;
             Close();
-            _menuWas = _backWas = true;
+            _menuWas = _backWas[0] = _backWas[1] = true;
             _left.Reset();
             _waitingRelease = true;
             _clearFrames = 0;
