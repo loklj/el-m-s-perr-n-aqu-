@@ -121,12 +121,12 @@ namespace FolioXR.Environments
                 float h = _theme.StoreyHeight;
                 float wall = _theme.WallThickness;
                 B(Cream, new Vector3(0f, -0.22f, 0f), new Vector3(12.4f, 0.24f, 10.4f));
-                B(Wood, new Vector3(0f, -0.07f, 0f), new Vector3(12f, 0.14f, 10f));
+                B(Wood, new Vector3(0f, -0.07f, 0f), new Vector3(12f, 0.14f, 10f), true);
                 // Planta alta con hueco real de escalera x[3.7,5.7], z[-1.4,4.3].
-                B(Wood, new Vector3(-1.15f, h - 0.09f, 0f), new Vector3(9.7f, 0.18f, 10f));
-                B(Wood, new Vector3(4.85f, h - 0.09f, -3.2f), new Vector3(2.3f, 0.18f, 3.6f));
-                B(Wood, new Vector3(4.85f, h - 0.09f, 4.65f), new Vector3(2.3f, 0.18f, 0.7f));
-                B(Wood, new Vector3(5.85f, h - 0.09f, 1.45f), new Vector3(0.3f, 0.18f, 5.7f));
+                B(Wood, new Vector3(-1.15f, h - 0.09f, 0f), new Vector3(9.7f, 0.18f, 10f), true);
+                B(Wood, new Vector3(4.85f, h - 0.09f, -3.2f), new Vector3(2.3f, 0.18f, 3.6f), true);
+                B(Wood, new Vector3(4.85f, h - 0.09f, 4.65f), new Vector3(2.3f, 0.18f, 0.7f), true);
+                B(Wood, new Vector3(5.85f, h - 0.09f, 1.45f), new Vector3(0.3f, 0.18f, 5.7f), true);
                 B(Cream, new Vector3(0f, 2f * h + 0.09f, 0f), new Vector3(12.6f, 0.18f, 10.6f));
                 for (int floor = 0; floor < 2; floor++)
                 {
@@ -141,12 +141,12 @@ namespace FolioXR.Environments
                 B(Cream, new Vector3(1.0f, h + h * 0.5f, 1.8f), new Vector3(wall, h, 6.4f));
                 B(Wood, new Vector3(1.0f, h + h - 0.18f, -2.65f), new Vector3(0.24f, 0.36f, 2.5f));
                 // Balcón al frente del dormitorio; la puerta ocupa el segundo vano.
-                B(Wood, new Vector3(-3f, h - 0.09f, -6.15f), new Vector3(6f, 0.18f, 2.3f));
+                B(Wood, new Vector3(-3f, h - 0.09f, -6.15f), new Vector3(6f, 0.18f, 2.3f), true);
                 Rail(new Vector3(-6f, h, -7.3f), new Vector3(0f, h, -7.3f));
                 Rail(new Vector3(-6f, h, -7.3f), new Vector3(-6f, h, -5f));
                 Rail(new Vector3(0f, h, -7.3f), new Vector3(0f, h, -5f));
                 // Terraza junto al jardín, top=0.12 m. Postes sostienen una pérgola ligera.
-                B(Wood, new Vector3(-3f, 0.02f, -6.95f), new Vector3(6f, 0.2f, 3.9f));
+                B(Wood, new Vector3(-3f, 0.02f, -6.95f), new Vector3(6f, 0.2f, 3.9f), true);
                 for (int side = 0; side < 2; side++)
                     B(Wood, new Vector3(-5.75f + side * 5.5f, 1.46f, -8.65f), new Vector3(0.16f, 2.68f, 0.16f));
                 B(Wood, new Vector3(-3f, 2.75f, -8.65f), new Vector3(5.7f, 0.18f, 0.18f));
@@ -188,8 +188,8 @@ namespace FolioXR.Environments
                 {
                     float top = (i + 1) * rise;
                     float z = -1.4f + (i + 0.5f) * run;
-                    B(Wood, new Vector3(4.7f, top * 0.5f, z), new Vector3(1.7f, top, run));
-                    B(Metal, new Vector3(4.7f, top - 0.008f, z - run * 0.5f + 0.015f), new Vector3(1.7f, 0.016f, 0.03f));
+                    B(Wood, new Vector3(4.7f, top * 0.5f, z), new Vector3(1.7f, top, run), true);
+                    B(Metal, new Vector3(4.7f, top - 0.008f, z - run * 0.5f + 0.015f), new Vector3(1.7f, 0.016f, 0.03f), true);
                 }
                 Rail(new Vector3(3.78f, rise, -1.24f), new Vector3(3.78f, h, 4.15f));
                 Rail(new Vector3(5.62f, rise, -1.24f), new Vector3(5.62f, h, 4.15f));
@@ -202,7 +202,7 @@ namespace FolioXR.Environments
             {
                 float h = _theme.StoreyHeight;
                 Seat(new Vector3(-3.1f, 0f, 0.4f), 2.6f, 0f);
-                B(Fabric, new Vector3(-3.1f, 0.008f, -1.6f), new Vector3(3.6f, 0.016f, 2.5f));
+                B(Fabric, new Vector3(-3.1f, 0.008f, -1.6f), new Vector3(3.6f, 0.016f, 2.5f), true);
                 Table(new Vector3(-3.1f, 0f, -1.35f), 1.4f, 0.7f, 0.45f);
                 Lamp(new Vector3(-4.8f, 0f, 0.2f));
                 Plant(new Vector3(-5.3f, 0f, -3.6f), 1.15f);
@@ -211,7 +211,7 @@ namespace FolioXR.Environments
                 Lamp(new Vector3(0.5f, 0f, -0.1f));
                 Bookshelf(new Vector3(1.7f, 0f, 4.55f), 3.2f, 0f);
                 Bookshelf(new Vector3(5.55f, 0f, -3.25f), 2.6f, 90f);
-                B(Cream, new Vector3(2.1f, 0.006f, 1.1f), new Vector3(2.7f, 0.012f, 3f));
+                B(Cream, new Vector3(2.1f, 0.006f, 1.1f), new Vector3(2.7f, 0.012f, 3f), true);
                 // Cama orientada al balcón, con cabecera, colchón, manta y dos almohadas.
                 Vector3 bed = new Vector3(-2.8f, h, 1.25f);
                 B(Wood, bed + new Vector3(0f, 0.3f, 0f), new Vector3(2.1f, 0.5f, 2.5f));
@@ -222,7 +222,7 @@ namespace FolioXR.Environments
                     B(Cream, bed + new Vector3(-0.48f + i * 0.96f, 0.79f, 0.81f), new Vector3(0.8f, 0.12f, 0.45f));
                 Table(new Vector3(-4.35f, h, 1.8f), 0.65f, 0.6f, 0.57f);
                 Lamp(new Vector3(-4.6f, h, 2.7f));
-                B(Fabric, new Vector3(-2.8f, h + 0.008f, -1.5f), new Vector3(3.4f, 0.016f, 1.5f));
+                B(Fabric, new Vector3(-2.8f, h + 0.008f, -1.5f), new Vector3(3.4f, 0.016f, 1.5f), true);
                 Plant(new Vector3(-5.3f, h, -3.8f), 1.2f);
                 Seat(new Vector3(-2.8f, h, -6f), 0.9f, 0f);
                 Table(new Vector3(-1.5f, h, -6.3f), 0.5f, 0.5f, 0.5f);
@@ -314,9 +314,9 @@ namespace FolioXR.Environments
 
             private void BuildGarden()
             {
-                AddWorld(_box, Green, Matrix4x4.TRS(new Vector3(0f, -0.34f, 0f), Quaternion.identity, new Vector3(120f, 0.12f, 120f)));
+                AddWorld(_box, Green, Matrix4x4.TRS(new Vector3(0f, -0.34f, 0f), Quaternion.identity, new Vector3(120f, 0.12f, 120f)), true);
                 for (int i = 0; i < 8; i++)
-                    B(Cream, new Vector3(1.7f, -0.22f, -6f - i * 0.78f), new Vector3(1.25f, 0.13f, 0.55f));
+                    B(Cream, new Vector3(1.7f, -0.22f, -6f - i * 0.78f), new Vector3(1.25f, 0.13f, 0.55f), true);
                 int treeCount = Mathf.RoundToInt(18f * _theme.FurnitureDensity);
                 for (int i = 0; i < treeCount; i++)
                 {
@@ -361,17 +361,19 @@ namespace FolioXR.Environments
                 float h = _theme.StoreyHeight;
                 _result.ReadingPoints = Array.AsReadOnly(new[]
                 {
-                    Point("Sofá de la sala", new Vector3(-3.1f, 1.2f, 0.4f), Vector3.back),
-                    Point("Sillón de la biblioteca", new Vector3(1.7f, 1.2f, -1f), Vector3.forward),
-                    Point("Cama del dormitorio", new Vector3(-2.8f, h + 1.2f, 2.1f), Vector3.back),
-                    Point("Silla del balcón", new Vector3(-2.8f, h + 1.2f, -6f), Vector3.back),
-                    Point("Tumbona de la terraza", new Vector3(-3.4f, 1.32f, -7f), Vector3.back)
+                    Point("Sofá de la sala", new Vector3(-3.1f, 1.2f, 0.4f), Vector3.back, new Vector3(-1.35f, 0f, -0.3f)),
+                    Point("Sillón de la biblioteca", new Vector3(1.7f, 1.2f, -1f), Vector3.forward, new Vector3(1.7f, 0f, 0.15f)),
+                    Point("Cama del dormitorio", new Vector3(-2.8f, h + 1.2f, 2.1f), Vector3.back, new Vector3(-1.25f, h, 0.5f)),
+                    Point("Silla del balcón", new Vector3(-2.8f, h + 1.2f, -6f), Vector3.back, new Vector3(-3.8f, h, -6f)),
+                    Point("Tumbona de la terraza", new Vector3(-3.4f, 1.32f, -7f), Vector3.back, new Vector3(-4.45f, 0.12f, -7f))
                 });
             }
 
-            private ReadingPoint Point(string name, Vector3 position, Vector3 direction)
+            private ReadingPoint Point(string name, Vector3 position, Vector3 direction, Vector3 floor)
             {
-                return new ReadingPoint(name, _planScale.MultiplyPoint3x4(position), _planScale.MultiplyVector(direction));
+                // Llegada libre junto al asiento: una cápsula no cabe dentro del mueble.
+                return new ReadingPoint(name, _planScale.MultiplyPoint3x4(position),
+                    _planScale.MultiplyVector(direction), _planScale.MultiplyPoint3x4(floor));
             }
 
             private void Combine()
@@ -506,9 +508,9 @@ namespace FolioXR.Environments
             {
                 return Matrix4x4.TRS(position, Quaternion.Euler(0f, yaw, 0f), Vector3.one);
             }
-            private void B(int material, Vector3 position, Vector3 size)
+            private void B(int material, Vector3 position, Vector3 size, bool floor = false)
             {
-                Add(_box, material, Matrix4x4.TRS(position, Quaternion.identity, size));
+                Add(_box, material, Matrix4x4.TRS(position, Quaternion.identity, size), floor);
             }
             private void C(int material, Vector3 position, Vector3 size)
             {
@@ -518,19 +520,19 @@ namespace FolioXR.Environments
             {
                 Add(_box, material, group * Matrix4x4.TRS(position, Quaternion.identity, size));
             }
-            private void Add(Mesh mesh, int material, Matrix4x4 transform)
+            private void Add(Mesh mesh, int material, Matrix4x4 transform, bool floor = false)
             {
-                AddWorld(mesh, material, _planScale * transform);
+                AddWorld(mesh, material, _planScale * transform, floor);
             }
-            private void AddWorld(Mesh mesh, int material, Matrix4x4 transform)
+            private void AddWorld(Mesh mesh, int material, Matrix4x4 transform, bool floor = false)
             {
                 _batches[material].Add(new CombineInstance { mesh = mesh, subMeshIndex = 0, transform = transform });
                 // Solo sólidos estructurales/muebles; el cielo, follaje y los lomos son decorativos.
                 // No se toca ninguna malla ni se añaden renderers a la física.
-                if (mesh == _box || mesh == _cylinder) AddCollider(transform);
+                if (mesh == _box || mesh == _cylinder) AddCollider(transform, floor);
             }
 
-            private void AddCollider(Matrix4x4 matrix)
+            private void AddCollider(Matrix4x4 matrix, bool floor)
             {
                 var part = new GameObject("Sólido " + (++_colliderCount));
                 part.transform.SetParent(_colliders, false);
@@ -542,7 +544,9 @@ namespace FolioXR.Environments
                 // escala ancho/profundidad de forma distinta (matriz con cizallamiento).
                 Quaternion inverse = Quaternion.Inverse(rotation);
                 x = inverse * x; y = inverse * y; z = inverse * z;
-                part.AddComponent<BoxCollider>().size = new Vector3(
+                var collider = part.AddComponent<BoxCollider>();
+                if (floor) _result.TeleportFloors.Add(collider);
+                collider.size = new Vector3(
                     Mathf.Abs(x.x) + Mathf.Abs(y.x) + Mathf.Abs(z.x),
                     Mathf.Abs(x.y) + Mathf.Abs(y.y) + Mathf.Abs(z.y),
                     Mathf.Abs(x.z) + Mathf.Abs(y.z) + Mathf.Abs(z.z));

@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using FolioXR.Reading;
+using FolioXR.Locomotion;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.XR;
@@ -13,8 +14,6 @@ namespace FolioXR.Environments
     [DefaultExecutionOrder(10000)]
     public sealed class FolioEnvironmentController : MonoBehaviour
     {
-        private const float AxisPress = 0.7f;
-        private const float AxisRelease = 0.3f;
         private const double FpsInterval = 5.0;
         private const float LabelSeconds = 3f;
 
@@ -28,9 +27,7 @@ namespace FolioXR.Environments
         private bool _active;
         private bool _hasSnapshot;
         private bool _clickWasDown = true;
-        private bool _axisLatched = true;
         private bool _toggleRequested;
-        private int _requestedStep;
         private int _pointIndex;
         private float _labelUntil;
         private double _fpsWindowStart;
@@ -62,6 +59,8 @@ namespace FolioXR.Environments
             ? _house.Root.transform.position.y : _rig != null && _rig.trackingSpace != null
                 ? _rig.trackingSpace.position.y : 0f;
         public bool InputPaused { get; set; }
+        public bool IsTeleportFloor(Collider collider) =>
+            _active && _house != null && _house.TeleportFloors.Contains(collider);
         public IReadOnlyList<string> PointNames =>
             _readOnlyPointNames ?? (_readOnlyPointNames = _pointNames.AsReadOnly());
 
@@ -136,34 +135,20 @@ namespace FolioXR.Environments
             if (InputPaused)
             {
                 _clickWasDown = true;
-                _axisLatched = true;
-                _requestedStep = 0;
                 return;
             }
             InputDevice device = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
             if (!device.isValid ||
-                !device.TryGetFeatureValue(CommonUsages.primary2DAxisClick, out bool click) ||
-                !device.TryGetFeatureValue(CommonUsages.primary2DAxis, out Vector2 axis))
+                !device.TryGetFeatureValue(CommonUsages.primary2DAxisClick, out bool click))
             {
-                // Al reconectar hay que soltar el clic y centrar el eje antes de actuar.
+                // Al reconectar hay que soltar el clic antes de actuar.
                 _clickWasDown = true;
-                _axisLatched = true;
                 return;
             }
 
             bool toggle = click && !_clickWasDown;
             _clickWasDown = click;
             if (toggle) _toggleRequested = true;
-
-            float x = axis.x;
-            if (Mathf.Abs(x) < AxisRelease) _axisLatched = false;
-            if (!_axisLatched && Mathf.Abs(x) > AxisPress)
-            {
-                // También se enclava en passthrough: entrar con el stick inclinado
-                // debe mostrar primero el sofá. Y sigue siendo exclusivo de FolioBook.
-                _axisLatched = true;
-                if (_active && !toggle) _requestedStep = x > 0f ? 1 : -1;
-            }
         }
 
         private void LateUpdate()
@@ -175,7 +160,6 @@ namespace FolioXR.Environments
                 bool enter = _requestedMode > 0;
                 _requestedMode = 0;
                 _toggleRequested = false;
-                _requestedStep = 0;
                 if (enter && !_active) EnterEnvironment();
                 else if (!enter && _active) LeaveEnvironment();
                 return;
@@ -183,7 +167,6 @@ namespace FolioXR.Environments
             if (_toggleRequested)
             {
                 _toggleRequested = false;
-                _requestedStep = 0;
                 if (_active) LeaveEnvironment();
                 else EnterEnvironment();
                 return;
@@ -201,11 +184,6 @@ namespace FolioXR.Environments
                 GoToReadingPoint(_requestedPoint);
                 _requestedPoint = -1;
             }
-            if (_requestedStep != 0)
-            {
-                GoToReadingPoint(_pointIndex + _requestedStep);
-                _requestedStep = 0;
-            }
             UpdatePointLabel();
             LogAverageFps();
         }
@@ -216,7 +194,7 @@ namespace FolioXR.Environments
             _rig = FindFirstObjectByType<OVRCameraRig>();
             _passthrough = FindFirstObjectByType<OVRPassthroughLayer>(FindObjectsInactive.Include);
             _view = Camera.main;
-            if (_book == null || _rig == null || _rig.centerEyeAnchor == null ||
+            if (_book == null || _rig == null || _rig.centerEyeAnchor == null || _rig.trackingSpace == null ||
                 _passthrough == null || _view == null)
             {
                 Debug.LogWarning("[FolioXR] Entorno: faltan libro, OVRCameraRig, centerEyeAnchor, " +
@@ -305,9 +283,9 @@ namespace FolioXR.Environments
 
         private void LeaveEnvironment()
         {
+            FolioLocomotion.SuspendForRelocation();
             _active = false;
             _requestedPoint = -1;
-            _requestedStep = 0;
             if (_house != null && _house.Root != null) _house.Root.SetActive(false);
             if (_pointLabel != null) _pointLabel.gameObject.SetActive(false);
             if (!_hasSnapshot) return;
@@ -340,12 +318,14 @@ namespace FolioXR.Environments
 
         private void GoToReadingPoint(int index)
         {
+            FolioLocomotion.SuspendForRelocation();
             int count = _house.ReadingPoints.Count;
             _pointIndex = (index % count + count) % count;
             ReadingPoint point = _house.ReadingPoints[_pointIndex];
             Transform root = _house.Root.transform;
             Transform eyes = _rig.centerEyeAnchor;
-            Vector3 targetPosition = root.TransformPoint(point.EyePosition);
+            float eyeHeight = Mathf.Max(0.5f, eyes.position.y - _rig.trackingSpace.position.y);
+            Vector3 targetPosition = root.TransformPoint(point.FloorPosition) + Vector3.up * (eyeHeight + 0.03f);
             Vector3 targetForward = Vector3.ProjectOnPlane(root.TransformDirection(point.ViewDirection), Vector3.up);
             Vector3 currentForward = Vector3.ProjectOnPlane(eyes.forward, Vector3.up);
             if (currentForward.sqrMagnitude < 0.0001f)
@@ -434,9 +414,7 @@ namespace FolioXR.Environments
         {
             ResetFpsWindow();
             _clickWasDown = true;
-            _axisLatched = true;
             _toggleRequested = false;
-            _requestedStep = 0;
             _requestedMode = 0;
             _requestedPoint = -1;
         }
