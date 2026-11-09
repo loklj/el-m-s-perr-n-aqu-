@@ -44,7 +44,7 @@ Este documento es la especificación para que Codex (GPT-6 Astra) programe por t
 
 **4. Tamaño con dos manos o dos mandos**
 - Si el libro ya está agarrado y la otra mano o mando también lo agarra, entra en **modo dos manos**. Esto reemplaza la transferencia actual a la segunda mano.
-- **Escala:** escala inicial × (distancia actual entre las manos / distancia inicial), entre **0,5× y 3×**.
+- **Escala:** escala inicial × (distancia actual entre las manos / distancia inicial), entre **0,5× y 5×** (el máximo era 3× y el usuario lo subió a 5× el 9 de noviembre de 2026).
 - **Movimiento:** la posición sigue al punto medio entre las manos, con el desplazamiento inicial. La rotación sigue la primera mano.
 - Al soltar una mano, se vuelve a una mano con la que queda, sin saltos.
 - El tamaño se guarda en PlayerPrefs con la clave `folioxr.bookScale`. En Ajustes hay una opción «Tamaño normal» que vuelve a 1×.
@@ -174,7 +174,7 @@ Cambios de la revisión:
 
 ## Estado de la Tanda B
 
-Implementada en `interaccion/tanda-b`, partiendo de `origin/fase-1/preparacion` (`d9fcda2`, Tanda A revisada). Pendiente de revisión e integración y de compilar/probar en Unity 6000.3 + Quest 3. No se inició el Hito 2 ni las tandas C–E. `PROGRESO.md` no se modifica.
+Implementada en `interaccion/tanda-b`, partiendo de `origin/fase-1/preparacion` (`d9fcda2`, Tanda A revisada), e incorporando después `c76f336` (máximo de libro 5×). Pendiente de revisión e integración y de compilar/probar en Unity 6000.3 + Quest 3. No se inició el Hito 2 ni las tandas C–E. `PROGRESO.md` no se modifica.
 
 - **Arranque y alcance:** `Locomotion/FolioLocomotion.cs`, namespace `FolioXR.Locomotion`, se crea con `RuntimeInitializeOnLoadMethod(AfterSceneLoad)`. Su ayudante `LocomotionVisuals` crea y libera los recursos visuales por código. Solo actúa con la casa activa, seguimiento válido y `InputPaused == false`. «Casa» incluye el terreno, terraza y balcón ya generados por ese entorno; no añade locomoción a passthrough.
 - **Caminar y colisionar:** CharacterController en OVRCameraRig, radio 20 cm, altura física de cabeza +10 cm (mínimo 60 cm), centro siguiendo la cabeza en horizontal, skin 2 cm, stepOffset 30 cm y gravedad 9,81 m/s². Movimiento a 1,4 m/s, aceleración/frenado 3,5 m/s² y diagonal limitada. También barre el desplazamiento físico horizontal para que actualizar el centro no atraviese los sólidos. Requiere el rig vertical a escala unitaria de la escena existente.
