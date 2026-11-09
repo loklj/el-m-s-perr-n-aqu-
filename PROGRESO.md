@@ -17,6 +17,7 @@ El repositorio partía de un README. Esta fase añade documentación de diseño,
 - [Menú esférico 3D: diseño acordado](docs/MENU_ESFERICO.md).
 - [Menú simple (alternativa a la esfera)](docs/MENU_SIMPLE.md).
 - [Entorno de prueba 1: casa moderna cálida](docs/ENTORNOS.md).
+- [Interacción: física del libro, movimiento libre y herramientas de muñeca](docs/INTERACCION.md).
 - [Licencias para vender la app en la Meta Horizon Store](docs/LICENCIAS_Y_TIENDA.md): Unity, SDK de Meta, comisión e inventario de componentes (7 de noviembre de 2026).
 - [Importación local, nubes, OPDS y guía Kindle](docs/IMPORTACION_Y_NUBES.md).
 - [Preparación del PC, compilación, instalación y pruebas](docs/PC_Y_VALIDACION.md).
@@ -179,6 +180,7 @@ La app se venderá en la **Meta Horizon Store a USD 4,99**, con **código cerrad
 - Forma de trabajo pedida por el usuario: **Codex/GPT-6 Astra escribe el código y Claude lo revisa y corrige** antes de que el usuario compile.
 - Estado (8 de noviembre de 2026): **entorno de prueba 1 integrado en `fase-1/preparacion`**. Es una casa «moderna cálida» de dos pisos, hecha por Codex con esfuerzo Alto y revisada por Claude. Claude agregó la actualización de la luz ambiente y el manejo del límite del Guardian. Controles: el clic del stick izquierdo alterna entre passthrough y la casa, y el stick izquierdo a los lados cambia entre 5 lugares para leer. Falta probarlo en el Quest 3. Detalle: [docs/ENTORNOS.md](docs/ENTORNOS.md).
 - **Prueba del 9 de noviembre de 2026 (03:25), registro leído por Claude:** los pellizcos funcionan. La nitidez no registró ningún movimiento del stick (falta confirmar si se usaron los mandos). El agarre no puede funcionar porque la escena no tiene interactores del Interaction SDK (`HandGrabInteractor=0, GrabInteractor=0`). Además, el APK era la versión 1.2: la casa y el menú no se habían copiado al proyecto.
+- **Prueba del 9 de noviembre de 2026 (04:15)**, con la casa, el menú y el agarre. La casa se ve bien. El agarre funciona con el mando, pero no con las manos (el usuario probó pellizco y mano completa). Las letras del menú no caben en los botones. El usuario pidió movimiento libre, física realista, cambiar el tamaño del libro con dos manos y herramientas de muñeca. Plan por tandas A a E en [docs/INTERACCION.md](docs/INTERACCION.md).
 - **Agarre propio (`BookGrab`)**, hecho por Codex y revisado por Claude, sin Interaction SDK. Con la mano: pellizco a menos de 4 cm del libro. Con el mando: botón de agarre (grip) a menos de 8 cm. Mientras el libro está tomado, los pellizcos no pasan página.
 - `FolioBook` desactiva la Dynamic Resolution de Meta al arrancar, porque el Project Setup Tool la activó y pasaría por encima de la nitidez elegida.
 
