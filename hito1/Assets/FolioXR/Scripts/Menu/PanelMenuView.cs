@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
 using FolioXR.Reading;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -8,8 +7,8 @@ using UnityEngine.Rendering;
 namespace FolioXR.Menu
 {
     /// <summary>
-    /// Panel en metros, frente -Z. Ocho renderizadores como máximo, sin física:
-    /// superficies, categorías, dos columnas, cabecera, reloj, aviso y ambos rayos.
+    /// Panel en metros, frente -Z. Un TextMesh por botón, ajustado a su rectángulo.
+    /// Hasta 21 renderizadores con diez opciones; presupuesto: 30 draw calls.
     /// </summary>
     public sealed class PanelMenuView : MonoBehaviour, IMenuView
     {
@@ -24,7 +23,7 @@ namespace FolioXR.Menu
         private Font _font;
         private Mesh _surface, _rays;
         private MeshRenderer _surfaceRenderer, _rayRenderer;
-        private TextMesh _categories, _optionsLeft, _optionsRight, _header, _clock, _notice;
+        private TextMesh _header, _clock, _notice;
         private TextMesh[] _panelTexts;
         private readonly List<Button> _buttons = new List<Button>();
         private readonly List<Vector3> _vertices = new List<Vector3>();
@@ -33,7 +32,6 @@ namespace FolioXR.Menu
         private readonly HashSet<int> _hover = new HashSet<int>();
         private readonly Vector3[] _rayVertices = new Vector3[8];
         private readonly Vector2[] _rayUv = new Vector2[8];
-        private readonly string[] _labels = new string[8];
         private MenuCategory _drawnCategory = (MenuCategory)(-1);
         private int _drawnCount = -1;
         private int _pressed = -1;
@@ -46,6 +44,8 @@ namespace FolioXR.Menu
         private sealed class Button
         {
             public Rect Rect;
+            public TextMesh Text;
+            public string Label;
             public int Category = -1, Option = -1;
             public bool Close;
             public int Start, Count, Palette = -1;
@@ -87,17 +87,13 @@ namespace FolioXR.Menu
             _rays.uv = _rayUv;
             _rays.triangles = new[] { 0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7 };
             _rayRenderer = MeshObject("Rayos", _rays, _surfaceMaterial);
-            _categories = Label("Categorías", new Vector3(-0.184f, Top - 0.003f, -0.004f), 0.012f);
-            _optionsLeft = Label("Opciones izquierda", new Vector3(-0.027f, Top - 0.003f, -0.004f), 0.01f);
-            _optionsRight = Label("Opciones derecha", new Vector3(0.089f, Top - 0.003f, -0.004f), 0.01f);
             _header = Label("Hora y batería", new Vector3(-0.184f, 0.123f, -0.004f), 0.01f);
             _clock = Label("Reloj grande", new Vector3(-0.027f, 0.083f, -0.004f), 0.018f);
             _notice = Label("Aviso del temporizador", Vector3.zero, 0.012f);
             _notice.anchor = TextAnchor.MiddleCenter;
             _notice.alignment = TextAlignment.Center;
             _notice.gameObject.SetActive(false);
-            _panelTexts = new[] { _categories, _optionsLeft, _optionsRight, _header, _clock };
-            _categories.text = "Biblioteca\n\nEntornos\n\nAjustes\n\nImportar y\nnubes\nHora";
+            _panelTexts = new[] { _header, _clock };
             SetVisibility(0f);
             return true;
         }
@@ -201,22 +197,24 @@ namespace FolioXR.Menu
                 _hover.Clear();
                 _pressed = -1;
                 BuildLayout();
-                BuildOptionTexts();
                 _clock.gameObject.SetActive(_drawnCategory == MenuCategory.Hora);
             }
-            UpdateButtons(); // Solo UV/profundidad; las marcas no reconstruyen texto.
+            RefreshButtonTexts();
+            UpdateButtons();
         }
 
         private void BuildLayout()
         {
+            foreach (Button button in _buttons)
+            {
+                button.Text.gameObject.SetActive(false);
+                Destroy(button.Text.gameObject);
+            }
             _buttons.Clear(); _vertices.Clear(); _uv.Clear(); _indices.Clear();
             RoundedRect(new Rect(-0.2f, -0.14f, 0.4f, 0.28f), 0f, 0, 0.012f);
             for (int i = 0; i < 5; i++)
                 AddButton(new Rect(-0.192f, Top - i * RowPitch - ButtonHeight, 0.148f, ButtonHeight), i, -1, false);
             AddButton(new Rect(0.148f, 0.094f, 0.044f, 0.04f), -1, -1, true);
-            // X geométrica: no añade otro TextMesh/draw call.
-            CrossStroke(new Vector2(0.162f, 0.106f), new Vector2(0.178f, 0.122f));
-            CrossStroke(new Vector2(0.162f, 0.122f), new Vector2(0.178f, 0.106f));
             bool wide = _drawnCategory == MenuCategory.Biblioteca || _drawnCategory == MenuCategory.ImportarYNubes;
             float top = _drawnCategory == MenuCategory.Hora ? Top - 0.056f : Top;
             for (int i = 0; i < _model.Options.Count; i++)
@@ -237,8 +235,15 @@ namespace FolioXR.Menu
         {
             int start = _vertices.Count;
             RoundedRect(rect, -0.002f, 1, 0.004f);
+            TextMesh text = Label("Texto de botón", new Vector3(rect.center.x, rect.center.y, -0.004f),
+                category >= 0 ? 0.008f : 0.007f);
+            text.anchor = TextAnchor.MiddleCenter;
+            text.alignment = TextAlignment.Center;
+            text.lineSpacing = 1f;
+            text.color = new Color(1f, 1f, 1f, _alpha);
+            text.GetComponent<MeshRenderer>().enabled = _alpha > 0f;
             _buttons.Add(new Button { Rect = rect, Category = category, Option = option, Close = close,
-                Start = start, Count = _vertices.Count - start, Depth = -0.002f });
+                Text = text, Start = start, Count = _vertices.Count - start, Depth = -0.002f });
         }
 
         private void RoundedRect(Rect rect, float z, int palette, float radius)
@@ -261,65 +266,77 @@ namespace FolioXR.Menu
             { _indices.Add(start); _indices.Add(start + 1 + (i + 1) % 20); _indices.Add(start + 1 + i); }
         }
 
-        private void CrossStroke(Vector2 a, Vector2 b)
-        {
-            Vector2 n = new Vector2(-(b - a).y, (b - a).x).normalized * 0.001f;
-            int start = _vertices.Count;
-            foreach (Vector2 point in new[] { a - n, a + n, b + n, b - n })
-            { _vertices.Add(new Vector3(point.x, point.y, -0.004f)); _uv.Add(PaletteUv(6)); }
-            _indices.AddRange(new[] { start, start + 2, start + 1, start, start + 3, start + 2 });
-        }
-
         private static Vector2 PaletteUv(int index) => new Vector2((index + 0.5f) / 8f, 0.5f);
 
-        private void BuildOptionTexts()
+        private void RefreshButtonTexts()
         {
-            bool wide = _drawnCategory == MenuCategory.Biblioteca || _drawnCategory == MenuCategory.ImportarYNubes;
-            for (int i = 0; i < _labels.Length; i++)
-                _labels[i] = i < _model.Options.Count ? Wrap(_model.Options[i].Text, wide ? 0.210f : 0.094f) : string.Empty;
-            float top = _drawnCategory == MenuCategory.Hora ? Top - 0.056f : Top;
-            _optionsLeft.transform.localPosition = new Vector3(-0.027f, top - 0.003f, -0.004f);
-            _optionsRight.transform.localPosition = new Vector3(0.089f, top - 0.003f, -0.004f);
-            _optionsLeft.text = ColumnText(0, wide);
-            _optionsRight.text = wide ? string.Empty : ColumnText(1, false);
-        }
-
-        private string ColumnText(int column, bool wide)
-        {
-            var result = new StringBuilder();
-            for (int i = column; i < _model.Options.Count; i += wide ? 1 : 2)
+            foreach (Button button in _buttons)
             {
-                if (result.Length > 0) result.Append('\n');
-                string label = _labels[i];
-                result.Append(label);
-                if (!label.Contains("\n")) result.Append('\n');
+                string label = button.Close ? "×" : button.Category >= 0
+                    ? MenuModel.CategoryNames[button.Category] : _model.Options[button.Option].Text;
+                if (button.Label == label) continue;
+                button.Label = label;
+                FitButtonText(button, label);
             }
-            return result.ToString();
         }
 
-        private string Wrap(string text, float width)
+        private void FitButtonText(Button button, string label)
         {
-            _font.RequestCharactersInTexture(text, 64);
-            var result = new StringBuilder();
-            float lineWidth = 0f;
-            foreach (string line in text.Split('\n'))
+            TextMesh text = button.Text;
+            string flat = string.Join(" ", label.Split(new[] { ' ', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries));
+            _font.RequestCharactersInTexture(flat + "H", 64);
+            _font.GetCharacterInfo('H', out CharacterInfo glyph, 64);
+            float initialSize = (button.Category >= 0 ? 0.008f : 0.007f) * 10f / Mathf.Max(1, glyph.glyphHeight);
+            float width = button.Rect.width - 0.006f;
+            float height = button.Rect.height - 0.006f;
+            Renderer renderer = text.GetComponent<Renderer>();
+            string best = flat;
+            float bestSize = 0f;
+            // Probar una línea y cada corte entre palabras: nunca más de dos líneas.
+            // Las métricas de la fuente cubren también textos recién creados con el
+            // renderer apagado; localBounds añade los límites de la geometría generada.
+            for (int split = -1; split < flat.Length; split++)
             {
-                if (result.Length > 0) { result.Append('\n'); lineWidth = 0f; }
-                foreach (string word in line.Split(' '))
+                if (split >= 0 && flat[split] != ' ') continue;
+                text.text = split < 0 ? flat : flat.Substring(0, split) + "\n" + flat.Substring(split + 1);
+                text.characterSize = initialSize;
+                Bounds bounds = renderer.localBounds;
+                Vector2 measured = MeasureText(text.text, initialSize);
+                float fit = Mathf.Min(1f, width / Mathf.Max(0.00001f, bounds.size.x, measured.x),
+                    height / Mathf.Max(0.00001f, bounds.size.y, measured.y));
+                if (fit * initialSize > bestSize)
                 {
-                    float wordWidth = 0f;
-                    foreach (char c in word)
-                        if (_font.GetCharacterInfo(c, out CharacterInfo glyph, 64)) wordWidth += glyph.advance * _optionsLeft.characterSize * 0.1f;
-                    _font.GetCharacterInfo(' ', out CharacterInfo space, 64);
-                    float gap = lineWidth > 0f ? space.advance * _optionsLeft.characterSize * 0.1f : 0f;
-                    if (lineWidth > 0f && lineWidth + gap + wordWidth > width)
-                    { result.Append('\n'); lineWidth = 0f; gap = 0f; }
-                    else if (gap > 0f) result.Append(' ');
-                    result.Append(word);
-                    lineWidth += gap + wordWidth;
+                    bestSize = fit * initialSize;
+                    best = text.text;
                 }
             }
-            return result.ToString();
+            text.text = best;
+            text.characterSize = bestSize * 0.99f; // Margen para redondeos del atlas dinámico.
+            Vector3 center = renderer.localBounds.center;
+            text.transform.localPosition = new Vector3(button.Rect.center.x - center.x,
+                button.Rect.center.y - center.y, -0.004f);
+        }
+
+        private Vector2 MeasureText(string value, float characterSize)
+        {
+            float width = 0f, advance = 0f, overhang = 0f;
+            int lines = 1;
+            foreach (char c in value)
+            {
+                if (c == '\n')
+                {
+                    width = Mathf.Max(width, advance + overhang * 2f);
+                    advance = overhang = 0f;
+                    lines++;
+                    continue;
+                }
+                if (!_font.GetCharacterInfo(c, out CharacterInfo glyph, 64)) continue;
+                advance += glyph.advance;
+                overhang = Mathf.Max(overhang, -glyph.minX, glyph.maxX - glyph.advance);
+            }
+            width = Mathf.Max(width, advance + overhang * 2f);
+            float lineHeight = _font.lineHeight * (64f / Mathf.Max(1, _font.fontSize));
+            return new Vector2(width, lineHeight * lines) * (characterSize * 0.1f);
         }
 
         private bool Enabled(Button button) => button.Option < 0 || _model.Options[button.Option].Enabled();
@@ -417,6 +434,11 @@ namespace FolioXR.Menu
             {
                 text.color = new Color(1f, 1f, 1f, alpha);
                 text.GetComponent<MeshRenderer>().enabled = alpha > 0f;
+            }
+            foreach (Button button in _buttons)
+            {
+                button.Text.color = new Color(1f, 1f, 1f, alpha);
+                button.Text.GetComponent<MeshRenderer>().enabled = alpha > 0f;
             }
             if (alpha <= 0f) _rayRenderer.enabled = false;
         }

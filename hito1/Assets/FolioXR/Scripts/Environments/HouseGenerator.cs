@@ -72,6 +72,8 @@ namespace FolioXR.Environments
             private readonly List<Mesh> _templates = new List<Mesh>();
             private readonly Matrix4x4 _planScale;
             private Mesh _box, _cylinder, _octahedron;
+            private Transform _colliders;
+            private int _colliderCount;
             private readonly Mesh[] _bookBoxes = new Mesh[8];
 
             internal Builder(EnvironmentTheme theme, HouseBuildResult result)
@@ -101,6 +103,8 @@ namespace FolioXR.Environments
                     _bookBoxes[i] = mesh;
                 }
 
+                _colliders = new GameObject("Colisionadores (sin renderers)").transform;
+                _colliders.SetParent(_result.Root.transform, false);
                 BuildShell();
                 BuildStairs();
                 BuildRooms();
@@ -109,6 +113,7 @@ namespace FolioXR.Environments
                 AddWorld(sky, Sky, Matrix4x4.Scale(Vector3.one * SkyRadius));
                 SetReadingPoints();
                 Combine();
+                Debug.Log("[FolioXR] Casa: " + _colliderCount + " BoxCollider independientes.");
             }
 
             private void BuildShell()
@@ -520,6 +525,27 @@ namespace FolioXR.Environments
             private void AddWorld(Mesh mesh, int material, Matrix4x4 transform)
             {
                 _batches[material].Add(new CombineInstance { mesh = mesh, subMeshIndex = 0, transform = transform });
+                // Solo sólidos estructurales/muebles; el cielo, follaje y los lomos son decorativos.
+                // No se toca ninguna malla ni se añaden renderers a la física.
+                if (mesh == _box || mesh == _cylinder) AddCollider(transform);
+            }
+
+            private void AddCollider(Matrix4x4 matrix)
+            {
+                var part = new GameObject("Sólido " + (++_colliderCount));
+                part.transform.SetParent(_colliders, false);
+                Vector3 x = matrix.GetColumn(0), y = matrix.GetColumn(1), z = matrix.GetColumn(2);
+                Quaternion rotation = Quaternion.LookRotation(z, y);
+                part.transform.localPosition = matrix.GetColumn(3);
+                part.transform.localRotation = rotation;
+                // Proyectar los tres ejes encierra también vigas inclinadas si el tema
+                // escala ancho/profundidad de forma distinta (matriz con cizallamiento).
+                Quaternion inverse = Quaternion.Inverse(rotation);
+                x = inverse * x; y = inverse * y; z = inverse * z;
+                part.AddComponent<BoxCollider>().size = new Vector3(
+                    Mathf.Abs(x.x) + Mathf.Abs(y.x) + Mathf.Abs(z.x),
+                    Mathf.Abs(x.y) + Mathf.Abs(y.y) + Mathf.Abs(z.y),
+                    Mathf.Abs(x.z) + Mathf.Abs(y.z) + Mathf.Abs(z.z));
             }
             private Mesh Template(Mesh mesh)
             {

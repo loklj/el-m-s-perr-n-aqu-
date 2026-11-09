@@ -3,14 +3,12 @@ using UnityEngine.XR;
 
 namespace FolioXR.Reading
 {
-    /// <summary>Agarre por pose con Meta Core y XR; no necesita interactores ni simulación física.</summary>
-    // Después de Meta y del menú (100), antes de los pellizcos de FolioBook (200).
-    [DefaultExecutionOrder(150)]
+    /// <summary>Agarre por pose, física al soltar y escala bimanual. Solo Meta Core y Unity XR.</summary>
+    [DefaultExecutionOrder(150)] // Después del menú; antes de los pellizcos para páginas (200).
     [DisallowMultipleComponent]
     public sealed class BookGrab : MonoBehaviour
     {
-        private const float HandDistance = 0.04f;
-        private const float ControllerDistance = 0.08f;
+        private const float PinchDistance = 0.06f, PalmDistance = 0.08f, ControllerDistance = 0.08f;
         private const float TrackingGraceSeconds = 0.3f;
 
         private sealed class GrabInput
@@ -21,25 +19,51 @@ namespace FolioXR.Reading
             internal OVRHand Hand;
             internal OVRSkeleton Skeleton;
             internal InputDevice Device;
-            internal bool WasPressed = true; // Al aparecer, exigir primero una muestra suelta.
-            internal bool Pressed, Started, Reliable;
-            internal Vector3 Position;
+            internal bool WasPinch = true, WasFist = true, WasGrip = true;
+            internal bool LoggedPinch, LoggedFist;
+            internal bool Pressed, Started, Reliable, Pinch, Fist, PinchBones, PalmBones;
+            internal bool FistMode, PoseChanged;
+            internal Vector3 Position, PinchPosition, PalmPosition;
             internal Quaternion Rotation;
+            internal float LostSince = -1f;
+            internal int PoseSource = -1;
+            internal string BonesFound;
+            private readonly Vector3[] _velocities = new Vector3[5], _angular = new Vector3[5];
+            private int _count, _slot;
+            private bool _hasPrevious;
+            private Vector3 _previousPosition;
+            private Quaternion _previousRotation;
 
             internal GrabInput(XRNode node, bool isHand, string label)
+            { Node = node; IsHand = isHand; Label = label; }
+
+            internal void ClearMotion() { _count = _slot = 0; _hasPrevious = false; }
+
+            internal void RecordMotion()
             {
-                Node = node;
-                IsHand = isHand;
-                Label = label;
+                float dt = Time.unscaledDeltaTime;
+                if (!Reliable || PoseChanged || dt <= 0f || dt > 0.1f) ClearMotion();
+                if (!Reliable) return;
+                if (_hasPrevious)
+                {
+                    _velocities[_slot] = (Position - _previousPosition) / dt;
+                    Quaternion delta = Rotation * Quaternion.Inverse(_previousRotation);
+                    if (delta.w < 0f) delta = new Quaternion(-delta.x, -delta.y, -delta.z, -delta.w);
+                    delta.ToAngleAxis(out float angle, out Vector3 axis);
+                    _angular[_slot] = angle > 0.001f ? axis * (angle * Mathf.Deg2Rad / dt) : Vector3.zero;
+                    _slot = (_slot + 1) % 5;
+                    _count = Mathf.Min(_count + 1, 5);
+                }
+                _previousPosition = Position;
+                _previousRotation = Rotation;
+                _hasPrevious = true;
             }
 
-            internal void Bind(OVRHand hand)
+            internal Vector3 Velocity(bool angular = false)
             {
-                if (Hand == hand && Skeleton != null) return;
-                if (Hand != hand) WasPressed = true;
-                Hand = hand;
-                Skeleton = hand.GetComponent<OVRSkeleton>();
-                if (Skeleton == null) Skeleton = hand.GetComponentInChildren<OVRSkeleton>(true);
+                Vector3 sum = Vector3.zero;
+                for (int i = 0; i < _count; i++) sum += angular ? _angular[i] : _velocities[i];
+                return _count > 0 ? sum / _count : Vector3.zero;
             }
         }
 
@@ -53,11 +77,10 @@ namespace FolioXR.Reading
         private FolioBook _book;
         private OVRCameraRig _rig;
         private Rigidbody _body;
-        private GrabInput _owner;
-        private Vector3 _positionOffset;
+        private GrabInput _owner, _second;
+        private Vector3 _positionOffset, _midpointOffset;
         private Quaternion _rotationOffset;
-        private float _lostSince = -1f;
-        private float _nextFind;
+        private float _initialDistance, _initialScale, _nextFind;
         private bool _focused = true;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -71,15 +94,36 @@ namespace FolioXR.Reading
         {
             if (_book == null)
             {
-                Release();
+                _owner = _second = null;
                 _book = FindFirstObjectByType<FolioBook>();
+                if (_book != null)
+                {
+                    _body = _book.GetComponent<Rigidbody>();
+                    _book.Recalled += CancelGrab;
+                    _book.ScaleReset += RebaseHeldPose;
+                }
             }
             if (_rig == null) _rig = FindFirstObjectByType<OVRCameraRig>();
             if (_rig == null) return;
-            foreach (OVRHand hand in FindObjectsByType<OVRHand>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            var skeletons = _rig.GetComponentsInChildren<OVRSkeleton>(true);
+            foreach (OVRHand hand in _rig.GetComponentsInChildren<OVRHand>(true))
             {
-                if (hand.GetHand() == OVRPlugin.Hand.HandLeft) _inputs[0].Bind(hand);
-                else if (hand.GetHand() == OVRPlugin.Hand.HandRight) _inputs[1].Bind(hand);
+                GrabInput input = hand.GetHand() == OVRPlugin.Hand.HandLeft ? _inputs[0] : _inputs[1];
+                if (input.Hand != null && input.Hand != hand && input.Hand.isActiveAndEnabled) continue;
+                if (input.Hand != hand) input.WasPinch = input.WasFist = true;
+                input.Hand = hand;
+                input.Skeleton = hand.GetComponent<OVRSkeleton>();
+                if (input.Skeleton == null) input.Skeleton = hand.GetComponentInChildren<OVRSkeleton>(true);
+                // Algunos rigs guardan el esqueleto como hermano, no como hijo del OVRHand.
+                if (input.Skeleton == null)
+                    foreach (OVRSkeleton skeleton in skeletons)
+                    {
+                        var type = skeleton.GetSkeletonType();
+                        bool left = type == OVRSkeleton.SkeletonType.HandLeft || type == OVRSkeleton.SkeletonType.XRHandLeft;
+                        bool right = type == OVRSkeleton.SkeletonType.HandRight || type == OVRSkeleton.SkeletonType.XRHandRight;
+                        if ((input.Node == XRNode.LeftHand && left) || (input.Node == XRNode.RightHand && right))
+                        { input.Skeleton = skeleton; break; }
+                    }
             }
         }
 
@@ -87,42 +131,39 @@ namespace FolioXR.Reading
         {
             if (!_focused) return;
             if (Time.unscaledTime >= _nextFind)
-            {
-                _nextFind = Time.unscaledTime + 1f;
-                ResolveScene();
-            }
+            { _nextFind = Time.unscaledTime + 1f; ResolveScene(); }
             foreach (GrabInput input in _inputs) Sample(input);
             if (_book == null || !_book.isActiveAndEnabled || _rig == null)
-            {
-                Release();
-                return;
-            }
+            { Release(false); return; }
 
             UpdateHeldPose();
-            // ClosestPoint debe ver también los cambios de Transform de este cuadro,
-            // incluso en libros sin Rigidbody. Solo sincroniza geometría; no simula física.
-            bool hasNewPress = false;
-            foreach (GrabInput input in _inputs) hasNewPress |= input.Started;
-            if (hasNewPress) Physics.SyncTransforms();
-            // Un flanco nuevo puede transferir el libro aunque el dueño anterior siga apretando.
-            // Si llegan varios en el mismo cuadro, el último de este orden toma la propiedad.
+            bool attempt = false;
+            foreach (GrabInput input in _inputs) attempt |= input.Started ||
+                (input.IsHand && ((input.Pinch && !input.LoggedPinch) || (input.Fist && !input.LoggedFist)));
+            if (attempt) Physics.SyncTransforms();
             foreach (GrabInput input in _inputs)
             {
-                if (!input.Started || !NearBook(input.Position,
-                    input.IsHand ? HandDistance : ControllerDistance)) continue;
-                Take(input);
+                if (input.IsHand)
+                {
+                    if (input.Pinch && !input.LoggedPinch) LogAttempt(input, "pellizco", input.PinchPosition);
+                    if (input.Fist && !input.LoggedFist) LogAttempt(input, "puño", input.PalmPosition);
+                    input.LoggedPinch = input.Pinch;
+                    input.LoggedFist = input.Fist;
+                }
+                if (!input.Started || input == _owner || input == _second) continue;
+                // Un lado físico nunca cuenta dos veces (mano + mando emulado).
+                if (_owner != null && (_owner.Node == input.Node || _owner.IsHand != input.IsHand)) continue;
+                float distance = input.IsHand ? (input.FistMode ? PalmDistance : PinchDistance) : ControllerDistance;
+                if (DistanceToBook(input.Position) < distance) Take(input);
             }
         }
 
         private void Sample(GrabInput input)
         {
+            input.Started = false;
             input.Pressed = false;
-            if (input.IsHand)
-            {
-                input.Reliable = TryHandPose(input, out input.Position, out input.Rotation);
-                if (input.Reliable)
-                    input.Pressed = input.Hand.GetFingerIsPinching(OVRHand.HandFinger.Index);
-            }
+            input.PoseChanged = false;
+            if (input.IsHand) SampleHand(input);
             else
             {
                 input.Device = InputDevices.GetDeviceAtXRNode(input.Node);
@@ -133,134 +174,219 @@ namespace FolioXR.Reading
                     input.Device.TryGetFeatureValue(CommonUsages.isTracked, out bool tracked) && tracked &&
                     input.Device.TryGetFeatureValue(CommonUsages.gripButton, out input.Pressed);
                 if (input.Reliable)
-                {
-                    input.Position = anchor.position;
-                    input.Rotation = anchor.rotation;
-                }
+                { input.Position = anchor.position; input.Rotation = anchor.rotation; }
+                input.Started = input.Reliable && input.Pressed && !input.WasGrip;
+                input.WasGrip = !input.Reliable || input.Pressed;
             }
-            input.Started = input.Reliable && input.Pressed && !input.WasPressed;
-            // Una recuperación del seguimiento con el gesto sostenido no inventa otro flanco.
-            input.WasPressed = !input.Reliable || input.Pressed;
+            input.RecordMotion();
         }
 
-        private static bool TryHandPose(GrabInput input, out Vector3 position, out Quaternion rotation)
+        private void SampleHand(GrabInput input)
         {
-            position = default;
-            rotation = Quaternion.identity;
             OVRHand hand = input.Hand;
-            OVRSkeleton skeleton = input.Skeleton;
-            if (hand == null || !hand.isActiveAndEnabled || !hand.IsTracked || !hand.IsDataHighConfidence ||
-                hand.IsSystemGestureInProgress || skeleton == null || !skeleton.isActiveAndEnabled ||
-                !skeleton.IsDataValid || !skeleton.IsDataHighConfidence || skeleton.Bones == null) return false;
+            input.Reliable = hand != null && hand.isActiveAndEnabled && hand.IsTracked &&
+                hand.IsDataHighConfidence && !hand.IsSystemGestureInProgress;
+            input.Pinch = hand != null && hand.GetFingerIsPinching(OVRHand.HandFinger.Index);
+            input.Fist = false;
+            Transform fallback = hand != null ? hand.transform : null;
+            input.PinchPosition = input.PalmPosition = fallback != null ? fallback.position : Vector3.zero;
+            input.Rotation = fallback != null ? fallback.rotation : Quaternion.identity;
 
-            var type = skeleton.GetSkeletonType();
+            OVRSkeleton skeleton = input.Skeleton;
+            bool valid = skeleton != null && skeleton.isActiveAndEnabled && skeleton.IsDataValid &&
+                skeleton.IsDataHighConfidence && skeleton.Bones != null;
+            var type = skeleton != null ? skeleton.GetSkeletonType() : OVRSkeleton.SkeletonType.None;
             bool xr = type == OVRSkeleton.SkeletonType.XRHandLeft || type == OVRSkeleton.SkeletonType.XRHandRight;
-            OVRSkeleton.BoneId thumbId = xr ? OVRSkeleton.BoneId.XRHand_ThumbTip : OVRSkeleton.BoneId.Hand_ThumbTip;
-            OVRSkeleton.BoneId indexId = xr ? OVRSkeleton.BoneId.XRHand_IndexTip : OVRSkeleton.BoneId.Hand_IndexTip;
-            OVRSkeleton.BoneId wristId = xr ? OVRSkeleton.BoneId.XRHand_Wrist : OVRSkeleton.BoneId.Hand_WristRoot;
-            Transform thumb = null, index = null, wrist = null;
-            foreach (OVRBone bone in skeleton.Bones)
+            Transform wrist = null, thumb = null, index = null, middle = null, ring = null, little = null, palm = null, knuckle = null;
+            // Buscar también en datos no fiables para que el diagnóstico distinga huesos ausentes de datos malos.
+            if (skeleton != null && skeleton.Bones != null)
+                foreach (OVRBone bone in skeleton.Bones)
+                {
+                    if (bone.Id == (xr ? OVRSkeleton.BoneId.XRHand_Wrist : OVRSkeleton.BoneId.Hand_WristRoot)) wrist = bone.Transform;
+                    if (bone.Id == (xr ? OVRSkeleton.BoneId.XRHand_ThumbTip : OVRSkeleton.BoneId.Hand_ThumbTip)) thumb = bone.Transform;
+                    if (bone.Id == (xr ? OVRSkeleton.BoneId.XRHand_IndexTip : OVRSkeleton.BoneId.Hand_IndexTip)) index = bone.Transform;
+                    if (bone.Id == (xr ? OVRSkeleton.BoneId.XRHand_MiddleTip : OVRSkeleton.BoneId.Hand_MiddleTip)) middle = bone.Transform;
+                    if (bone.Id == (xr ? OVRSkeleton.BoneId.XRHand_RingTip : OVRSkeleton.BoneId.Hand_RingTip)) ring = bone.Transform;
+                    if (bone.Id == (xr ? OVRSkeleton.BoneId.XRHand_LittleTip : OVRSkeleton.BoneId.Hand_PinkyTip)) little = bone.Transform;
+                    if (bone.Id == (xr ? OVRSkeleton.BoneId.XRHand_MiddleProximal : OVRSkeleton.BoneId.Hand_Middle1)) knuckle = bone.Transform;
+                    if (xr && bone.Id == OVRSkeleton.BoneId.XRHand_Palm) palm = bone.Transform;
+                }
+            input.PinchBones = valid && thumb != null && index != null && wrist != null;
+            input.PalmBones = valid && wrist != null && (palm != null || knuckle != null) &&
+                index != null && middle != null && ring != null && little != null;
+            if (input.PinchBones) input.PinchPosition = (thumb.position + index.position) * 0.5f;
+            if (input.PalmBones)
             {
-                if (bone.Id == thumbId) thumb = bone.Transform;
-                else if (bone.Id == indexId) index = bone.Transform;
-                else if (bone.Id == wristId) wrist = bone.Transform;
+                input.PalmPosition = palm != null ? palm.position : (wrist.position + knuckle.position) * 0.5f;
+                float mean = (Vector3.Distance(index.position, input.PalmPosition) + Vector3.Distance(middle.position, input.PalmPosition) +
+                    Vector3.Distance(ring.position, input.PalmPosition) + Vector3.Distance(little.position, input.PalmPosition)) * 0.25f;
+                input.Fist = mean < 0.06f;
             }
-            if (thumb == null || index == null || wrist == null) return false;
-            position = (thumb.position + index.position) * 0.5f;
-            rotation = wrist.rotation;
-            return true;
+            if ((input.Pinch && !input.LoggedPinch) || (input.Fist && !input.LoggedFist))
+                input.BonesFound = "muñeca=" + (wrist != null) + ",pulgar=" + (thumb != null) + ",índice=" + (index != null) +
+                ",medio=" + (middle != null) + ",anular=" + (ring != null) + ",meñique=" + (little != null) +
+                ",palma=" + (palm != null) + ",nudillo=" + (knuckle != null);
+            // Sin huesos se conserva el pellizco de OVRHand y su pose; no se inventa un puño geométrico.
+            bool pinchStart = input.Pinch && !input.WasPinch;
+            bool fistStart = input.Fist && !input.WasFist;
+            bool held = input == _owner || input == _second;
+            if (!held) input.FistMode = fistStart && (!pinchStart || DistanceToBook(input.PinchPosition) >= PinchDistance);
+            bool bones = input.FistMode ? input.PalmBones : input.PinchBones;
+            if (bones) input.Rotation = wrist.rotation;
+            input.Position = input.FistMode ? input.PalmPosition : input.PinchPosition;
+            int source = (input.FistMode ? 2 : 0) + (bones ? 1 : 0);
+            input.PoseChanged = source != input.PoseSource;
+            input.PoseSource = source;
+            input.Pressed = input.Pinch || input.Fist;
+            input.Started = input.Reliable && (pinchStart || fistStart);
+            input.WasPinch = !input.Reliable || input.Pinch;
+            input.WasFist = !input.Reliable || input.Fist;
         }
 
-        private bool NearBook(Vector3 point, float distance)
+        private float DistanceToBook(Vector3 point)
         {
-            BoxCollider collider = _book.bookCollider;
-            if (collider == null || !collider.enabled || !collider.gameObject.activeInHierarchy) return false;
-            return (collider.ClosestPoint(point) - point).sqrMagnitude < distance * distance;
+            BoxCollider collider = _book != null ? _book.bookCollider : null;
+            return collider != null && collider.enabled && collider.gameObject.activeInHierarchy
+                ? Vector3.Distance(collider.ClosestPoint(point), point) : float.PositiveInfinity;
+        }
+
+        private void LogAttempt(GrabInput input, string gesture, Vector3 point)
+        {
+            var s = input.Skeleton;
+            Debug.Log("[FolioXR] Agarre intento: " + input.Label + " " + gesture + ", fiable=" + input.Reliable +
+                ", skeleton=" + (s != null ? s.GetSkeletonType().ToString() : "ausente") +
+                ", huesos=" + (s != null && s.Bones != null ? s.Bones.Count : 0) + ", " + input.BonesFound +
+                ", pinchBones=" + input.PinchBones + ", palmBones=" + input.PalmBones +
+                ", respaldoOVRHand=" + !(gesture == "puño" ? input.PalmBones : input.PinchBones) +
+                ", distancia=" + DistanceToBook(point).ToString("F3") + " m");
         }
 
         private void Take(GrabInput input)
         {
-            if (_owner != null) Release();
-            _owner = input;
-            _lostSince = -1f;
-            Quaternion inverse = Quaternion.Inverse(input.Rotation);
-            _positionOffset = inverse * (_book.transform.position - input.Position);
-            _rotationOffset = inverse * _book.transform.rotation;
-            _body = _book.GetComponent<Rigidbody>();
-            KeepKinematic();
-            _book.IsGrabbed = true;
+            if (_owner == null)
+            {
+                _owner = input;
+                _book.FreezePhysics();
+                _book.IsGrabbed = true;
+                RebaseHeldPose();
+            }
+            else
+            {
+                if (_second != null || !_owner.Reliable || !_owner.Pressed ||
+                    Vector3.Distance(_owner.Position, input.Position) < 0.02f) return;
+                _second = input;
+                RebaseHeldPose();
+                Debug.Log("[FolioXR] Agarre: modo dos " + (input.IsHand ? "manos" : "mandos"));
+            }
+            input.LostSince = -1f;
+            input.ClearMotion();
             Debug.Log("[FolioXR] Agarre: tomado con " + input.Label);
-            if (!input.IsHand && input.Device.TryGetHapticCapabilities(out HapticCapabilities capabilities) &&
-                capabilities.supportsImpulse) input.Device.SendHapticImpulse(0, 0.25f, 0.035f);
+            if (!input.IsHand && input.Device.TryGetHapticCapabilities(out HapticCapabilities caps) && caps.supportsImpulse)
+                input.Device.SendHapticImpulse(0, 0.25f, 0.035f);
+        }
+
+        private bool StillHolding(GrabInput input)
+        {
+            if (input.LostSince >= 0f && Time.unscaledTime - input.LostSince > TrackingGraceSeconds) return false;
+            if (!input.Reliable)
+            {
+                if (input.LostSince < 0f) input.LostSince = Time.unscaledTime;
+                return input.IsHand;
+            }
+            input.LostSince = -1f;
+            return input.Pressed;
         }
 
         private void UpdateHeldPose()
         {
             if (_owner == null) return;
-            // Comprobar también el primer cuadro recuperado si ya venció la tolerancia.
-            if (_lostSince >= 0f && Time.unscaledTime - _lostSince > TrackingGraceSeconds)
+            bool firstHolds = StillHolding(_owner);
+            bool secondHolds = _second != null && StillHolding(_second);
+            if (!firstHolds && !secondHolds)
             {
-                Release();
+                bool trackedRelease = _owner.Reliable && _owner.LostSince < 0f && (_second == null || _second.Reliable);
+                Release(trackedRelease);
                 return;
             }
-            if (!_owner.Reliable)
+            if (_second != null && (!firstHolds || !secondHolds))
             {
-                if (_lostSince < 0f) _lostSince = Time.unscaledTime;
-                if (!_owner.IsHand) Release();
-                return; // Con poca confianza, conservar la última pose mundial del libro.
+                if (!firstHolds) _owner = _second;
+                _second = null;
+                RebaseHeldPose();
+                _owner.ClearMotion();
+                _book.SaveBookScale();
+                Debug.Log("[FolioXR] Agarre: vuelve a una mano/mando sin salto.");
+                return;
             }
-            _lostSince = -1f;
-            if (!_owner.Pressed) { Release(); return; }
-
-            Vector3 position = _owner.Position + _owner.Rotation * _positionOffset;
+            if (!_owner.Reliable || (_second != null && !_second.Reliable)) return;
+            if (_owner.PoseChanged || (_second != null && _second.PoseChanged)) { RebaseHeldPose(); return; }
+            Vector3 position;
+            if (_second != null)
+            {
+                float distance = Vector3.Distance(_owner.Position, _second.Position);
+                _book.SetBookScale(_initialScale * distance / _initialDistance);
+                position = (_owner.Position + _second.Position) * 0.5f + _midpointOffset;
+            }
+            else position = _owner.Position + _owner.Rotation * _positionOffset;
             Quaternion rotation = _owner.Rotation * _rotationOffset;
-            KeepKinematic();
-            if (_body != null)
-            {
-                _body.position = position;
-                _body.rotation = rotation;
-            }
+            _book.FreezePhysics();
+            if (_body != null) { _body.position = position; _body.rotation = rotation; }
             _book.transform.SetPositionAndRotation(position, rotation);
         }
 
-        private void KeepKinematic()
+        private void RebaseHeldPose()
         {
-            if (_body == null) return;
-            if (!_body.isKinematic)
-            {
-                _body.linearVelocity = Vector3.zero;
-                _body.angularVelocity = Vector3.zero;
-                _body.isKinematic = true;
-            }
-            _body.useGravity = false;
-            // El Transform se actualiza por cuadro; la interpolación física no debe sobrescribirlo.
-            _body.interpolation = RigidbodyInterpolation.None;
+            if (_owner == null || _book == null) return;
+            Quaternion inverse = Quaternion.Inverse(_owner.Rotation);
+            _positionOffset = inverse * (_book.transform.position - _owner.Position);
+            _rotationOffset = inverse * _book.transform.rotation;
+            if (_second == null) return;
+            _initialDistance = Mathf.Max(0.02f, Vector3.Distance(_owner.Position, _second.Position));
+            _initialScale = _book.BookScale;
+            _midpointOffset = _book.transform.position - (_owner.Position + _second.Position) * 0.5f;
         }
 
-        private void Release()
+        private void Release(bool throwBook)
         {
             if (_owner == null) return;
-            KeepKinematic(); // Al soltar no restaurar gravedad, velocidades ni simulación.
-            if (_book != null) _book.IsGrabbed = false;
-            _owner = null;
-            _body = null;
-            _lostSince = -1f;
-            Debug.Log("[FolioXR] Agarre: soltado");
+            Vector3 velocity = throwBook ? _owner.Velocity() : Vector3.zero;
+            Vector3 angular = throwBook ? _owner.Velocity(true) : Vector3.zero;
+            if (throwBook && _second != null) velocity = (velocity + _second.Velocity()) * 0.5f;
+            if (_book != null)
+            {
+                _book.IsGrabbed = false;
+                _book.SaveBookScale();
+                _book.ReleasePhysics(velocity, angular);
+            }
+            _owner = _second = null;
+            Debug.Log("[FolioXR] Agarre: soltado, velocidad=" + velocity.ToString("F2"));
+        }
+
+        private void CancelGrab()
+        {
+            _owner = _second = null;
+            if (_book != null) { _book.IsGrabbed = false; _book.SaveBookScale(); _book.FreezePhysics(); }
+            foreach (GrabInput input in _inputs)
+            {
+                input.WasPinch = input.WasFist = input.WasGrip = true;
+                input.LostSince = -1f;
+                input.ClearMotion();
+            }
         }
 
         private void OnApplicationFocus(bool focused)
         {
             _focused = focused;
-            if (!focused) Release();
-            foreach (GrabInput input in _inputs) input.WasPressed = true;
+            // Suspender no debe lanzar el libro con una muestra obsoleta.
+            if (!focused) CancelGrab();
         }
-
         private void OnApplicationPause(bool paused) { OnApplicationFocus(!paused); }
-
-        private void OnDisable()
+        private void OnDisable() { CancelGrab(); }
+        private void OnDestroy()
         {
-            Release();
-            foreach (GrabInput input in _inputs) input.WasPressed = true;
+            if (_book == null) return;
+            _book.Recalled -= CancelGrab;
+            _book.ScaleReset -= RebaseHeldPose;
         }
     }
 }
