@@ -188,3 +188,13 @@ Implementada en `interaccion/tanda-b`, partiendo de `origin/fase-1/preparacion` 
 **Validación realizada:** análisis sintáctico de los 15 archivos C# sin errores, revisión manual de tipos/usings/miembros contra Meta XR Core `207.0.0` publicado (`OVRHand`, `OVRCameraRig`), UnityCsReference `6000.3` (`CharacterController`, consultas Physics) y Graphics `6000.3/staging` (URP 17: Vignette y CameraExtensions). Revisión de flancos/cancelación, orden Update/LateUpdate, filtros de destino y transferencia del libro. `git diff --check` limpio; sin llamadas nuevas a Shader.Find, paquetes, escenas ni cambios en PROGRESO.md. No se ha compilado Unity ni ejecutado física o render XR en este entorno. Las filas de Tanda B del Paso 10 de HITO1_GUIA.md son el protocolo pendiente para el visor, no pruebas ya ejecutadas.
 
 **Riesgos pendientes en Quest:** medir coste del postprocesado, consultas del arco y actualización de la cápsula; comprobar que el renderer de la APK incluye postprocesado y no elimina variantes de Vignette creadas solo en runtime. Validar escalera, barandas, bordes de piso y cambio de altura bajo obstáculos, tanto sentado como de pie; las cajas aproximadas de la Tanda A siguen delimitando muebles y vigas. Calibrar dirección de PointerPose y estabilidad del pellizco medio. Verificar tamaño de texto de las seis filas y el libro a dos manos durante giros/saltos. El desplazamiento físico del visor y su actualización tardía requieren prueba real de contactos y comodidad.
+
+**Revisión de Claude de la Tanda B (9 de noviembre de 2026).** El código compila contra stubs de Unity 6000.3 y Meta XR 207. Se revisaron estos puntos:
+
+- La cápsula sigue a la cabeza y frena también el movimiento físico, para no atravesar paredes caminando en la habitación.
+- Se suspende antes de cada recolocación del entorno.
+- El libro agarrado acompaña el movimiento del rig (`CarryWithRig`).
+- El pellizco del dedo medio está reservado para el teletransporte.
+- Solo se aceptan pisos marcados con espacio libre para la cápsula.
+
+Hubo un cambio. La viñeta usaba el posprocesado de URP, encendido en la cámara mientras se camina. En Quest eso agrega una pasada de pantalla completa justo al moverse, puede provocar tirones al reasignar texturas, y sus variantes de shader podrían faltar en el APK. Ahora es una malla pegada a la vista con un degradado radial generado por código, sobre un clon transparente del material de las páginas (cola Overlay).
