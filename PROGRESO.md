@@ -18,6 +18,7 @@ El repositorio partía de un README. Esta fase añade documentación de diseño,
 - [Menú simple (alternativa a la esfera)](docs/MENU_SIMPLE.md).
 - [Entorno de prueba 1: casa moderna cálida](docs/ENTORNOS.md).
 - [Interacción: física del libro, movimiento libre y herramientas de muñeca](docs/INTERACCION.md).
+- [Prompts para terminar la app con Codex](docs/PROMPTS_CODEX.md) y [reglas comunes para Codex](docs/REGLAS_CODEX.md).
 - [Licencias para vender la app en la Meta Horizon Store](docs/LICENCIAS_Y_TIENDA.md): Unity, SDK de Meta, comisión e inventario de componentes (7 de noviembre de 2026).
 - [Importación local, nubes, OPDS y guía Kindle](docs/IMPORTACION_Y_NUBES.md).
 - [Preparación del PC, compilación, instalación y pruebas](docs/PC_Y_VALIDACION.md).
