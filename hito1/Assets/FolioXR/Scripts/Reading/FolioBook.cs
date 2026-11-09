@@ -23,6 +23,7 @@
 using System.Collections;
 using System.Globalization;
 using System.IO;
+using FolioXR.Environments;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.Rendering;
@@ -74,6 +75,21 @@ namespace FolioXR.Reading
         public float viewDistance = 0.45f;
         public float belowEyes = 0.12f;
 
+        public const string PhysicsPrefsKey = "folioxr.bookPhysics";
+        public const string ScalePrefsKey = "folioxr.bookScale";
+        public bool RealisticPhysics { get; private set; }
+        public float BookScale { get; private set; } = 1f;
+        public event System.Action Recalled;
+        public event System.Action ScaleReset;
+        private Rigidbody _body;
+        private PhysicsMaterial _physicsMaterial;
+        private Vector3 _baseScale;
+        private FolioEnvironmentController _environment;
+        private int _renderedWidth;
+        private float _resolutionChangedAt;
+        private bool _resolutionDirty;
+        private bool _spreadReady;
+
         private PdfPageRenderer _renderer;
         private int _pageCount;
         private int _leftIndex; // pagina izquierda de la doble pagina actual (indice desde 0)
@@ -123,6 +139,27 @@ namespace FolioXR.Reading
 
         private void Awake()
         {
+            _baseScale = transform.localScale;
+            RealisticPhysics = PlayerPrefs.GetInt(PhysicsPrefsKey, 1) != 0;
+            _body = GetComponent<Rigidbody>();
+            if (_body == null) _body = gameObject.AddComponent<Rigidbody>();
+            _body.mass = 0.6f;
+            _body.detectCollisions = true;
+            _body.linearDamping = 0.05f;
+            _body.angularDamping = 0.15f;
+            _physicsMaterial = new PhysicsMaterial("FolioXR libro: fricción alta")
+            {
+                staticFriction = 0.85f, dynamicFriction = 0.75f, bounciness = 0.02f,
+                frictionCombine = PhysicsMaterialCombine.Maximum,
+                bounceCombine = PhysicsMaterialCombine.Minimum
+            };
+            if (bookCollider != null)
+            {
+                bookCollider.isTrigger = false;
+                bookCollider.sharedMaterial = _physicsMaterial;
+            }
+            FreezePhysics();
+            SetBookScale(PlayerPrefs.GetFloat(ScalePrefsKey, 1f));
             renderScale = ClampRenderScale(renderScale);
             _currentRenderScale = ClampRenderScale(PlayerPrefs.GetFloat(RenderScalePrefsKey, renderScale));
             ApplyRenderQuality();
@@ -202,6 +239,98 @@ namespace FolioXR.Reading
             if (!InputPaused) UpdateRenderScaleInput();
             else _renderScaleStickLatched = true;
             UpdateRenderScaleStatus();
+            UpdateBookRecovery();
+            // Agrupa cambios continuos del gesto; no iniciar renders cada cuadro.
+            if (_resolutionDirty && !_busy && _spreadReady && _renderer != null &&
+                Time.unscaledTime - _resolutionChangedAt >= 0.35f)
+            {
+                _resolutionDirty = false;
+                if (DesiredPageWidth() != _renderedWidth) StartCoroutine(ShowSpread(_leftIndex));
+            }
+        }
+
+        public void FreezePhysics()
+        {
+            if (_body == null) return;
+            if (!_body.isKinematic)
+            {
+                _body.linearVelocity = Vector3.zero;
+                _body.angularVelocity = Vector3.zero;
+            }
+            _body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+            _body.isKinematic = true;
+            _body.useGravity = false;
+            _body.interpolation = RigidbodyInterpolation.None;
+        }
+
+        public void ReleasePhysics(Vector3 velocity, Vector3 angularVelocity)
+        {
+            if (_body == null) return;
+            if (!RealisticPhysics) { FreezePhysics(); return; }
+            _body.isKinematic = false;
+            _body.useGravity = true;
+            _body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            _body.interpolation = RigidbodyInterpolation.Interpolate;
+            _body.linearVelocity = velocity;
+            _body.angularVelocity = angularVelocity;
+            _body.WakeUp();
+        }
+
+        public void SetRealisticPhysics(bool realistic)
+        {
+            RealisticPhysics = realistic;
+            PlayerPrefs.SetInt(PhysicsPrefsKey, realistic ? 1 : 0);
+            PlayerPrefs.Save();
+            // Activar Realista no hace caer un libro que acaba de traerse.
+            if (!realistic) FreezePhysics();
+        }
+
+        public void SetBookScale(float scale)
+        {
+            if (float.IsNaN(scale) || float.IsInfinity(scale)) scale = 1f;
+            scale = Mathf.Clamp(scale, 0.5f, 3f);
+            int previousWidth = DesiredPageWidth();
+            BookScale = scale;
+            transform.localScale = _baseScale * scale;
+            if (previousWidth != DesiredPageWidth())
+            {
+                _resolutionDirty = true;
+                _resolutionChangedAt = Time.unscaledTime;
+            }
+        }
+
+        public void SaveBookScale()
+        {
+            PlayerPrefs.SetFloat(ScalePrefsKey, BookScale);
+            PlayerPrefs.Save();
+        }
+
+        public void ResetBookScale()
+        {
+            SetBookScale(1f);
+            SaveBookScale();
+            ScaleReset?.Invoke();
+        }
+
+        private int DesiredPageWidth()
+        {
+            int baseline = Mathf.Clamp(renderWidthPixels, MinRenderWidth, 4096);
+            // Tramos de 256 px limitan trabajo y oscilaciones, con techo absoluto 4096.
+            return BookScale <= 1.5f ? baseline : Mathf.Min(4096,
+                Mathf.CeilToInt(baseline * BookScale / 256f) * 256);
+        }
+
+        private void UpdateBookRecovery()
+        {
+            if (_environment == null) _environment = FindFirstObjectByType<FolioEnvironmentController>();
+            Camera view = Camera.main;
+            if (IsGrabbed || view == null || _environment == null) return;
+            if (transform.position.y < _environment.FloorHeight - 2f ||
+                Vector3.Distance(transform.position, view.transform.position) > 20f)
+            {
+                Debug.Log("[FolioXR] Libro: recuperación automática por caída/distancia.");
+                PlaceInFrontOfView();
+            }
         }
 
         private void UpdateRenderScaleInput()
@@ -393,6 +522,9 @@ namespace FolioXR.Reading
             Camera view = Camera.main;
             if (view == null) return;
 
+            Recalled?.Invoke();
+            IsGrabbed = false;
+            FreezePhysics();
             Transform head = view.transform;
             Vector3 flatForward = Vector3.ProjectOnPlane(head.forward, Vector3.up);
             // Si se mira casi en vertical (por ejemplo, acostado), usar la vista tal cual.
@@ -425,7 +557,9 @@ namespace FolioXR.Reading
             PdfResult leftResult = null;
             PdfResult rightResult = null;
 
-            int width = Mathf.Max(renderWidthPixels, MinRenderWidth);
+            int width = DesiredPageWidth();
+            _resolutionDirty = false;
+            Debug.Log("[FolioXR] Páginas: render a " + width + " px, escala=" + BookScale.ToString("F2"));
             yield return _renderer.RenderPage(leftIndex, width, (t, r) =>
             {
                 left = t;
@@ -449,6 +583,8 @@ namespace FolioXR.Reading
             }
 
             _leftIndex = leftIndex;
+            _spreadReady = true;
+            _renderedWidth = width;
             ReplaceTexture(ref _leftTexture, left, leftPage);
             ReplaceTexture(ref _rightTexture, right, rightPage);
             if (rightPage != null) rightPage.enabled = right != null;
@@ -633,6 +769,11 @@ namespace FolioXR.Reading
             }
         }
 
+        private void OnApplicationPause(bool paused)
+        {
+            if (paused) SaveBookScale();
+        }
+
         private void OnDestroy()
         {
             if (_renderer != null)
@@ -640,6 +781,7 @@ namespace FolioXR.Reading
                 _renderer.Dispose();
                 _renderer = null;
             }
+            if (_physicsMaterial != null) Destroy(_physicsMaterial);
             if (_leftTexture != null) Destroy(_leftTexture);
             if (_rightTexture != null) Destroy(_rightTexture);
         }

@@ -91,7 +91,10 @@ namespace FolioXR.Menu
                 ResolveScene();
             }
             if (!_focused) return;
-            bool gesture = _left.UpdateGesture();
+            // El puño usado para sostener el libro no debe abrir/cerrar el menú al soltar.
+            bool gesture = false;
+            if (_book != null && _book.IsGrabbed) _left.Reset();
+            else gesture = _left.UpdateGesture();
             if (_book != null) _book.LeftPinchSuppressed = _left.PalmUp;
             InputDevice leftDevice = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
             bool menu = Down(leftDevice, CommonUsages.menuButton);

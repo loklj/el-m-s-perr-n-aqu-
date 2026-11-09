@@ -54,7 +54,12 @@ namespace FolioXR.Environments
 
         private readonly List<string> _pointNames = new List<string>();
         private IReadOnlyList<string> _readOnlyPointNames;
+        private GameObject _passthroughFloor;
+        private bool _floorOriginSet;
         public bool IsActive => _active;
+        public float FloorHeight => _active && _house != null && _house.Root != null
+            ? _house.Root.transform.position.y : _rig != null && _rig.trackingSpace != null
+                ? _rig.trackingSpace.position.y : 0f;
         public bool InputPaused { get; set; }
         public IReadOnlyList<string> PointNames =>
             _readOnlyPointNames ?? (_readOnlyPointNames = _pointNames.AsReadOnly());
@@ -89,8 +94,30 @@ namespace FolioXR.Environments
             new GameObject("Entornos (Folio XR)").AddComponent<FolioEnvironmentController>();
         }
 
+        private void UpdatePassthroughFloor()
+        {
+            if (_rig == null) _rig = FindFirstObjectByType<OVRCameraRig>();
+            if (_rig == null || _rig.trackingSpace == null) return;
+            if (!_floorOriginSet && OVRManager.instance != null)
+            {
+                OVRManager.instance.trackingOriginType = OVRManager.TrackingOrigin.FloorLevel;
+                _floorOriginSet = true;
+            }
+            if (_passthroughFloor == null)
+            {
+                _passthroughFloor = new GameObject("Piso físico passthrough (sin renderer)");
+                _passthroughFloor.transform.SetParent(transform, false);
+                var floor = _passthroughFloor.AddComponent<BoxCollider>();
+                floor.size = new Vector3(100f, 0.1f, 100f);
+            }
+            _passthroughFloor.SetActive(!_active);
+            Vector3 origin = _rig.trackingSpace.position;
+            _passthroughFloor.transform.SetPositionAndRotation(origin - Vector3.up * 0.05f, Quaternion.identity);
+        }
+
         private void Update()
         {
+            UpdatePassthroughFloor();
             if (InputPaused)
             {
                 _clickWasDown = true;
@@ -227,6 +254,7 @@ namespace FolioXR.Environments
 
                 _house.Root.SetActive(true);
                 _active = true;
+                UpdatePassthroughFloor();
                 GoToReadingPoint(0);
                 ResetFpsWindow();
             }
@@ -291,6 +319,7 @@ namespace FolioXR.Environments
                 if (item.Light != null) item.Light.shadows = item.Shadows;
             _lights.Clear();
             _hasSnapshot = false;
+            UpdatePassthroughFloor();
             if (_book != null) _book.PlaceInFrontOfView();
         }
 
@@ -410,6 +439,7 @@ namespace FolioXR.Environments
             if (_house != null) _house.Dispose();
             _house = null;
             if (_pointLabel != null) Destroy(_pointLabel.gameObject);
+            if (_passthroughFloor != null) Destroy(_passthroughFloor);
         }
     }
 }

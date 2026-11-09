@@ -103,7 +103,8 @@ namespace FolioXR.Reading
             {
                 byte[] png = File.ReadAllBytes(pngPath);
                 texture = new Texture2D(2, 2, TextureFormat.RGBA32, true);
-                if (!texture.LoadImage(png, false))
+                // Las páginas solo se muestrean en GPU; evitar la copia CPU a 4096 px.
+                if (!texture.LoadImage(png, true))
                 {
                     UnityEngine.Object.Destroy(texture);
                     texture = null;

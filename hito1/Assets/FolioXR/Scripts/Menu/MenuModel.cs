@@ -140,6 +140,10 @@ namespace FolioXR.Menu
                     }
                     options.Add(new MenuOption("Estilo de menú:\nSimple", _useSimple, marked: () => true));
                     options.Add(new MenuOption("Esfera\n(próximamente)"));
+                    options.Add(new MenuOption("Física: " + (_book != null && _book.RealisticPhysics ? "Realista" : "Flotante"),
+                        () => { _book.SetRealisticPhysics(!_book.RealisticPhysics); RebuildOptions(); }, () => _book != null));
+                    options.Add(new MenuOption("Tamaño normal", () => _book.ResetBookScale(), () => _book != null));
+                    options.Add(new MenuOption("Traer libro", () => _book.PlaceInFrontOfView(), () => _book != null));
                     break;
                 case MenuCategory.ImportarYNubes:
                     options.Add(new MenuOption("Próximamente"));
