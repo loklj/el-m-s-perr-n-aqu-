@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using FolioXR.Environments;
 using FolioXR.Reading;
+using FolioXR.Tools;
 using FolioXR.Locomotion;
 using UnityEngine;
 
@@ -148,6 +149,7 @@ namespace FolioXR.Menu
                     options.Add(new MenuOption("Giro: " + (FolioLocomotion.SmoothTurn ? "suave" : "por pasos"),
                         () => { FolioLocomotion.SetSmoothTurn(!FolioLocomotion.SmoothTurn); RebuildOptions(); }));
                     options.Add(new MenuOption("Tamaño normal", () => _book.ResetBookScale(), () => _book != null));
+                    options.Add(new MenuOption("Guardar herramientas", ToolRegistry.StoreAll, () => ToolRegistry.Instance != null));
                     options.Add(new MenuOption("Traer libro", () => _book.PlaceInFrontOfView(), () => _book != null));
                     break;
                 case MenuCategory.ImportarYNubes:

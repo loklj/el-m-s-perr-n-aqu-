@@ -8,7 +8,7 @@ namespace FolioXR.Menu
 {
     /// <summary>
     /// Panel en metros, frente -Z. Un TextMesh por botón, ajustado a su rectángulo.
-    /// Hasta 23 renderizadores con doce opciones; presupuesto: 30 draw calls.
+    /// Hasta 24 renderizadores con trece opciones; presupuesto: 30 draw calls.
     /// </summary>
     public sealed class PanelMenuView : MonoBehaviour, IMenuView
     {

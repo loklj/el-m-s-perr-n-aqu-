@@ -98,8 +98,8 @@ namespace FolioXR.Reading
         private Texture2D _rightTexture;
         private float _aspectHeightOverWidth = 1.414f; // A4/A5 hasta conocer el PDF real
 
-        private bool _nextWasDown;
-        private bool _prevWasDown;
+        private readonly bool[] _nextWasDown = new bool[2], _prevWasDown = new bool[2];
+        private readonly bool[] _toolInputSuppressed = new bool[2];
         private bool _recenterWasDown;
 
         private const string RenderScalePrefsKey = "folioxr.renderScale";
@@ -126,6 +126,17 @@ namespace FolioXR.Reading
         public float RenderScale => _currentRenderScale;
         public bool InputPaused { get; set; }
         public bool LeftPinchSuppressed { get; set; }
+        /// <summary>Reserva un lado físico para herramientas; consume también el pellizco hasta abrir.</summary>
+        public void SetToolInputSuppressed(XRNode side, bool suppressed)
+        {
+            _toolInputSuppressed[side == XRNode.LeftHand ? 0 : 1] = suppressed;
+            if (suppressed)
+            {
+                if (side == XRNode.LeftHand) _leftGrabPinchConsumed = true;
+                else _rightGrabPinchConsumed = true;
+            }
+        }
+
         public bool IsGrabbed
         {
             get => _isGrabbed;
@@ -221,18 +232,25 @@ namespace FolioXR.Reading
 
         private void Update()
         {
-            bool next = Pressed(XRNode.RightHand, CommonUsages.primaryButton) ||
-                        Pressed(XRNode.LeftHand, CommonUsages.primaryButton);
-            bool prev = Pressed(XRNode.RightHand, CommonUsages.secondaryButton) ||
-                        Pressed(XRNode.LeftHand, CommonUsages.secondaryButton);
+            bool next = false, prev = false;
+            for (int i = 0; i < 2; i++)
+            {
+                XRNode side = i == 0 ? XRNode.LeftHand : XRNode.RightHand;
+                bool primary = Pressed(side, CommonUsages.primaryButton);
+                bool secondary = Pressed(side, CommonUsages.secondaryButton);
+                if (!_toolInputSuppressed[i])
+                {
+                    next |= primary && !_nextWasDown[i];
+                    prev |= secondary && !_prevWasDown[i];
+                }
+                // Guardar el botón real evita un flanco falso al devolver con A/B/X/Y sostenido.
+                _nextWasDown[i] = primary;
+                _prevWasDown[i] = secondary;
+            }
             bool recenter = Pressed(XRNode.RightHand, CommonUsages.primary2DAxisClick);
-
-            if (!InputPaused && next && !_nextWasDown) NextSpread();
-            if (!InputPaused && prev && !_prevWasDown) PreviousSpread();
+            if (!InputPaused && next) NextSpread();
+            if (!InputPaused && prev) PreviousSpread();
             if (!InputPaused && recenter && !_recenterWasDown) PlaceInFrontOfView();
-
-            _nextWasDown = next;
-            _prevWasDown = prev;
             _recenterWasDown = recenter;
 
             if (pinchToTurnPages) UpdatePinchPageTurn();
@@ -405,18 +423,18 @@ namespace FolioXR.Reading
             else
             {
                 // Solo una apertura fiable rearma la mano: baja confianza no significa soltar.
-                if (HandReliable(_leftHand) && !left) _leftGrabPinchConsumed = false;
-                if (HandReliable(_rightHand) && !right) _rightGrabPinchConsumed = false;
+                if (!_toolInputSuppressed[0] && HandReliable(_leftHand) && !left) _leftGrabPinchConsumed = false;
+                if (!_toolInputSuppressed[1] && HandReliable(_rightHand) && !right) _rightGrabPinchConsumed = false;
             }
 
             if (!InputPaused && !IsGrabbed && Time.time >= _nextPinchTime)
             {
-                if (right && !_rightPinchWas && !_rightGrabPinchConsumed && !NearBook(_rightHand))
+                if (!_toolInputSuppressed[1] && right && !_rightPinchWas && !_rightGrabPinchConsumed && !NearBook(_rightHand))
                 {
                     NextSpread();
                     _nextPinchTime = Time.time + PinchCooldownSeconds;
                 }
-                else if (!LeftPinchSuppressed && left && !_leftPinchWas && !_leftGrabPinchConsumed && !NearBook(_leftHand))
+                else if (!_toolInputSuppressed[0] && !LeftPinchSuppressed && left && !_leftPinchWas && !_leftGrabPinchConsumed && !NearBook(_leftHand))
                 {
                     PreviousSpread();
                     _nextPinchTime = Time.time + PinchCooldownSeconds;
