@@ -9,11 +9,13 @@ namespace FolioXR.Environments
         public string Name { get; }
         public Vector3 EyePosition { get; }
         public Vector3 ViewDirection { get; }
+        public Vector3 FloorPosition { get; }
 
-        public ReadingPoint(string name, Vector3 eyePosition, Vector3 viewDirection)
+        public ReadingPoint(string name, Vector3 eyePosition, Vector3 viewDirection, Vector3 floorPosition)
         {
             Name = name;
             EyePosition = eyePosition;
+            FloorPosition = floorPosition;
             ViewDirection = viewDirection.normalized;
         }
     }
@@ -29,6 +31,7 @@ namespace FolioXR.Environments
 
         private readonly List<UnityEngine.Object> _owned = new List<UnityEngine.Object>();
         private bool _disposed;
+        internal readonly HashSet<Collider> TeleportFloors = new HashSet<Collider>();
 
         internal T Own<T>(T resource) where T : UnityEngine.Object
         {
@@ -48,6 +51,7 @@ namespace FolioXR.Environments
             foreach (UnityEngine.Object resource in _owned)
                 if (resource != null) UnityEngine.Object.Destroy(resource);
             _owned.Clear();
+            TeleportFloors.Clear();
             Root = null;
         }
     }

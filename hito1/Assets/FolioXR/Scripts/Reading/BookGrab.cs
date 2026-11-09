@@ -1,3 +1,4 @@
+using FolioXR.Locomotion;
 using UnityEngine;
 using UnityEngine.XR;
 
@@ -62,6 +63,18 @@ namespace FolioXR.Reading
                 _previousPosition = Position;
                 _previousRotation = Rotation;
                 _hasPrevious = true;
+            }
+
+            internal void TransformFrame(Vector3 oldOrigin, Vector3 newOrigin, Quaternion rotation)
+            {
+                Position = newOrigin + rotation * (Position - oldOrigin);
+                PinchPosition = newOrigin + rotation * (PinchPosition - oldOrigin);
+                PalmPosition = newOrigin + rotation * (PalmPosition - oldOrigin);
+                Rotation = rotation * Rotation;
+                _previousPosition = newOrigin + rotation * (_previousPosition - oldOrigin);
+                _previousRotation = rotation * _previousRotation;
+                for (int i = 0; i < _count; i++)
+                { _velocities[i] = rotation * _velocities[i]; _angular[i] = rotation * _angular[i]; }
             }
 
             internal Vector3 Velocity(bool angular = false)
@@ -244,6 +257,9 @@ namespace FolioXR.Reading
             bool pinchStart = input.Pinch && now - input.PinchSince <= OnsetWindowSeconds;
             bool fistStart = input.Fist && now - input.FistSince <= OnsetWindowSeconds;
             bool held = input == _owner || input == _second;
+            // El medio reservado para teletransporte no inicia un agarre por puño.
+            if (!held && FolioLocomotion.ReservesMiddlePinch(hand))
+            { input.Fist = fistStart = false; }
             if (!held) input.FistMode = fistStart && (!pinchStart || DistanceToBook(input.PinchPosition) >= PinchDistance);
             bool bones = input.FistMode ? input.PalmBones : input.PinchBones;
             if (bones) input.Rotation = wrist.rotation;
@@ -345,6 +361,21 @@ namespace FolioXR.Reading
             _book.FreezePhysics();
             if (_body != null) { _body.position = position; _body.rotation = rotation; }
             _book.transform.SetPositionAndRotation(position, rotation);
+        }
+
+        /// <summary>Compensa el LateUpdate del rig sin soltar ni inventar velocidad de lanzamiento.</summary>
+        public void CarryWithRig(Vector3 oldPosition, Quaternion oldRotation, Vector3 position, Quaternion rotation)
+        {
+            Quaternion delta = rotation * Quaternion.Inverse(oldRotation);
+            if (_owner != null && _book != null)
+            {
+                Vector3 target = position + delta * (_book.transform.position - oldPosition);
+                Quaternion facing = delta * _book.transform.rotation;
+                if (_body != null) { _body.position = target; _body.rotation = facing; }
+                _book.transform.SetPositionAndRotation(target, facing);
+                _midpointOffset = delta * _midpointOffset;
+            }
+            foreach (GrabInput input in _inputs) input.TransformFrame(oldPosition, position, delta);
         }
 
         private void RebaseHeldPose()

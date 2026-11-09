@@ -8,7 +8,7 @@ namespace FolioXR.Menu
 {
     /// <summary>
     /// Panel en metros, frente -Z. Un TextMesh por botón, ajustado a su rectángulo.
-    /// Hasta 21 renderizadores con diez opciones; presupuesto: 30 draw calls.
+    /// Hasta 23 renderizadores con doce opciones; presupuesto: 30 draw calls.
     /// </summary>
     public sealed class PanelMenuView : MonoBehaviour, IMenuView
     {
@@ -217,12 +217,15 @@ namespace FolioXR.Menu
             AddButton(new Rect(0.148f, 0.094f, 0.044f, 0.04f), -1, -1, true);
             bool wide = _drawnCategory == MenuCategory.Biblioteca || _drawnCategory == MenuCategory.ImportarYNubes;
             float top = _drawnCategory == MenuCategory.Hora ? Top - 0.056f : Top;
+            int rows = wide ? _model.Options.Count : (_model.Options.Count + 1) / 2;
+            float pitch = Mathf.Min(RowPitch, (top + 0.134f) / Mathf.Max(1, rows));
+            float height = Mathf.Min(ButtonHeight, pitch - 0.004f);
             for (int i = 0; i < _model.Options.Count; i++)
             {
                 int column = wide ? 0 : i % 2;
                 int row = wide ? i : i / 2;
-                AddButton(new Rect(-0.034f + column * 0.116f, top - row * RowPitch - ButtonHeight,
-                    wide ? 0.224f : 0.108f, ButtonHeight), -1, i, false);
+                AddButton(new Rect(-0.034f + column * 0.116f, top - row * pitch - height,
+                    wide ? 0.224f : 0.108f, height), -1, i, false);
             }
             _surface.Clear();
             _surface.SetVertices(_vertices);

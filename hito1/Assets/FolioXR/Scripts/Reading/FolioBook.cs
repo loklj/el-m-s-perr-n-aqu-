@@ -5,7 +5,7 @@
 //   A o X              -> siguiente doble pagina
 //   B o Y              -> doble pagina anterior
 //   Clic del stick der. -> volver a poner el libro frente a la vista
-//   Stick izq. arriba/abajo -> subir/bajar nitidez (1,4 a 1,8, Hito 1.2)
+//   Stick izq. arriba/abajo -> nitidez en passthrough; caminar en la casa
 // Con las manos (Hito 1.1):
 //   Pellizco de la mano derecha (indice + pulgar) lejos del libro -> siguiente
 //   Pellizco de la mano izquierda lejos del libro                 -> anterior
@@ -339,6 +339,12 @@ namespace FolioXR.Reading
 
         private void UpdateRenderScaleInput()
         {
+            if (_environment == null) _environment = FindFirstObjectByType<FolioEnvironmentController>();
+            if (_environment != null && _environment.IsActive)
+            {
+                _renderScaleStickLatched = true;
+                return;
+            }
             float y = ReadAxis(XRNode.LeftHand, CommonUsages.primary2DAxis).y;
             if (Mathf.Abs(y) < 0.3f) _renderScaleStickLatched = false;
             if (_renderScaleStickLatched || Mathf.Abs(y) <= 0.7f) return;
@@ -370,7 +376,8 @@ namespace FolioXR.Reading
             _renderScaleStatusUntil = Time.unscaledTime + RenderScaleStatusSeconds;
             if (statusText != null)
                 statusText.text = "Nitidez: " + displayValue.Replace('.', ',') + "x" + limit +
-                    " (stick izquierdo arriba/abajo). Más nitidez usa más batería.";
+                    (_environment != null && _environment.IsActive ? " (Ajustes)." : " (stick izquierdo arriba/abajo).") +
+                    " Más nitidez usa más batería.";
         }
 
         private void UpdateRenderScaleStatus()

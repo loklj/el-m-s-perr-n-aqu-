@@ -185,15 +185,18 @@ namespace FolioXR.Menu
                 if (Down(device, CommonUsages.primaryButton) || Down(device, CommonUsages.secondaryButton) ||
                     Down(device, CommonUsages.primary2DAxisClick) || Down(device, CommonUsages.menuButton) ||
                     Down(device, CommonUsages.triggerButton)) return false;
-                if (node == XRNode.LeftHand && device.TryGetFeatureValue(CommonUsages.primary2DAxis, out Vector2 axis) &&
+                if ((node == XRNode.LeftHand || (_environment != null && _environment.IsActive)) &&
+                    device.TryGetFeatureValue(CommonUsages.primary2DAxis, out Vector2 axis) &&
                     (Mathf.Abs(axis.x) >= 0.3f || Mathf.Abs(axis.y) >= 0.3f)) return false;
             }
-            return !Pinching(_left.Hand) && !Pinching(_right.Hand);
+            return !Pinching(_left.Hand, false) &&
+                !Pinching(_right.Hand, _environment != null && _environment.IsActive);
         }
 
-        private static bool Pinching(OVRHand hand) => hand != null && hand.isActiveAndEnabled &&
+        private static bool Pinching(OVRHand hand, bool includeMiddle) => hand != null && hand.isActiveAndEnabled &&
             hand.IsTracked && (!hand.IsDataHighConfidence || hand.IsSystemGestureInProgress ||
-                hand.GetFingerIsPinching(OVRHand.HandFinger.Index));
+                hand.GetFingerIsPinching(OVRHand.HandFinger.Index) ||
+                (includeMiddle && hand.GetFingerIsPinching(OVRHand.HandFinger.Middle)));
 
         private void UpdatePointer(int slot, XRNode node, Transform anchor, MenuHandInput hand)
         {
