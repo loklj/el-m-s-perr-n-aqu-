@@ -95,7 +95,7 @@ Son los pasos de la guía oficial de Meta (*Manual Project Setup*):
 2. Borra **Main Camera** de la jerarquía.
 3. Abre **Building Blocks** (desde la ventana Meta XR SDK) y agrega, en este orden: **Camera Rig**, **Passthrough**, **Controller Tracking** y **Hand Tracking**.
 4. Menú **Folio XR → Crear libro de prueba (Hito 1)**. Aparece el libro y se fija el identificador del paquete en `com.loklj.folioxr`.
-5. Clic derecho sobre **Libro de prueba (Folio XR)** → **Interaction SDK → Add Grab Interaction** → **Fix All** → **Create**. Esto lo hace agarrable con manos y mandos.
+5. El agarre propio `BookGrab` se crea automáticamente al iniciar y encuentra el libro y el `OVRCameraRig`: no hay que agregar interactores del Interaction SDK. Si la escena ya tiene `HandGrabInteractable`/`GrabInteractable`, no son necesarios para este agarre.
 6. Guarda la escena (**Ctrl+S**).
 7. Menú **Folio XR → Comprobar Hito 1**. Todo debe salir **OK**.
 
@@ -128,7 +128,13 @@ En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
 | A o X | Avanza dos páginas; el texto de abajo dice «Páginas 3-4 de 8» |
 | B o Y | Retrocede dos páginas |
 | Página 2 y 4 | Se distinguen los tamaños de letra (8 a 18 puntos) |
-| Agarrar con la mano o el gatillo de agarre | El libro se mueve contigo |
+| Agarrar con la mano izquierda/derecha | Con seguimiento fiable, empieza un pellizco índice-pulgar a menos de **4 cm** del colisionador del libro (medido desde el punto medio de ambas puntas). Sigue ese punto y la rotación de la muñeca conservando la pose relativa inicial, sin saltar al tomarlo. Al abrir los dedos queda flotando, sin pasar página. Log: `[FolioXR] Agarre: tomado con mano izquierda` / `mano derecha` y `[FolioXR] Agarre: soltado` |
+| Agarrar con el mando izquierdo/derecho | Acerca el ancla del mando a menos de **8 cm** del colisionador y pulsa el botón de agarre (grip). Vibra brevemente al tomarlo y conserva la pose relativa mientras lo mantienes. Al soltar queda inmóvil, sin gravedad ni inercia. Log: `[FolioXR] Agarre: tomado con mando izquierdo` / `mando derecho` y `[FolioXR] Agarre: soltado` |
+| Acercarse con pellizco/grip ya sostenido | No toma el libro: soltar y volver a pulsar dentro de la distancia para generar un flanco nuevo |
+| Transferir a otra mano o mando | Un nuevo pellizco/grip cercano transfiere el libro sin salto. Solo el último dueño lo mueve; soltar el anterior no lo libera |
+| Pérdida de confianza durante un agarre con mano | Conserva la última pose durante la pérdida; si vuelve antes de 0,3 s con el pellizco sostenido, continúa. Si la pérdida supera 0,3 s, suelta. Recuperar el seguimiento todavía pellizcando no vuelve a agarrar ni pasa página: abrir y hacer un gesto nuevo |
+| Pellizcar lejos mientras el libro está agarrado | Ninguna mano pasa página. Tras soltar el libro y abrir los dedos con seguimiento fiable, un pellizco nuevo lejos vuelve a pasar página como antes |
+| Agarrar con el menú abierto y recolocar después | Funciona con manos y mandos aunque el menú pause los otros controles. Tras soltar y cerrar el menú, el clic del stick derecho vuelve a poner el libro frente a la vista |
 | Clic en el stick derecho | El libro vuelve frente a tu vista |
 | Clic en el stick izquierdo (entorno de prueba) | Alterna passthrough/casa. Al entrar, aparece el sofá de la sala y el libro se recoloca; al salir, vuelve el passthrough y se restauran la pose original del rig y el fondo de la cámara. Mantener pulsado no repite la acción |
 | Stick izquierdo hacia la izquierda (dentro de la casa) | Punto de lectura anterior, en ciclo: sofá, biblioteca, dormitorio, balcón y terraza. Un cambio por movimiento con `x < -0,7`; vuelve a `abs(x) < 0,3` para rearmar. Muestra el nombre del punto unos segundos y recoloca el libro |
