@@ -44,7 +44,7 @@ Este documento es la especificación para que Codex (GPT-6 Astra) programe por t
 
 **4. Tamaño con dos manos o dos mandos**
 - Si el libro ya está agarrado y la otra mano o mando también lo agarra, entra en **modo dos manos**. Esto reemplaza la transferencia actual a la segunda mano.
-- **Escala:** escala inicial × (distancia actual entre las manos / distancia inicial), entre **0,5× y 3×**.
+- **Escala:** escala inicial × (distancia actual entre las manos / distancia inicial), entre **0,5× y 5×** (el máximo era 3× y el usuario lo subió a 5× el 9 de noviembre de 2026).
 - **Movimiento:** la posición sigue al punto medio entre las manos, con el desplazamiento inicial. La rotación sigue la primera mano.
 - Al soltar una mano, se vuelve a una mano con la que queda, sin saltos.
 - El tamaño se guarda en PlayerPrefs con la clave `folioxr.bookScale`. En Ajustes hay una opción «Tamaño normal» que vuelve a 1×.

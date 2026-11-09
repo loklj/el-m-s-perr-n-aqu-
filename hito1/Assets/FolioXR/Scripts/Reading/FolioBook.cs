@@ -288,7 +288,7 @@ namespace FolioXR.Reading
         public void SetBookScale(float scale)
         {
             if (float.IsNaN(scale) || float.IsInfinity(scale)) scale = 1f;
-            scale = Mathf.Clamp(scale, 0.5f, 3f);
+            scale = Mathf.Clamp(scale, 0.5f, 5f); // Máximo 5x, pedido por el usuario (9 nov 2026).
             int previousWidth = DesiredPageWidth();
             BookScale = scale;
             transform.localScale = _baseScale * scale;
