@@ -22,7 +22,14 @@ namespace FolioXR.Tools
                 _source = null;
         }
 
-        public static bool Reveals(Vector3 point)
+        public static bool Reveals(Vector3 point) => Reveals(point, null);
+
+        /// <summary>
+        /// Revisión de Claude: el soporte de la tinta puede ser una caja con grosor (por ejemplo, el libro),
+        /// y la superficie dibujada queda dentro de ella. El rayo chocaría primero con su cara y la
+        /// tinta nunca se vería. Si el primer impacto es el colisionador de soporte, cuenta como iluminado.
+        /// </summary>
+        public static bool Reveals(Vector3 point, Collider support)
         {
             if (_source == null || !_source.isActiveAndEnabled || !_source.Powered ||
                 _source.Mode != FlashlightMode.Ultraviolet || _source.Emitter == null)
@@ -35,8 +42,10 @@ namespace FolioXR.Tools
             if (Vector3.Dot(emitter.forward, delta / distance) < ConeCosine)
                 return false;
             // El propio soporte del punto puede ser el impacto final: tolerancia de 1 mm.
-            return !Physics.Raycast(emitter.position, delta / distance, distance - 0.001f, ~0,
-                                    QueryTriggerInteraction.Ignore);
+            if (!Physics.Raycast(emitter.position, delta / distance, out RaycastHit hit, distance - 0.001f, ~0,
+                                 QueryTriggerInteraction.Ignore))
+                return true;
+            return support != null && hit.collider == support;
         }
     }
 }

@@ -65,7 +65,7 @@ TAREA:
 - En el libro: por identificador del PDF y por página, en coordenadas de la página. Reaparecen al volver a esa página y siguen la escala del libro.
 - En la libreta: por página.
 - En la casa: por entorno, en coordenadas de la raíz de la casa.
-(5) Tinta invisible: pluma aparte en el reloj. Sus trazos solo se ven dentro del cono ultravioleta de la linterna encendida, a menos de 3 m. Por CPU, actualiza solo los trazos cercanos al cono y como mucho 10 veces por segundo.
+(5) Tinta invisible: pluma aparte en el reloj. Para saber si un trazo está iluminado usa UltravioletLight.Reveals(punto, colisionadorDeSoporte): pasa el colisionador de la superficie donde está el trazo, porque el libro es una caja con grosor y sin él el rayo chocaría con su cara. Sus trazos solo se ven dentro del cono ultravioleta de la linterna encendida, a menos de 3 m. Por CPU, actualiza solo los trazos cercanos al cono y como mucho 10 veces por segundo.
 (6) Libreta: herramienta del reloj, tamaño A5, 20 páginas. Se pasa de página tocando las esquinas con el índice. Se puede agarrar, dejar en cualquier parte y tiene física igual que el libro. Las páginas se dibujan con una textura de líneas generada por código.
 (7) En el menú, en Ajustes: "Borrar trazos de esta página" y "Borrar trazos de la casa", con confirmación (segundo toque).
 Rendimiento: 72 FPS con 2.000 trazos guardados; registra en el log la cantidad de trazos y vértices al cargar.

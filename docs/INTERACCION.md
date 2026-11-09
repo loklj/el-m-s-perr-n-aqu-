@@ -216,3 +216,12 @@ Implementada en `interaccion/tanda-c`, desde `origin/fase-1/preparacion` (`46c1f
 **Validación realizada:** análisis sintáctico de los 22 archivos C# sin errores. Comparación por tokens de siete cuerpos de métodos extraídos contra la base: misma lógica, salvo parámetros de contexto y acceso añadido a muñeca/índice. Revisión manual de APIs contra Meta XR Core `207.0.0` publicado, UnityCsReference `6000.3`, documentación oficial de `Light.innerSpotAngle` y Graphics `6000.3/staging` (URP 17). Revisión de propiedad por lado, flancos, pausa, toma/suelta, devolución y liberación de recursos. `git diff --check` limpio; una sola creación de Light adicional, sin paquetes ni modificaciones de `PROGRESO.md`. Las filas nuevas del Paso 10 son pruebas pendientes en visor, no resultados ejecutados. No se ha compilado ni ejecutado Unity en este entorno.
 
 **Riesgos pendientes:** calibrar orientación de linterna según muñeca/mando y distancia de toques en Quest, especialmente con oclusión de dedos; comprobar símbolos/textos y siete filas del menú. Medir coste de luz, transparencia, raycasts y draw calls junto al libro ampliado y locomoción. El material Unlit del libro no recibe iluminación real, y el cono falso es una indicación visual, no iluminación de superficies; su longitud se recorta por el rayo central y no por toda la sección del cono. La API UV sí comprueba oclusión por punto. Verificar variantes de luces adicionales/transparencia conservadas en la APK, contactos del collider aproximado y transiciones manos/mandos/casa/passthrough. «Guardar herramientas» permite recuperar una linterna perdida fuera del espacio visible.
+
+**Revisión de Claude de la Tanda C (9 de noviembre de 2026).** El código compila con Roslyn (C# 9) contra stubs de Unity 6000.3 y Meta XR 207. Se revisaron estos puntos:
+
+- `GrabInput` se extrajo de `BookGrab` y conserva la ventana de inicio del gesto.
+- La supresión por lado funciona en `FolioBook` (A/X, B/Y y pellizcos) y en el menú.
+- La linterna usa una sola luz y comprueba las luces adicionales por píxel de URP.
+- El láser usa un raycast y el ultravioleta usa un cono.
+
+Hubo un cambio: se agregó `UltravioletLight.Reveals(punto, soporte)`. Sin el soporte, el rayo chocaba con la cara de colisionadores con grosor, como el libro, y la tinta sobre ellos nunca se habría revelado.

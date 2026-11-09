@@ -181,6 +181,14 @@ La app se venderá en la **Meta Horizon Store a USD 4,99**, con **código cerrad
 - Forma de trabajo pedida por el usuario: **Codex/GPT-6 Astra escribe el código y Claude lo revisa y corrige** antes de que el usuario compile.
 - Estado (8 de noviembre de 2026): **entorno de prueba 1 integrado en `fase-1/preparacion`**. Es una casa «moderna cálida» de dos pisos, hecha por Codex con esfuerzo Alto y revisada por Claude. Claude agregó la actualización de la luz ambiente y el manejo del límite del Guardian. Controles: el clic del stick izquierdo alterna entre passthrough y la casa, y el stick izquierdo a los lados cambia entre 5 lugares para leer. Falta probarlo en el Quest 3. Detalle: [docs/ENTORNOS.md](docs/ENTORNOS.md).
 - **Prueba del 9 de noviembre de 2026 (03:25), registro leído por Claude:** los pellizcos funcionan. La nitidez no registró ningún movimiento del stick (falta confirmar si se usaron los mandos). El agarre no puede funcionar porque la escena no tiene interactores del Interaction SDK (`HandGrabInteractor=0, GrabInteractor=0`). Además, el APK era la versión 1.2: la casa y el menú no se habían copiado al proyecto.
+- **Tanda C integrada (9 de noviembre de 2026), sin probar todavía:**
+  - Reloj de 6 herramientas en la muñeca izquierda; por ahora solo la linterna funciona.
+  - Se toman con la mano derecha (pellizco o puño) o con el grip del mando y se devuelven soltándolas cerca de la muñeca.
+  - Linterna triple: normal (luz spot), láser y ultravioleta, con una API para la tinta invisible.
+  - «Guardar herramientas» en Ajustes.
+  - Mientras se sostiene una herramienta, esa mano no pasa página.
+  - Claude agregó el soporte para revelar la tinta sobre superficies con grosor.
+  - Desde esta tanda, la compilación de revisión usa Roslyn (.NET 8 SDK, C# 9) en vez de mcs, porque mcs no entiende funciones locales.
 - **Tanda B integrada (9 de noviembre de 2026), sin probar todavía:** movimiento libre dentro de la casa.
   - Stick izquierdo para caminar y stick derecho para girar 30° (o giro suave, en Ajustes).
   - Teletransporte con el stick derecho hacia adelante, o con pellizco del dedo medio de la mano derecha.
