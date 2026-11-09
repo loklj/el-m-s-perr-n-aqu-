@@ -9,8 +9,8 @@
 // Con las manos (Hito 1.1):
 //   Pellizco de la mano derecha (indice + pulgar) lejos del libro -> siguiente
 //   Pellizco de la mano izquierda lejos del libro                 -> anterior
-//   Cerca del libro el pellizco se deja para agarrarlo (Grab Quick Action de
-//   Meta, ver docs/HITO1_GUIA.md). Pasar la hoja tomandola llega mas adelante.
+//   Cerca del libro el pellizco se deja para BookGrab (agarre propio).
+//   Pasar la hoja tomandola llega mas adelante.
 //
 // Nitidez (Hito 1.1): al iniciar en el visor sube la resolucion de render
 // (renderScale de URP) y activa MSAA; las texturas de pagina usan filtrado
@@ -102,11 +102,24 @@ namespace FolioXR.Reading
         private OVRHand _rightHand;
         private bool _leftPinchWas;
         private bool _rightPinchWas;
+        private bool _leftGrabPinchConsumed;
+        private bool _rightGrabPinchConsumed;
+        private bool _isGrabbed;
         private float _nextPinchTime;
 
         public float RenderScale => _currentRenderScale;
         public bool InputPaused { get; set; }
         public bool LeftPinchSuppressed { get; set; }
+        public bool IsGrabbed
+        {
+            get => _isGrabbed;
+            set
+            {
+                _isGrabbed = value;
+                // También sobrevive a una suelta por pérdida prolongada del seguimiento.
+                if (value) _leftGrabPinchConsumed = _rightGrabPinchConsumed = true;
+            }
+        }
 
         private void Awake()
         {
@@ -248,14 +261,22 @@ namespace FolioXR.Reading
             bool left = IsPinching(_leftHand);
             bool right = IsPinching(_rightHand);
 
-            if (!InputPaused && Time.time >= _nextPinchTime)
+            if (IsGrabbed) _leftGrabPinchConsumed = _rightGrabPinchConsumed = true;
+            else
             {
-                if (right && !_rightPinchWas && !NearBook(_rightHand))
+                // Solo una apertura fiable rearma la mano: baja confianza no significa soltar.
+                if (HandReliable(_leftHand) && !left) _leftGrabPinchConsumed = false;
+                if (HandReliable(_rightHand) && !right) _rightGrabPinchConsumed = false;
+            }
+
+            if (!InputPaused && !IsGrabbed && Time.time >= _nextPinchTime)
+            {
+                if (right && !_rightPinchWas && !_rightGrabPinchConsumed && !NearBook(_rightHand))
                 {
                     NextSpread();
                     _nextPinchTime = Time.time + PinchCooldownSeconds;
                 }
-                else if (!LeftPinchSuppressed && left && !_leftPinchWas && !NearBook(_leftHand))
+                else if (!LeftPinchSuppressed && left && !_leftPinchWas && !_leftGrabPinchConsumed && !NearBook(_leftHand))
                 {
                     PreviousSpread();
                     _nextPinchTime = Time.time + PinchCooldownSeconds;
@@ -268,8 +289,13 @@ namespace FolioXR.Reading
 
         private static bool IsPinching(OVRHand hand)
         {
+            return HandReliable(hand) && hand.GetFingerIsPinching(OVRHand.HandFinger.Index);
+        }
+
+        private static bool HandReliable(OVRHand hand)
+        {
             return hand != null && hand.isActiveAndEnabled && hand.IsTracked && hand.IsDataHighConfidence &&
-                   !hand.IsSystemGestureInProgress && hand.GetFingerIsPinching(OVRHand.HandFinger.Index);
+                   !hand.IsSystemGestureInProgress;
         }
 
         private bool NearBook(OVRHand hand)
