@@ -123,6 +123,14 @@ En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
 
 | Prueba | Resultado esperado |
 | --- | --- |
+| Formatos 2 · TXT y codificaciones | Abrir los TXT UTF-8, con BOM, UTF-16 LE/BE con/sin BOM, Windows-1252 y Latin-1. Ver tildes, eñes, signos y saltos; «<» y «&» son texto, nunca HTML ejecutable |
+| Formatos 2 · Codificación TXT | Ajustes → Codificación TXT recorre automática/UTF-8/Windows-1252 en una casilla. Persiste `folioxr.txtEncoding`, repagina y conserva progreso proporcional. Una opción incorrecta da error controlado o texto incorrecto reversible; regresar a automática |
+| Formatos 2 · TXT grande | Abrir un TXT de cientos de MB, observar indexado por tramos y memoria; no se lee completo a RAM. Medir tiempo hasta primera página (se pagina todo antes) y cancelación/cierre, incluido timeout. El archivo JVM de 240 MB no se distribuye |
+| Formatos 2 · MOBI/AZW | Fixtures propios sin compresión, PalmDOC y HUFF/CDIC: texto e imagen correctos. Cambiar letra, recorrer capítulos y retomar progreso. Un BOOKMOBI truncado no cierra la app; campo de cifrado activo muestra DRM sin intentar descifrar |
+| Formatos 2 · KF8/AZW3 | Reconstruir esqueleto y fragmento del fixture, comprobar texto acentuado e imagen kindle:embed. Ampliar prueba con archivos propios reales, FDST/CSS, híbridos y varios fragmentos; mantener clasificación experimental |
+| Formatos 2 · CBR ZIP/RAR4/RAR5 | ZIP con extensión CBR abre con lector de cómics. RAR4 almacenado abre; probar compresión y sólidos con archivos propios. RAR5 muestra «CBR (RAR5) aún no compatible: conviértelo a CBZ»; contraseña/multivolumen/cuotas se rechazan |
+| Formatos 2 · Regresión FXR1 y menús | PDF sigue usando FXR1/LoadRaw; EPUB/TXT/MOBI usan PNG y cómics JPEG. Alternar formatos y cerrar durante recarga sin mezclar páginas. Confirmar nuevos entornos, menú compacto y asas movibles, agarre, herramientas y pausa |
+
 | EPUB · Importación y apertura | Importar libro-prueba.epub desde Biblioteca; aparece como abrible. Muestra capítulos en el orden del spine, primera y última página, tildes, listas, cursivas e imágenes en ambas páginas 3D |
 | EPUB · Nitidez y captura | Con renderScale 1,4 y letra normal, leer 12 pt a 45 cm; comprobar que no falte texto en bordes ni se repita una columna. Revisar tiempos `[FolioXR] EPUB captura` y capturas de capítulos de distinta longitud |
 | EPUB · Letra y progreso | Ajustes → Letra pequeña/normal/grande repagina. Conserva fracción aproximada de lectura, alineada a doble página; reiniciar conserva letra y página. Probar abrir otro EPUB guardado con otro conteo y volver |

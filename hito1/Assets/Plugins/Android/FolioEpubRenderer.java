@@ -20,7 +20,8 @@ public final class FolioEpubRenderer {
     private static final AtomicInteger GENERATION = new AtomicInteger();
     private static android.app.Activity context;
     private static WebView web;
-    private static FolioEpubContainer book;
+    private static FolioHtmlSource book;
+    private static String txtEncoding = "auto";
     private static String path;
     private static float fontScale = 1f;
     private static int[] counts;
@@ -33,6 +34,9 @@ public final class FolioEpubRenderer {
     public static void init(Context activity, float scale) {
         context = (android.app.Activity)activity;
         WORK.execute(() -> { if (fontScale != scale) { fontScale = scale; reset(); } });
+    }
+    public static void setTxtEncoding(String encoding) {
+        WORK.execute(() -> { if (!txtEncoding.equals(encoding)) { txtEncoding = encoding; reset(); } });
     }
     public static String getStatus(String key) { return STATUS.get(key); }
     public static void clearStatus(String key) {
@@ -77,7 +81,8 @@ public final class FolioEpubRenderer {
         if (file.equals(path) && counts != null) return;
         reset();
         if (context == null) throw new IOException("EPUB sin contexto Android");
-        book = new FolioEpubContainer(file);
+        book = FolioHtmlSource.open(file, txtEncoding, () -> generation != GENERATION.get());
+        book.checkDrm();
         ui(() -> {
             WebView.enableSlowWholeDocumentDraw();
             web = new WebView(context);
@@ -97,7 +102,7 @@ public final class FolioEpubRenderer {
             web.layout(0, 0, WIDTH, HEIGHT);
             return null;
         });
-        int[] result = new int[book.spine.size()];
+        int[] result = new int[book.chapterCount()];
         for (int i = 0; i < result.length; i++) {
             check(generation, null); load(i);
             String number = js("Math.max(1,Math.ceil((document.body.scrollWidth+48)/596))");
@@ -113,9 +118,9 @@ public final class FolioEpubRenderer {
     }
     private static void load(int chapter) throws Exception {
         if (chapter == loaded) return;
-        final FolioEpubContainer source = book;
-        String resource = source.spine.get(chapter);
-        String content = new String(source.read(resource, 4 * 1024 * 1024), StandardCharsets.UTF_8);
+        final FolioHtmlSource source = book;
+        String resource = source.chapterName(chapter);
+        String content = new String(source.chapter(chapter), StandardCharsets.UTF_8);
         String policy = "default-src 'none'; img-src https://folio.invalid data:; style-src 'unsafe-inline' https://folio.invalid; font-src 'none'; script-src 'none';";
         String prefix = "<meta http-equiv='Content-Security-Policy' content=\"" + policy + "\"><meta name='viewport' content='width=596'>";
         String css = "<style>html{width:596px!important;height:842px!important;overflow:hidden!important;}" +
@@ -133,10 +138,10 @@ public final class FolioEpubRenderer {
                 @Override public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest request) {
                     try {
                         String name = FolioEpubContainer.resolve("", request.getUrl().toString());
-                        if (source.fonts.contains(name)) throw new IOException("Fuente del sistema");
+                        if (source.isFont(name)) throw new IOException("Fuente del sistema");
                         String mime = name.endsWith(".css") ? "text/css" : name.endsWith(".svg") ? "image/svg+xml" :
                             name.endsWith(".png") ? "image/png" : "image/jpeg";
-                        byte[] data = source.read(name, FolioEpubContainer.MAX_RESOURCE);
+                        byte[] data = source.resource(name, FolioEpubContainer.MAX_RESOURCE);
                         if (!mime.equals("text/css") && !mime.equals("image/svg+xml")) {
                             BitmapFactory.Options bounds = new BitmapFactory.Options(); bounds.inJustDecodeBounds = true;
                             BitmapFactory.decodeByteArray(data, 0, data.length, bounds);

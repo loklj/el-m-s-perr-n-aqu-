@@ -28,9 +28,18 @@ namespace FolioXR.Reading
         public static bool IsComic(string path)
         {
             string extension = string.IsNullOrEmpty(path) ? string.Empty : Path.GetExtension(path).ToLowerInvariant();
-            return extension == ".cbz" || extension == ".zip";
+            return extension == ".cbz" || extension == ".zip" || extension == ".cbr";
         }
         public static bool IsEpub(string path) => string.Equals(Path.GetExtension(path), ".epub", StringComparison.OrdinalIgnoreCase);
+        public static bool IsReflow(string path)
+        {
+            string ext = Path.GetExtension(path)?.ToLowerInvariant();
+            return ext == ".epub" || ext == ".txt" || ext == ".mobi" || ext == ".azw" || ext == ".azw3";
+        }
+        public const string TxtEncodingPrefsKey = "folioxr.txtEncoding";
+        public static string TxtEncoding => PlayerPrefs.GetString(TxtEncodingPrefsKey, "auto");
+        public static string FormatFailurePath { get; private set; }
+        public static string FormatFailureDetail { get; private set; }
         public const string EpubFontPrefsKey = "folioxr.epubFontScale";
         public static float EpubFontScale => Mathf.Clamp(PlayerPrefs.GetFloat(EpubFontPrefsKey, 1f), 0.8f, 1.25f);
         public static string DrmFailurePath { get; private set; }
@@ -52,11 +61,17 @@ namespace FolioXR.Reading
             _cacheDir = Path.Combine(Application.temporaryCachePath, "folio-paginas");
             Directory.CreateDirectory(_cacheDir);
 #if UNITY_ANDROID && !UNITY_EDITOR
-            _java = new AndroidJavaClass(IsEpub(pdfPath) ? "com.loklj.folioxr.FolioEpubRenderer" : IsComic(pdfPath) ? ComicJavaClass : JavaClass);
-            if (IsEpub(pdfPath))
+            _java = new AndroidJavaClass(IsEpub(pdfPath) ? "com.loklj.folioxr.FolioEpubRenderer" :
+                IsReflow(pdfPath) ? "com.loklj.folioxr.FolioTextRenderer" :
+                string.Equals(Path.GetExtension(pdfPath), ".cbr", StringComparison.OrdinalIgnoreCase) ? "com.loklj.folioxr.FolioCbrRenderer" :
+                IsComic(pdfPath) ? ComicJavaClass : JavaClass);
+            if (IsReflow(pdfPath))
                 using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
                 using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+                {
                     _java.CallStatic("init", activity, EpubFontScale);
+                    _java.CallStatic("setTxtEncoding", TxtEncoding);
+                }
 #endif
         }
 
@@ -91,6 +106,8 @@ namespace FolioXR.Reading
             {
                 result = Fail("OTHER", "respuesta inesperada: " + result.Data);
             }
+            FormatFailurePath = result.Ok ? null : _pdfPath;
+            FormatFailureDetail = result.ErrorDetail;
             DrmFailurePath = result.ErrorKind == "DRM" ? _pdfPath : null;
             if (result.Ok) PageCounted?.Invoke(_pdfPath);
             done(count, result);
@@ -192,7 +209,7 @@ namespace FolioXR.Reading
                     done(Parse(status));
                     yield break;
                 }
-                if (Time.realtimeSinceStartup - start > (IsEpub(_pdfPath) ? 300f : TimeoutSeconds))
+                if (Time.realtimeSinceStartup - start > ((IsReflow(_pdfPath) || string.Equals(Path.GetExtension(_pdfPath), ".cbr", StringComparison.OrdinalIgnoreCase)) ? 300f : TimeoutSeconds))
                 {
                     _java.CallStatic("clearStatus", key);
                     done(Fail("TIMEOUT", "El lector tardó demasiado en responder"));

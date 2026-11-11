@@ -1,6 +1,6 @@
 # Formatos, protección y licencias — Fase 0
 
-Fecha de revisión: 5 de noviembre de 2026. Este documento describe decisiones y pruebas pendientes; **ningún formato está implementado ni validado en Quest 3 todavía**. No se han incorporado bibliotecas ni fijado versiones de producción.
+Diseño original: 5 de noviembre de 2026. **Estado de implementación actualizado el 11 de noviembre de 2026 en la sección 8**. Las secciones históricas describen alternativas; el estado vigente y las dependencias efectivas están al final. Las pruebas JVM no acreditan el renderizado en Quest.
 
 ## 1. Decisión de implementación
 
@@ -10,7 +10,7 @@ Separar tres trabajos: identificar el contenedor y su protección, obtener conte
 - CBZ/ZIP: índice de entradas y lectura individual; **libarchive** como biblioteca de archivos, sujeto a demostrar acceso eficiente a entradas ZIP. No se presupone que su interfaz secuencial proporcione búsqueda aleatoria constante.
 - EPUB: **Readium Kotlin Toolkit** para publicación, recursos, navegación y localizadores. La integración visual con el libro 3D es una prueba técnica obligatoria antes de comprometer el MVP completo.
 - CBR: **libarchive**, con casos separados de RAR4 y RAR5 y preparación en disco cuando la compresión sea sólida.
-- MOBI/AZW/AZW3: **libmobi es un candidato condicionado**, no una solución aprobada de streaming. Su API habitual carga registros y genera estructuras en memoria. No cumple automáticamente la regla de nunca cargar el archivo completo; limitar el tamaño del archivo no convierte esa ruta en streaming. Si no se obtiene una ruta de lectura incremental compatible con la licencia, se ofrecerá conversión local en el PC a EPUB sin DRM.
+- MOBI/AZW/AZW3: **libmobi descartado por LGPL; se implementa un parser propio**, descrito en la sección 8. La evaluación histórica siguiente no autoriza incorporarlo: Su API habitual carga registros y genera estructuras en memoria. No cumple automáticamente la regla de nunca cargar el archivo completo; limitar el tamaño del archivo no convierte esa ruta en streaming. Si no se obtiene una ruta de lectura incremental compatible con la licencia, se ofrecerá conversión local en el PC a EPUB sin DRM.
 - TXT, DOCX, ODT y RTF: conversores incrementales a un modelo común de contenido. DOC binario y KFX requieren decisiones adicionales detalladas abajo.
 
 El modelo interno propuesto conserva capítulos, párrafos, imágenes, estilos admitidos, idioma, dirección de lectura, índice y localizadores estables. Los recursos y el índice se guardan en disco; no se genera un único HTML gigante ni se concatena el libro completo en una cadena.
@@ -172,3 +172,51 @@ Consulta HTTPS realizada el 5 de noviembre de 2026. Se leyeron los documentos de
 - **O1:** [Proyecto Apache POI](https://github.com/apache/poi/blob/trunk/README.md).
 - **O2:** [Licencias Apache POI](https://github.com/apache/poi/blob/trunk/legal/LICENSE).
 - **E1:** [Especificación EPUB 3.3 en el repositorio oficial W3C](https://github.com/w3c/epub-specs/blob/main/epub33/core/index.html), secciones sobre `encryption.xml` y ofuscación de fuentes. La web `www.w3.org` no fue accesible desde este entorno; se consultó la fuente oficial en GitHub.
+
+
+## 8. Estado — Encargo 10, Formatos 2
+
+11 de noviembre de 2026. Rama `fase2/formatos`, rebasada sobre `7fcf14a` de `fase-1/preparacion`: conserva PDF con cabecera **FXR1**, `PdfPageRenderer.LoadRaw`, entornos y menús movibles. No se modifican Tools, SphereMenuView ni FolioWifiServer. En FolioLibrary solo cambia `detectFormat`.
+
+«Soportado» aquí describe el camino de código cubierto por fixtures y pruebas JVM, no una certificación de la APK. «Experimental» requiere ampliar corpus y validar fidelidad en Quest; los errores estructurales se rechazan, no se etiquetan automáticamente como DRM.
+
+| Formato | Estado | Implementación y límites |
+| --- | --- | --- |
+| PDF | Soportado, heredado | PdfRenderer y salida FXR1 de la base; no se modifica ese motor ni LoadRaw |
+| EPUB | Experimental, heredado | Misma captura WebView y contenedor; conserva try/catch de setFeature en Android y acepta ausencia de mimetype con container.xml válido |
+| TXT UTF-8, UTF-16 LE/BE con/sin BOM, Windows-1252, Latin-1 | Soportado en parser; render Quest pendiente | Muestra de 64 KiB para detección, decodificador estricto, lectura por bloques y capítulos aproximados de 200 KB normalizados a UTF-8 en archivo temporal. Corte en salto de línea; sin salto, máximo 256 KiB aproximados, sin cortar pares sustitutos. Texto escapado como HTML. No se carga el archivo completo a RAM |
+| MOBI/AZW sin cifrado | Experimental | PalmDB y offsets de 64 bits; encabezados MOBI/EXTH, registros sin compresión, PalmDOC y HUFF/CDIC propios, imágenes por registro. El archivo debe ser realmente BOOKMOBI; no basta la extensión. Código de texto 1252/65001 |
+| AZW3/KF8 sin cifrado | Experimental | INDX/TAGX, esqueletos y fragmentos a HTML, recursos kindle:embed y flujos FDST. Fixtures sintéticos de reconstrucción; híbridos, diccionarios, índices complejos, CSS con referencias anidadas y diseño fijo requieren corpus adicional. No es soporte KFX |
+| CBZ y CBR que realmente son ZIP | Soportado, heredado/adaptado | FolioComicRenderer; CBR identifica la firma antes de decidir extractor |
+| CBR RAR4 | Experimental | Junrar 7.5.5, Java puro: conversión temporal a CBZ y lector de cómics existente. Se procesan también entradas no visuales para conservar el diccionario de archivos sólidos. Cuotas de 32 MiB por entrada, 512 MiB extraídos y 10.000 entradas; se rechazan contraseña y multivolumen. Fixture propio RAR4 almacenado; falta validar compresión/sólidos variados en Quest |
+| CBR RAR5 | No compatible | Junrar no admite RAR5. Mensaje: «CBR (RAR5) aún no compatible: conviértelo a CBZ». No se añade biblioteca nativa ni dependencia de licencia incompatible |
+| MOBI/AZW/AZW3 con campo de cifrado activo | No compatible (DRM) | Se comprueba antes de leer texto, también en la cabecera KF8 de un híbrido; nunca se descifra |
+| KFX, DOC/DOCX, ODT, RTF, FB2, CB7 | No compatible en esta entrega | Fuera del encargo; importación/reconocimiento no equivale a lectura |
+
+### Motor compartido y preferencias
+
+`FolioHtmlSource` define capítulos, recursos locales, fuentes y validación de DRM. EPUB, TXT y MOBI implementan ese contrato; `FolioEpubRenderer` conserva cola, cancelación por generación, WebView en UI, aislamiento CSP, LRU de 24 MiB y captura PNG. `FolioTextRenderer` es la entrada JNI para TXT/MOBI/AZW/AZW3, con el mismo protocolo. El puente Unity elige la clase por extensión y sigue intentando **FXR1 antes de PNG/JPEG**.
+
+Ajustes contiene una sola casilla **«Codificación TXT: automática / UTF-8 / Windows-1252»**, que recorre los tres valores y guarda `folioxr.txtEncoding` (`auto`, `UTF-8`, `Windows-1252`). Cambiarla vuelve a paginar el TXT abierto con reubicación proporcional. El ajuste de letra existente también funciona con TXT/MOBI/KF8. El progreso sigue siendo una página; los marcadores no se convierten en localizadores semánticos.
+
+Windows-1252 e ISO-8859-1 coinciden en muchos textos y no pueden distinguirse siempre. Sin BOM, UTF-16 se estima por distribución de bytes nulos; textos sin esa señal pueden requerir conversión previa. UTF-8 inválido fuera de la muestra produce error y permite elegir Windows-1252, sin reemplazar silenciosamente caracteres. Se conserva la opción explícita del usuario.
+
+La apertura construye un índice de tramos en disco y el paginador calcula el conteo completo antes de entregar la primera página: no es aún apertura inmediata para cientos de MB. El timeout de trabajo sigue en 300 s y la cancelación interrumpe el indexado por tramos. No se promete que libros enormes completen su paginación dentro de ese plazo. La prueba grande usa **240.000.000 bytes de TXT con heap JVM máximo de 64 MiB**, sin guardar ese archivo en el repositorio.
+
+MOBI limita cada registro a 8 MiB, salida de descompresión a 64 KiB por registro, diccionario HUFF a 16 MiB y capítulo reconstruido a 4 MiB; el texto completo descomprimido se guarda en un temporal. HUFF tiene límite de recursión y detección de ciclos. La fidelidad tipográfica y los cortes de HTML MOBI largos siguen siendo experimentales.
+
+### Junrar: decisión de licencia
+
+**Junrar 7.5.5 usa licencia UnRAR, no GPL, LGPL ni AGPL.** Su cláusula 2 permite usar las fuentes en cualquier software para manejar archivos RAR, gratis, y prohíbe recrear el algoritmo de compresión RAR. Se usa únicamente como extractor de RAR4; no se modifica el JAR ni se implementa un compresor RAR. Esta elección aplica la autorización específica del usuario para código Java compatible con distribución cerrada, y la alternativa UnRAR ya registrada en el inventario.
+
+Se incluyen JAR oficiales locales de Junrar y su única dependencia de producción, **SLF4J API 1.7.36 (MIT)**; no hay resolución Gradle, código nativo ni logback. Los avisos están en `docs/licencias/` y en `Assets/StreamingAssets/Licencias/` para acompañar la APK. El adaptador usa reflexión, por lo que los scripts compilan solo contra android.jar; los JAR son necesarios en ejecución. Si se activa Minify, usar `proguard-user.txt` actualizado. SLF4J sin implementación imprime un aviso inicial y usa logger NOP.
+
+Fuentes y procedencia:
+
+- [Junrar v7.5.5: licencia](https://github.com/junrar/junrar/blob/v7.5.5/LICENSE), [formatos admitidos](https://github.com/junrar/junrar/blob/v7.5.5/README.md) y [dependencias](https://github.com/junrar/junrar/blob/v7.5.5/build.gradle).
+- JAR oficiales: [Junrar en Maven Central](https://repo.maven.apache.org/maven2/com/github/junrar/junrar/7.5.5/junrar-7.5.5.jar), [SLF4J API](https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.jar).
+- Formato MOBI/INDX/PalmDOC: [documentación de estructura](https://wiki.mobileread.com/wiki/MOBI). Se consultaron además descripciones de campos del proyecto libmobi para KF8/HUFF; no se incorpora su código, biblioteca ni licencia a la app. Los parsers y fixtures de esta entrega son propios.
+
+### Validación
+
+Ver `tests/formatos/LEEME.md` para comandos reproducibles. Compilación Java 8 contra android.jar API 34; fixtures propios para TXT, PalmDOC, HUFF/CDIC, KF8, DRM sintético, archivo truncado, CBR ZIP y RAR4. Las pruebas no ejecutan WebView ni Unity y no acreditan nitidez, 72 FPS, latencia de página ni todas las variantes reales de MOBI/RAR.

@@ -487,7 +487,15 @@ namespace FolioXR.Menu
                     break;
                 }
                 case MenuCategory.Ajustes:
-                    // Una sola casilla por ajuste: cada toque pasa al valor siguiente (pedido del usuario, 11 nov).
+                    // Una sola casilla por ajuste, coherente con el menú compacto de la base.
+                    string[] encodings = { "auto", "UTF-8", "Windows-1252" };
+                    int encodingIndex = Array.IndexOf(encodings, PdfPageRenderer.TxtEncoding);
+                    if (encodingIndex < 0) encodingIndex = 0;
+                    string nextEncoding = encodings[(encodingIndex + 1) % encodings.Length];
+                    options.Add(new MenuOption("Codificación TXT:\n" +
+                        (encodings[encodingIndex] == "auto" ? "automática" : encodings[encodingIndex]),
+                        () => { BookLibrary.Instance.SetTxtEncoding(nextEncoding); RebuildOptions(); },
+                        () => BookLibrary.Instance != null && !BookLibrary.Instance.Repaginating));
                     string[] fontNames = { "pequeña", "normal", "grande" };
                     float[] fontScales = { 0.8f, 1f, 1.25f };
                     int font = 1;

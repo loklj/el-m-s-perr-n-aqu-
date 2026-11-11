@@ -3,3 +3,8 @@
 # Para que Unity use este archivo: Player Settings > Publishing Settings >
 # "Custom Proguard File".
 -keep class com.loklj.folioxr.** { *; }
+
+# CBR: acceso por reflexion para mantener javac independiente de los JAR.
+-keep class com.github.junrar.** { *; }
+-keep class org.slf4j.** { *; }
+-dontwarn org.slf4j.impl.StaticLoggerBinder

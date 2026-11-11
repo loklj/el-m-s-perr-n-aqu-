@@ -9,7 +9,7 @@ import javax.xml.parsers.*;
 import org.w3c.dom.*;
 
 /** Contenedor propio: nunca extrae rutas al disco ni concatena todo el libro. */
-public final class FolioEpubContainer implements Closeable {
+public final class FolioEpubContainer implements FolioHtmlSource {
     final ZipFile zip;
     final List<String> spine = new ArrayList<>();
     final Map<String, String> navigation = new LinkedHashMap<>();
@@ -120,5 +120,11 @@ public final class FolioEpubContainer implements Closeable {
         if (declaration.contains("<!ENTITY")) throw new IOException("Entidades XML no admitidas");
         return builder.parse(new ByteArrayInputStream(data));
     }
+    public int chapterCount() { return spine.size(); }
+    public String chapterName(int index) { return spine.get(index); }
+    public byte[] chapter(int index) throws IOException { return read(spine.get(index), 4 * 1024 * 1024); }
+    public byte[] resource(String name, int limit) throws IOException { return read(name, limit); }
+    public boolean isFont(String name) { return fonts.contains(name); }
+    public void checkDrm() { } // La apertura ya valida la proteccion antes de publicar el contenedor.
     public synchronized void close() throws IOException { zip.close(); }
 }

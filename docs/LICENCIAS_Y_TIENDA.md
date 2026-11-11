@@ -60,6 +60,9 @@ El Meta XR All-in-One SDK está en la Asset Store como «activo restringido»: s
 | Android System WebView | Parte del sistema (versión instalada en Horizon OS) | EPUB, API Android 34 | No se distribuye el motor ni fuentes del sistema | Implementado; prueba Quest pendiente |
 | FolioEpubContainer / FolioEpubRenderer | Código propio; APIs java.util.zip, XML y Android del sistema | OPF, spine, NCX/nav, columnas y captura | Sin dependencia externa ni Gradle nueva | Hito 2, 11 de noviembre de 2026 |
 | PDFium propio | BSD-3 / Apache-2.0 + terceros | Solo si `PdfRenderer` no basta | Avisos del conjunto. **FreeType** (licencia FTL) exige un crédito en la documentación; libjpeg-turbo, el crédito del Independent JPEG Group | Candidato |
+| Junrar 7.5.5 | UnRAR, **no GPL/LGPL/AGPL** | Extracción Java de RAR4/CBR | Solo extracción; no recrear compresor RAR. Licencia en docs/licencias y StreamingAssets/Licencias | Incluido como JAR oficial; excepción específica autorizada para extractor compatible con código cerrado |
+| SLF4J API 1.7.36 | MIT | Única dependencia de producción de Junrar | Conservar copyright/licencia, incluidos también en APK | JAR local; sin logback ni resolución Gradle |
+| FolioHtmlSource, TXT, MOBI/EXTH, PalmDOC, HUFF/CDIC, KF8 | Código propio + APIs del sistema | Fuentes de HTML por capítulos | Sin libmobi ni otras dependencias | Encargo 10; validación de parsers JVM |
 | Readium Kotlin Toolkit | BSD-3-Clause | Modelo EPUB | Aviso si se incorpora | No integrado: lector propio para evitar complejidad Gradle en Unity (decisión del usuario, Hito 2) |
 | libarchive | BSD-2-Clause (y algunos archivos BSD-3, dominio público o CC0) | CBZ, CBR | Aviso | Candidato |
 | UnRAR | Licencia UnRAR (freeware) | CBR, si libarchive falla | Se permite usarlo gratis en cualquier programa para **extraer** RAR. Se prohíbe usarlo para crear un compresor compatible con RAR. Si se modifica, incluir el párrafo de la licencia. [R1] | Alternativa |
@@ -109,3 +112,15 @@ Consultadas el 7 de noviembre de 2026.
 - **G1:** [MEGA SDK: ficha de licencias de Debian](https://dfsg-new-queue.debian.org/reviews/megacmd/2.4.0-1).
 - **G2:** [F-Droid: licencia de la app Android de MEGA](https://f-droid.org/forums/topic/mega-nz/).
 - **X1:** [Guía para desarrolladores de Dropbox: aprobación de producción](https://www.dropbox.com/developers/reference/developer-guide).
+
+
+### Artefactos fijados del Encargo 10
+
+Origen: Maven Central (`com.github.junrar:junrar:7.5.5`, `org.slf4j:slf4j-api:1.7.36`). JAR sin modificar en `hito1/Assets/Plugins/Android/FolioRar/`; no se descargan durante el build. Las licencias upstream están completas en `docs/licencias/` y `StreamingAssets/Licencias/`.
+
+| Archivo | SHA-256 |
+| --- | --- |
+| junrar-7.5.5.jar | `e01b949687e2a5b4c68011c1702aa5d2cc8e6c458656ac2c91658b69cebb1bb3` |
+| slf4j-api-1.7.36.jar | `d3ef575e3e4979678dc01bf1dcce51021493b4d11fb7f1be8ad982877c16a1c0` |
+
+Junrar no permite usar sus fuentes para crear un archivador compatible con RAR/WinRAR. Este proyecto solo extrae RAR4 y crea temporales ZIP/CBZ; RAR5 se rechaza con instrucción de conversión. Ver la decisión y fuentes en [FORMATOS_Y_LICENCIAS.md](FORMATOS_Y_LICENCIAS.md#8-estado--encargo-10-formatos-2).

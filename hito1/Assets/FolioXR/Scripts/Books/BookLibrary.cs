@@ -15,8 +15,8 @@ namespace FolioXR.Books
         public int pages, position;
 
         public bool IsPdf => format == "pdf";
-        /// <summary>Formatos que el libro 3D ya abre: PDF, EPUB y cómics CBZ (o ZIP de imágenes).</summary>
-        public bool CanOpen => format == "pdf" || format == "cbz" || format == "zip" || format == "epub";
+        /// <summary>Formatos que el libro 3D ya abre: PDF, fuentes HTML y cómics CBZ/CBR (o ZIP de imágenes).</summary>
+        public bool CanOpen => format == "pdf" || format == "cbz" || format == "zip" || format == "epub" || format == "txt" || format == "mobi" || format == "azw" || format == "azw3" || format == "cbr";
 
         /// <summary>Progreso para el menú: porcentaje, o si aún no se abrió.</summary>
         public string ProgressText => pages <= 0
@@ -205,7 +205,7 @@ namespace FolioXR.Books
         private void OnSpreadShown(int leftPage, int pageCount)
         {
             BookEntry entry = Find(_book.DocumentId);
-            if (!Repaginating && entry != null && entry != Current && entry.format == "epub" &&
+            if (!Repaginating && entry != null && entry != Current && PdfPageRenderer.IsReflow(entry.path) &&
                 entry.pages > 1 && entry.pages != pageCount)
             {
                 _repaginateId = entry.id;
@@ -253,6 +253,9 @@ namespace FolioXR.Books
             BookEntry entry = Find(id);
             if (entry != null && entry.path == PdfPageRenderer.DrmFailurePath)
                 message = "Este libro tiene DRM y no se puede abrir";
+            if (entry != null && entry.path == PdfPageRenderer.FormatFailurePath &&
+                (PdfPageRenderer.FormatFailureDetail ?? string.Empty).StartsWith("CBR"))
+                message = PdfPageRenderer.FormatFailureDetail;
             Notify(entry != null ? "«" + entry.title + "»\n" + message : message);
         }
 
@@ -311,7 +314,7 @@ namespace FolioXR.Books
             if (!Repaginating || (_book.DocumentId != _repaginateId && (Current == null || Current.path != path))) return;
             Repaginating = _awaitingPagination = false;
             _relocatePage = -1;
-            Notify("No se pudo dibujar el EPUB. Vuelve a abrirlo para reintentar.");
+            Notify("No se pudo dibujar el libro. Vuelve a abrirlo para reintentar.");
             StateChanged?.Invoke();
         }
 
@@ -322,14 +325,29 @@ namespace FolioXR.Books
             if (Mathf.Approximately(scale, PdfPageRenderer.EpubFontScale)) return;
             PlayerPrefs.SetFloat(PdfPageRenderer.EpubFontPrefsKey, scale);
             PlayerPrefs.Save();
-            if (Current != null && Current.format == "epub")
+            ReloadReflowCurrent();
+        }
+
+        public void SetTxtEncoding(string encoding)
+        {
+            if (Repaginating || (encoding != "auto" && encoding != "UTF-8" && encoding != "Windows-1252")) return;
+            if (encoding == PdfPageRenderer.TxtEncoding) return;
+            PlayerPrefs.SetString(PdfPageRenderer.TxtEncodingPrefsKey, encoding);
+            PlayerPrefs.Save();
+            if (Current != null && Current.format == "txt") ReloadReflowCurrent();
+            else StateChanged?.Invoke();
+        }
+
+        private void ReloadReflowCurrent()
+        {
+            if (Current != null && PdfPageRenderer.IsReflow(Current.path))
             {
                 _repaginateId = Current.id;
                 _epubProgress = Current.pages > 1 ? Current.position / (float)(Current.pages - 1) : 0f;
                 Repaginating = _awaitingPagination = true;
                 _paginationReady = false;
                 _book.RequestDocument(Current.path, Current.id, Current.position);
-                Notify("Actualizando páginas del EPUB…");
+                Notify("Actualizando páginas del libro…");
             }
             StateChanged?.Invoke();
         }
@@ -369,6 +387,8 @@ namespace FolioXR.Books
         public void CloseCurrent()
         {
             if (Current == null || _book == null) return;
+            Repaginating = _awaitingPagination = false;
+            _relocatePage = -1;
             Save(false);
             Debug.Log("[FolioXR] Biblioteca: cerrar «" + Current.title + "»");
             _book.OpenDefaultDocument();

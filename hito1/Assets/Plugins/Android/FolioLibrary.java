@@ -773,9 +773,14 @@ public final class FolioLibrary {
             return "pdf";
         }
         if (text.startsWith("PK\u0003\u0004")) {
-            if (text.contains("mimetypeapplication/epub+zip") || "epub".equals(extension)) {
+            boolean epubContainer;
+            try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(source)) {
+                epubContainer = zip.getEntry("META-INF/container.xml") != null;
+            }
+            if (epubContainer) {
                 return "epub";
             }
+            if ("cbr".equals(extension)) return "cbr";
             if ("cbz".equals(extension) || "docx".equals(extension) || "odt".equals(extension)) {
                 return extension;
             }
