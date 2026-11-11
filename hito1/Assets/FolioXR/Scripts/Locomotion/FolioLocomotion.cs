@@ -257,9 +257,34 @@ namespace FolioXR.Locomotion
                 Debug.Log("[FolioXR] Movimiento: " + (walking ? "caminar con la mano izquierda" : "detenerse"));
             }
             if (!walking) return false;
-            direction = Vector3.ProjectOnPlane(_leftHand.PointerPose.forward, Vector3.up);
-            if (direction.sqrMagnitude < 0.04f) return false; // Apuntando al suelo o al techo: no avanzar.
+            // Se avanza hacia donde se mira. Antes se usaba la dirección de la mano, pero PointerPose está en
+            // el espacio de seguimiento y, con el rig girado (puntos de lectura), llevaba a cualquier parte.
+            direction = Vector3.ProjectOnPlane(_rig.centerEyeAnchor.forward, Vector3.up);
+            if (direction.sqrMagnitude < 0.04f) return false; // Mirando al suelo o al techo: no avanzar.
             direction.Normalize();
+            return true;
+        }
+
+        /// <summary>
+        /// Rayo de puntería de la mano en coordenadas del mundo. OVRHand deja PointerPose sin padre con
+        /// valores del espacio de seguimiento; si el rig se movió o giró hay que convertirlos.
+        /// </summary>
+        private bool HandAim(OVRHand hand, out Vector3 position, out Vector3 forward)
+        {
+            position = forward = Vector3.zero;
+            Transform pose = hand != null ? hand.PointerPose : null;
+            if (pose == null) return false;
+            Transform space = _rig.trackingSpace;
+            if (pose.parent == null && space != null)
+            {
+                position = space.TransformPoint(pose.localPosition);
+                forward = space.TransformDirection(pose.localRotation * Vector3.forward);
+            }
+            else
+            {
+                position = pose.position;
+                forward = pose.forward;
+            }
             return true;
         }
 
@@ -301,9 +326,17 @@ namespace FolioXR.Locomotion
                 _turnArmed = false;
                 return;
             }
-            Transform source = _aim == AimSource.Controller ? _rig.rightControllerAnchor : _hand.PointerPose;
-            if (source == null) { CancelAim(); return; }
-            DrawArc(source.position, source.forward);
+            if (_aim == AimSource.Controller)
+            {
+                Transform source = _rig.rightControllerAnchor;
+                if (source == null) { CancelAim(); return; }
+                DrawArc(source.position, source.forward);
+            }
+            else
+            {
+                if (!HandAim(_hand, out Vector3 start, out Vector3 aim)) { CancelAim(); return; }
+                DrawArc(start, aim);
+            }
         }
 
         private bool Ignored(Collider collider) => collider == _capsule ||

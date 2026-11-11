@@ -157,6 +157,9 @@ namespace FolioXR.Menu
         private bool _manual, _hasManualTarget;
         private Vector3 _manualTarget;
 
+        /// <summary>Tamaño elegido por la persona (1 = normal); se cambia con las dos manos.</summary>
+        internal float UserScale { get; set; } = 1f;
+
         /// <summary>Centro del asa en el mundo (para empezar a arrastrar).</summary>
         internal Vector3 HandlePosition => _root != null ? _root.TransformPoint(Vector3.down * HandleDrop) : transform.position;
 
@@ -640,7 +643,7 @@ namespace FolioXR.Menu
             _categories.Velocity = 0f;
             _labelsDirty = true; // El atlas pudo cambiar mientras estaba cerrada.
             // Parte del tamaño actual (0 la primera vez): nunca aparece un cuadro a tamaño completo.
-            _root.localScale = Vector3.one * Mathf.SmoothStep(0f, 1f, _scale);
+            _root.localScale = Vector3.one * (Mathf.SmoothStep(0f, 1f, _scale) * UserScale);
             _root.gameObject.SetActive(true);
             ApplyLevel();
         }
@@ -712,7 +715,7 @@ namespace FolioXR.Menu
                 if (_root.gameObject.activeSelf) _root.gameObject.SetActive(false);
                 return;
             }
-            _root.localScale = Vector3.one * Mathf.SmoothStep(0f, 1f, _scale);
+            _root.localScale = Vector3.one * (Mathf.SmoothStep(0f, 1f, _scale) * UserScale);
             if (_model == null) return;
 
             float blend = Mathf.MoveTowards(_blend, _level, dt / LevelSeconds);

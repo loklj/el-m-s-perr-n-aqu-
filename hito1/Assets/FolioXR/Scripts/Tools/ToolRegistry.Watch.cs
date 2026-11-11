@@ -106,9 +106,14 @@ namespace FolioXR.Tools
             _visuals.Box(_watchBody, "Corona", new Vector3(0.0215f, 0f, 0.001f), new Vector3(0.004f, 0.005f, 0.004f), steel);
             for (int side = -1; side <= 1; side += 2)
             {
+                // +Z local entra en la muñeca: la correa baja hacia +Z a cada lado para rodearla.
+                // (Antes el giro tenía el signo invertido y las correas apuntaban hacia fuera.)
                 Transform band = _visuals.Box(_watchBody, side > 0 ? "Correa (12)" : "Correa (6)",
-                                              new Vector3(0f, side * 0.032f, 0.008f), new Vector3(0.022f, 0.026f, 0.003f), strap);
-                band.localRotation = Quaternion.Euler(side * -35f, 0f, 0f);
+                                              new Vector3(0f, side * 0.0295f, 0.0095f), new Vector3(0.022f, 0.022f, 0.003f), strap);
+                band.localRotation = Quaternion.Euler(side * 30f, 0f, 0f);
+                Transform wrap = _visuals.Box(_watchBody, side > 0 ? "Correa baja (12)" : "Correa baja (6)",
+                                              new Vector3(0f, side * 0.0432f, 0.0263f), new Vector3(0.022f, 0.024f, 0.003f), strap);
+                wrap.localRotation = Quaternion.Euler(side * 70f, 0f, 0f);
             }
             var clock = new GameObject("Hora del reloj");
             clock.transform.SetParent(_watchBody, false);
@@ -350,8 +355,18 @@ namespace FolioXR.Tools
             OVRHand hand = input.Hand;
             if (hand == null || !hand.IsPointerPoseValid || hand.PointerPose == null)
                 return false;
-            origin = hand.PointerPose.position;
-            direction = hand.PointerPose.forward;
+            // PointerPose sin padre trae valores del espacio de seguimiento: se pasan al mundo.
+            Transform pose = hand.PointerPose, space = _rig.trackingSpace;
+            if (pose.parent == null && space != null)
+            {
+                origin = space.TransformPoint(pose.localPosition);
+                direction = space.TransformDirection(pose.localRotation * Vector3.forward);
+            }
+            else
+            {
+                origin = pose.position;
+                direction = pose.forward;
+            }
             return true;
         }
 

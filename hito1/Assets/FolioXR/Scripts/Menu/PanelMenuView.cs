@@ -409,6 +409,13 @@ namespace FolioXR.Menu
 
         private static readonly Vector3 HandleLocal = new Vector3(0f, -0.157f, 0f);
 
+        /// <summary>Tamaño elegido por la persona (1 = normal); se cambia con las dos manos.</summary>
+        internal float UserScale
+        {
+            get => transform.localScale.x;
+            set => transform.localScale = Vector3.one * value;
+        }
+
         /// <summary>Centro del asa en el mundo.</summary>
         internal Vector3 HandlePosition => transform.TransformPoint(HandleLocal);
 
@@ -422,7 +429,7 @@ namespace FolioXR.Menu
                 if (away.sqrMagnitude > 0.0001f)
                     rotation = Quaternion.LookRotation(away.normalized, Vector3.up) * Quaternion.Euler(15f, 0f, 0f);
             }
-            transform.SetPositionAndRotation(handle - rotation * HandleLocal, rotation);
+            transform.SetPositionAndRotation(handle - rotation * (HandleLocal * transform.localScale.x), rotation);
             _placed = true;
         }
 

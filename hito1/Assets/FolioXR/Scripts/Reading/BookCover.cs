@@ -31,6 +31,7 @@ namespace FolioXR.Reading
         private bool _own, _rtl;
         private string _titleText = string.Empty;
         private Font _font;
+        private Material _textMaterial;
 
         internal static BookCover Attach(FolioBook book)
         {
@@ -63,7 +64,19 @@ namespace FolioXR.Reading
             text.color = Gold;
             text.richText = false;
             var renderer = item.GetComponent<MeshRenderer>();
-            if (_font != null) renderer.sharedMaterial = _font.material;
+            if (_font != null)
+            {
+                // El material propio de la fuente dibuja encima de todo (ZTest Always) y el título se veía
+                // a través de las páginas y el lomo. FolioXR/Text3D es igual pero respeta la profundidad.
+                if (_textMaterial == null)
+                {
+                    Shader shader = Resources.Load<Shader>("FolioXRText3D");
+                    if (shader != null && shader.isSupported)
+                        _textMaterial = new Material(shader) { name = "Título de tapa", mainTexture = _font.material.mainTexture };
+                    else Debug.LogWarning("[FolioXR] Falta el sombreador FolioXR/Text3D; el título usará el de la fuente.");
+                }
+                renderer.sharedMaterial = _textMaterial != null ? _textMaterial : _font.material;
+            }
             renderer.shadowCastingMode = ShadowCastingMode.Off;
             return text;
         }
@@ -178,6 +191,7 @@ namespace FolioXR.Reading
             _backImage.transform.localRotation = facingOut;
             _backImage.transform.localScale = new Vector3(width, height, 1f);
 
+            if (_textMaterial != null && _font != null) _textMaterial.mainTexture = _font.material.mainTexture;
             _title.text = Wrap(_titleText, 16, 3);
             _title.transform.localPosition = new Vector3(front, height * 0.12f, outside);
             _title.transform.localRotation = facingOut;
@@ -240,6 +254,7 @@ namespace FolioXR.Reading
             if (_backTexture != null) Destroy(_backTexture);
             if (_frontMaterial != null) Destroy(_frontMaterial);
             if (_backMaterial != null) Destroy(_backMaterial);
+            if (_textMaterial != null) Destroy(_textMaterial);
         }
     }
 }

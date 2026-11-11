@@ -179,9 +179,9 @@ namespace FolioXR.Menu
                 PauseControls(true);
                 FollowRigJump();
                 _panel.BeginPointers();
-                if (_dragSlot != 0)
+                if (_dragSlot != 0 && _scaleSlot != 0)
                     UpdatePointer(0, XRNode.LeftHand, _rig != null ? _rig.leftControllerAnchor : null, _left);
-                if (IsOpen && _dragSlot != 1)
+                if (IsOpen && _dragSlot != 1 && _scaleSlot != 1)
                     UpdatePointer(1, XRNode.RightHand, _rig != null ? _rig.rightControllerAnchor : null, _right);
                 _panel.EndPointers();
             }
@@ -233,7 +233,7 @@ namespace FolioXR.Menu
                 input.AnchorValid = true;
                 input.Anchor = (wrist + knuckle) * 0.5f; // Centro de la palma.
             }
-            if (_dragSlot != 1 && !ToolRegistry.HoldsHand(XRNode.RightHand) && !ToolRegistry.HoldsController(XRNode.RightHand) &&
+            if (_dragSlot != 1 && _scaleSlot != 1 && !ToolRegistry.HoldsHand(XRNode.RightHand) && !ToolRegistry.HoldsController(XRNode.RightHand) &&
                 _right.TryBone(OVRSkeleton.BoneId.Hand_IndexTip, out Vector3 tip))
             {
                 input.TipValid = true;
@@ -278,36 +278,94 @@ namespace FolioXR.Menu
             bool sphere = _view != (IMenuView)_panel;
             if (!IsOpen || camera == null || (sphere ? _sphere == null : _panel == null))
             {
-                _dragSlot = -1;
+                _dragSlot = _scaleSlot = -1;
                 _grabWas[0] = _grabWas[1] = true;
                 return false;
             }
             Vector3 handle = sphere ? _sphere.HandlePosition : _panel.HandlePosition;
+            var points = new Vector3[2];
+            var valid = new bool[2];
+            var held = new bool[2];
+            var edge = new bool[2];
+            var reach = new float[2];
             for (int i = 0; i < 2; i++)
             {
-                bool valid = GrabPoint(i, out Vector3 point, out bool held, out float reach);
-                bool edge = valid && held && !_grabWas[i];
-                _grabWas[i] = !valid || held;
-                if (_dragSlot == i)
-                {
-                    if (!valid || !held)
+                valid[i] = GrabPoint(i, out points[i], out held[i], out reach[i]);
+                edge[i] = valid[i] && held[i] && !_grabWas[i];
+                _grabWas[i] = !valid[i] || held[i];
+            }
+            if (_dragSlot >= 0 && (!valid[_dragSlot] || !held[_dragSlot]))
+            {
+                // Soltó la mano que sujeta el asa: termina el arrastre (y el cambio de tamaño, si lo había).
+                if (_scaleSlot >= 0) SaveMenuScale(sphere);
+                _dragSlot = _scaleSlot = -1;
+                _audio.PlayOneShot(_click);
+                Debug.Log("[FolioXR] Menú movido.");
+                return false;
+            }
+            if (_dragSlot < 0)
+            {
+                for (int i = 0; i < 2; i++)
+                    if (edge[i] && (points[i] - handle).sqrMagnitude <= reach[i] * reach[i])
                     {
-                        _dragSlot = -1;
+                        _dragSlot = i;
+                        _dragOffset = handle - points[i];
                         _audio.PlayOneShot(_click);
-                        Debug.Log("[FolioXR] Menú movido.");
-                        continue;
+                        break;
                     }
-                    if (sphere) _sphere.MoveHandleTo(point + _dragOffset);
-                    else _panel.MoveHandleTo(point + _dragOffset, camera.transform);
-                }
-                else if (_dragSlot < 0 && edge && (point - handle).sqrMagnitude <= reach * reach)
+                return _dragSlot >= 0;
+            }
+            // Igual que los libros: con el asa sujeta, la otra mano pellizca (o aprieta el grip) y al
+            // separar o juntar las manos el menú crece o se achica.
+            int other = 1 - _dragSlot;
+            if (_scaleSlot == other && (!valid[other] || !held[other]))
+            {
+                _scaleSlot = -1;
+                SaveMenuScale(sphere);
+            }
+            else if (_scaleSlot < 0 && edge[other])
+            {
+                float distance = Vector3.Distance(points[0], points[1]);
+                if (distance > 0.03f)
                 {
-                    _dragSlot = i;
-                    _dragOffset = handle - point;
+                    _scaleSlot = other;
+                    _scaleStartDistance = distance;
+                    _scaleStart = sphere ? _sphere.UserScale : _panel.UserScale;
                     _audio.PlayOneShot(_click);
                 }
             }
-            return _dragSlot >= 0;
+            if (_scaleSlot == other)
+            {
+                float scale = Mathf.Clamp(_scaleStart * Vector3.Distance(points[0], points[1]) / _scaleStartDistance,
+                                          MinMenuScale, MaxMenuScale);
+                // El asa se queda en la mano que la sujeta mientras cambia el tamaño.
+                if (sphere) _sphere.UserScale = scale; else _panel.UserScale = scale;
+            }
+            if (sphere) _sphere.MoveHandleTo(points[_dragSlot] + _dragOffset);
+            else _panel.MoveHandleTo(points[_dragSlot] + _dragOffset, camera.transform);
+            return true;
+        }
+
+        private const float MinMenuScale = 0.5f, MaxMenuScale = 3f;
+        private const string MenuScaleKey = "folioxr.menuScale.";
+        private int _scaleSlot = -1;
+        private float _scaleStart = 1f, _scaleStartDistance = 1f;
+
+        private void SaveMenuScale(bool sphere)
+        {
+            float scale = sphere ? _sphere.UserScale : _panel.UserScale;
+            PlayerPrefs.SetFloat(MenuScaleKey + (sphere ? "esfera" : "panel"), scale);
+            PlayerPrefs.Save();
+            Debug.Log("[FolioXR] Tamaño del menú " + (sphere ? "esférico" : "simple") + ": " + scale.ToString("F2"));
+        }
+
+        /// <summary>Aplica el tamaño guardado de cada menú (se llama al abrir).</summary>
+        private void LoadMenuScales()
+        {
+            if (_panel != null)
+                _panel.UserScale = Mathf.Clamp(PlayerPrefs.GetFloat(MenuScaleKey + "panel", 1f), MinMenuScale, MaxMenuScale);
+            if (_sphere != null)
+                _sphere.UserScale = Mathf.Clamp(PlayerPrefs.GetFloat(MenuScaleKey + "esfera", 1f), MinMenuScale, MaxMenuScale);
         }
 
         private bool GrabPoint(int slot, out Vector3 point, out bool held, out float reach)
@@ -353,6 +411,7 @@ namespace FolioXR.Menu
             _waitingRelease = false;
             PauseControls(true);
             for (int i = 0; i < 2; i++) { _touchArmed[i] = _hasTip[i] = false; _triggerWas[i] = true; }
+            LoadMenuScales();
             _view.SetOpen(true, camera.transform);
             if (_rig != null) _lastRigPosition = _rig.transform.position;
             Debug.Log("[FolioXR] Menú abierto: " + StyleName + ".");
