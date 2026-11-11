@@ -129,6 +129,10 @@ namespace FolioXR.Menu
             for (int i = 0; i < 5; i++) _categories.SlotTile[i] = i;
             _frameMesh = FrameMesh();
             _frame = MeshObject(_root, "Marco del frente", _frameMesh, _optionMaterial).transform;
+            // Asa para moverla: barra bajo la esfera; se agarra con pellizco (mano) o agarre (mando).
+            _handleMesh = BoxMesh(new Vector3(0.05f, 0.008f, 0.008f));
+            MeshObject(_root, "Asa para mover", _handleMesh, _bodyMaterial).transform.localPosition =
+                Vector3.down * HandleDrop;
             _root.gameObject.SetActive(false);
             ApplyLevel();
             return true;
@@ -146,6 +150,55 @@ namespace FolioXR.Menu
             ring.Labels.MarkDynamic();
             ring.TilesRenderer = MeshObject(ring.Spin, "Casillas", ring.Tiles, tiles);
             ring.LabelsRenderer = MeshObject(ring.Spin, "Textos", ring.Labels, labels);
+        }
+
+        private const float HandleDrop = 0.092f;
+        private Mesh _handleMesh;
+        private bool _manual, _hasManualTarget;
+        private Vector3 _manualTarget;
+
+        /// <summary>Centro del asa en el mundo (para empezar a arrastrar).</summary>
+        internal Vector3 HandlePosition => _root != null ? _root.TransformPoint(Vector3.down * HandleDrop) : transform.position;
+
+        /// <summary>Mueve la esfera para que el asa quede en <paramref name="handle"/>; deja de seguir a la mano.</summary>
+        internal void MoveHandleTo(Vector3 handle)
+        {
+            _manual = _hasManualTarget = true;
+            _manualTarget = handle + Vector3.up * HandleDrop * _root.lossyScale.y;
+        }
+
+        internal static Mesh BoxMesh(Vector3 size)
+        {
+            Vector3 h = size * 0.5f;
+            var vertices = new List<Vector3>();
+            var triangles = new List<int>();
+            Vector3[] normals = { Vector3.right, Vector3.left, Vector3.up, Vector3.down, Vector3.forward, Vector3.back };
+            foreach (Vector3 n in normals)
+            {
+                Vector3 a = Vector3.Cross(n, Mathf.Abs(n.y) > 0.5f ? Vector3.forward : Vector3.up);
+                Vector3 b = Vector3.Cross(n, a);
+                int start = vertices.Count;
+                foreach (var c in new[] { new Vector2(-1, -1), new Vector2(-1, 1), new Vector2(1, 1), new Vector2(1, -1) })
+                    vertices.Add(Vector3.Scale(n + a * c.x + b * c.y, h));
+                triangles.AddRange(new[] { start, start + 1, start + 2, start, start + 2, start + 3 });
+            }
+            var mesh = new Mesh { name = "Caja" };
+            mesh.SetVertices(vertices);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            // Corrige el sentido de cada cara para que mire hacia fuera.
+            int[] t = mesh.triangles;
+            Vector3[] v = mesh.vertices;
+            for (int i = 0; i < t.Length; i += 3)
+            {
+                Vector3 normal = Vector3.Cross(v[t[i + 1]] - v[t[i]], v[t[i + 2]] - v[t[i]]);
+                Vector3 center = (v[t[i]] + v[t[i + 1]] + v[t[i + 2]]) / 3f;
+                if (Vector3.Dot(normal, center) < 0f) { int k = t[i + 1]; t[i + 1] = t[i + 2]; t[i + 2] = k; }
+            }
+            mesh.triangles = t;
+            mesh.RecalculateNormals();
+            return mesh;
         }
 
         private static MeshRenderer MeshObject(Transform parent, string name, Mesh mesh, Material material)
@@ -583,7 +636,7 @@ namespace FolioXR.Menu
             if (!open) return;
             _level = 0;
             _blend = 0f;
-            _placed = false;
+            _placed = _manual = _hasManualTarget = false;
             _categories.Velocity = 0f;
             _labelsDirty = true; // El atlas pudo cambiar mientras estaba cerrada.
             // Parte del tamaño actual (0 la primera vez): nunca aparece un cuadro a tamaño completo.
@@ -745,7 +798,13 @@ namespace FolioXR.Menu
         private void Place(SphereInput input, float dt)
         {
             Vector3 position = _root.position;
-            if (input.AnchorValid && (input.FollowAnchor || !_placed))
+            if (_manual && _placed)
+            {
+                // Movida a mano con el asa: queda donde la dejaron (en el espacio del rig).
+                if (_hasManualTarget) { position = _manualTarget; _hasManualTarget = false; }
+                else if (input.Space != null) position = input.Space.TransformPoint(_spaceLocal);
+            }
+            else if (input.AnchorValid && (input.FollowAnchor || !_placed))
             {
                 Vector3 target = input.Anchor + Vector3.up * AnchorHeight;
                 // Sigue a la mano en tiempo real; un salto del rig no la arrastra por el aire.
@@ -961,7 +1020,7 @@ namespace FolioXR.Menu
         {
             Unbind();
             foreach (UnityEngine.Object item in new UnityEngine.Object[] {
-                _bodyMesh, _frameMesh, _categories.Tiles, _categories.Labels, _options.Tiles, _options.Labels,
+                _bodyMesh, _frameMesh, _handleMesh, _categories.Tiles, _categories.Labels, _options.Tiles, _options.Labels,
                 _bodyMaterial, _categoryMaterial, _categoryTextMaterial, _optionMaterial, _bodyTexture, _palette })
                 if (item != null) Destroy(item);
         }

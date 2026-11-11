@@ -51,6 +51,7 @@ namespace FolioXR.Menu
                 case OVRSkeleton.BoneId.Hand_Middle1: return OVRSkeleton.BoneId.XRHand_MiddleProximal;
                 case OVRSkeleton.BoneId.Hand_Pinky1: return OVRSkeleton.BoneId.XRHand_LittleProximal;
                 case OVRSkeleton.BoneId.Hand_IndexTip: return OVRSkeleton.BoneId.XRHand_IndexTip;
+                case OVRSkeleton.BoneId.Hand_ThumbTip: return OVRSkeleton.BoneId.XRHand_ThumbTip;
                 case OVRSkeleton.BoneId.Hand_MiddleTip: return OVRSkeleton.BoneId.XRHand_MiddleTip;
                 case OVRSkeleton.BoneId.Hand_RingTip: return OVRSkeleton.BoneId.XRHand_RingTip;
                 case OVRSkeleton.BoneId.Hand_PinkyTip: return OVRSkeleton.BoneId.XRHand_LittleTip;

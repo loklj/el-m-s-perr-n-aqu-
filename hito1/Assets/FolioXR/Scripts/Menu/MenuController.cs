@@ -168,6 +168,7 @@ namespace FolioXR.Menu
                 if (_view == (IMenuView)_sphere && _sphere != null && _sphere.Back()) _audio.PlayOneShot(_click);
                 else Close();
             }
+            UpdateDrag();
             if (IsOpen && _view != (IMenuView)_panel)
             {
                 PauseControls(true);
@@ -178,8 +179,10 @@ namespace FolioXR.Menu
                 PauseControls(true);
                 FollowRigJump();
                 _panel.BeginPointers();
-                UpdatePointer(0, XRNode.LeftHand, _rig != null ? _rig.leftControllerAnchor : null, _left);
-                if (IsOpen) UpdatePointer(1, XRNode.RightHand, _rig != null ? _rig.rightControllerAnchor : null, _right);
+                if (_dragSlot != 0)
+                    UpdatePointer(0, XRNode.LeftHand, _rig != null ? _rig.leftControllerAnchor : null, _left);
+                if (IsOpen && _dragSlot != 1)
+                    UpdatePointer(1, XRNode.RightHand, _rig != null ? _rig.rightControllerAnchor : null, _right);
                 _panel.EndPointers();
             }
             else
@@ -230,7 +233,7 @@ namespace FolioXR.Menu
                 input.AnchorValid = true;
                 input.Anchor = (wrist + knuckle) * 0.5f; // Centro de la palma.
             }
-            if (!ToolRegistry.HoldsHand(XRNode.RightHand) && !ToolRegistry.HoldsController(XRNode.RightHand) &&
+            if (_dragSlot != 1 && !ToolRegistry.HoldsHand(XRNode.RightHand) && !ToolRegistry.HoldsController(XRNode.RightHand) &&
                 _right.TryBone(OVRSkeleton.BoneId.Hand_IndexTip, out Vector3 tip))
             {
                 input.TipValid = true;
@@ -258,6 +261,76 @@ namespace FolioXR.Menu
                 }
             }
             _sphere.Drive(input);
+        }
+
+        // ───────────── Mover el menú con el asa (panel y esfera) ─────────────
+        private int _dragSlot = -1;
+        private Vector3 _dragOffset;
+        private readonly bool[] _grabWas = { true, true };
+
+        /// <summary>
+        /// Pellizco (mano) o agarre (mando) a pocos centímetros del asa: el menú sigue a ese punto
+        /// hasta soltar. Devuelve true mientras arrastra.
+        /// </summary>
+        private bool UpdateDrag()
+        {
+            Camera camera = Camera.main;
+            bool sphere = _view != (IMenuView)_panel;
+            if (!IsOpen || camera == null || (sphere ? _sphere == null : _panel == null))
+            {
+                _dragSlot = -1;
+                _grabWas[0] = _grabWas[1] = true;
+                return false;
+            }
+            Vector3 handle = sphere ? _sphere.HandlePosition : _panel.HandlePosition;
+            for (int i = 0; i < 2; i++)
+            {
+                bool valid = GrabPoint(i, out Vector3 point, out bool held, out float reach);
+                bool edge = valid && held && !_grabWas[i];
+                _grabWas[i] = !valid || held;
+                if (_dragSlot == i)
+                {
+                    if (!valid || !held)
+                    {
+                        _dragSlot = -1;
+                        _audio.PlayOneShot(_click);
+                        Debug.Log("[FolioXR] Menú movido.");
+                        continue;
+                    }
+                    if (sphere) _sphere.MoveHandleTo(point + _dragOffset);
+                    else _panel.MoveHandleTo(point + _dragOffset, camera.transform);
+                }
+                else if (_dragSlot < 0 && edge && (point - handle).sqrMagnitude <= reach * reach)
+                {
+                    _dragSlot = i;
+                    _dragOffset = handle - point;
+                    _audio.PlayOneShot(_click);
+                }
+            }
+            return _dragSlot >= 0;
+        }
+
+        private bool GrabPoint(int slot, out Vector3 point, out bool held, out float reach)
+        {
+            XRNode node = slot == 0 ? XRNode.LeftHand : XRNode.RightHand;
+            point = Vector3.zero; held = false; reach = 0f;
+            if (TrackedController(node, out InputDevice device))
+            {
+                Transform anchor = _rig == null ? null : slot == 0 ? _rig.leftControllerAnchor : _rig.rightControllerAnchor;
+                if (anchor == null || ToolRegistry.HoldsController(node)) return false;
+                point = anchor.position;
+                held = Down(device, CommonUsages.gripButton);
+                reach = 0.1f;
+                return true;
+            }
+            MenuHandInput hand = slot == 0 ? _left : _right;
+            if (hand.Hand == null || ToolRegistry.HoldsHand(node) ||
+                !hand.TryBone(OVRSkeleton.BoneId.Hand_IndexTip, out Vector3 index) ||
+                !hand.TryBone(OVRSkeleton.BoneId.Hand_ThumbTip, out Vector3 thumb)) return false;
+            point = (index + thumb) * 0.5f;
+            held = hand.Hand.GetFingerIsPinching(OVRHand.HandFinger.Index);
+            reach = 0.06f;
+            return true;
         }
 
         private static bool TrackedController(XRNode node, out InputDevice device)

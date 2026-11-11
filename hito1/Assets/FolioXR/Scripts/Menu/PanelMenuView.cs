@@ -219,6 +219,8 @@ namespace FolioXR.Menu
             }
             _buttons.Clear(); _vertices.Clear(); _uv.Clear(); _indices.Clear();
             RoundedRect(new Rect(-0.2f, -0.14f, 0.4f, 0.28f), 0f, 0, 0.012f);
+            // Asa para mover el panel: pellizco (mano) o agarre del mando cerca de ella.
+            RoundedRect(new Rect(-0.05f, -0.163f, 0.1f, 0.012f), 0f, 7, 0.006f);
             for (int i = 0; i < 5; i++)
                 AddButton(new Rect(-0.192f, Top - i * RowPitch - ButtonHeight, 0.148f, ButtonHeight), i, -1, false);
             AddButton(new Rect(0.148f, 0.094f, 0.044f, 0.04f), -1, -1, true);
@@ -403,6 +405,25 @@ namespace FolioXR.Menu
             transform.SetPositionAndRotation(head.position + head.forward * 0.45f - (facing * Vector3.up) * 0.10f,
                 facing * Quaternion.Euler(15f, 0f, 0f));
             _placed = true; // Nunca se parenta al rig: permanece fijo en el mundo.
+        }
+
+        private static readonly Vector3 HandleLocal = new Vector3(0f, -0.157f, 0f);
+
+        /// <summary>Centro del asa en el mundo.</summary>
+        internal Vector3 HandlePosition => transform.TransformPoint(HandleLocal);
+
+        /// <summary>Mueve el panel para que el asa quede en <paramref name="handle"/>, mirando a la cabeza.</summary>
+        internal void MoveHandleTo(Vector3 handle, Transform head)
+        {
+            Quaternion rotation = transform.rotation;
+            if (head != null)
+            {
+                Vector3 away = Vector3.ProjectOnPlane(handle - head.position, Vector3.up);
+                if (away.sqrMagnitude > 0.0001f)
+                    rotation = Quaternion.LookRotation(away.normalized, Vector3.up) * Quaternion.Euler(15f, 0f, 0f);
+            }
+            transform.SetPositionAndRotation(handle - rotation * HandleLocal, rotation);
+            _placed = true;
         }
 
         /// <summary>Recoloca el panel abierto frente a la vista (por ejemplo, después de un salto del rig).</summary>
