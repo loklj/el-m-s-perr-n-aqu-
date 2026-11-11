@@ -98,7 +98,8 @@ namespace FolioXR.Menu
             return true;
         }
 
-        private Material Clone(Material source, string name, Texture texture)
+        /// <summary>Clon transparente del material URP Unlit de la página; también lo usa la esfera.</summary>
+        internal static Material Clone(Material source, string name, Texture texture)
         {
             var material = new Material(source) { name = "FolioXR " + name };
             material.mainTexture = texture;
@@ -184,6 +185,12 @@ namespace FolioXR.Menu
             _close = close;
             _model.Changed += Refresh;
             Refresh();
+        }
+
+        public void Unbind()
+        {
+            if (_model != null) _model.Changed -= Refresh;
+            _model = null;
         }
 
         public void Refresh()

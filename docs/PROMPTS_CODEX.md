@@ -27,7 +27,7 @@ Responde siempre en español. Repositorio: https://github.com/loklj/el-m-s-perr-
 | 2 | Tanda D: lápices, tinta invisible y libreta | `fase-1/preparacion` | Escrita por Claude el 11 de noviembre de 2026 (Codex sin cupo) |
 | 3 | Tanda E: lupa y regla | `fase-1/preparacion` | Escrita por Claude el 11 de noviembre de 2026 |
 | | 🧪 Prueba en el visor: herramientas, movimiento y libro | | |
-| 4 | Menú esférico | `menus/esfera-1` | En curso (enviado el 10 de noviembre de 2026; Ultra agotó el cupo en 6 min) |
+| 4 | Menú esférico | `fase-1/preparacion` | Escrito por Claude el 11 de noviembre de 2026 (Ultra agotó el cupo de Codex en 6 min, sin subir nada) |
 | 5 | Biblioteca persistente e importación local | `fase1/biblioteca` | Pendiente |
 | 6 | Formatos base: PDF robusto y CBZ/ZIP | `fase1/formatos-base` | Pendiente |
 | 7 | Hito 2: EPUB en el libro 3D (WebView + Readium) | `hito2/epub` | Necesita la autorización del usuario |

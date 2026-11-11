@@ -83,3 +83,40 @@ Fecha: 7 de noviembre de 2026. Basado en el boceto del usuario («Menú esféric
 1. Terminar y revisar el entorno de prueba (rama `entornos/prueba-1`, hecho por Codex). Quedó sin subir porque se acabó el cupo de Codex; se reanuda cuando se restablezca.
 2. Programar el modelo compartido y el [menú simple](MENU_SIMPLE.md) (Codex), revisarlo (Claude) y probarlo (usuario).
 3. Programar esta esfera sobre el mismo modelo (Codex), revisarla (Claude) y probarla en el Quest 3 (usuario).
+
+## Estado
+
+Escrito por Claude el 11 de noviembre de 2026, a pedido del usuario («continua tu»), porque Codex agotó su cupo antes de subir nada. Compila con Roslyn (C# 9) contra los stubs de Unity 6000.3 y Meta XR 207. Falta probarlo en el Quest 3.
+
+**Qué hay**
+- `Menu/SphereMenuView.cs` es la segunda vista del mismo `MenuModel`. `MenuController` crea las dos y usa la que diga `folioxr.menuStyle`. La esfera es el estilo por defecto.
+- En Ajustes, «Menú: Esfera» y «Menú: Simple» cambian de vista al instante, incluso con el menú abierto.
+- Antes de existir la esfera, la app guardaba «simple» a la fuerza. Por eso solo se respeta «simple» si el usuario lo eligió (`folioxr.menuStyleChosen`).
+- La esfera muestra todas las opciones del modelo sin listas propias: lo que se agregue al modelo aparece solo.
+
+**Cómo se usa**
+- **Abrir y cerrar:** botón ☰ izquierdo, o cerrar y abrir la palma izquierda hacia arriba. La esfera aparece 13 cm sobre el mando o la palma izquierda y los sigue. Si la mano sale de vista, queda donde estaba.
+- **Girar con la mano:** deslizar el índice derecho sobre la esfera. Al soltar sigue con inercia, se frena y se acomoda en la casilla más cercana.
+- **Elegir con la mano:** tocar la casilla del frente (la del marco claro) y retirar el dedo sin deslizar, como en una pantalla táctil. Tocar una casilla lateral la trae al frente.
+- **Con mandos:** el stick de cualquier mando sin herramienta gira una casilla por movimiento; el gatillo elige la del frente; B/Y vuelve a las categorías o, si ya está en ellas, cierra.
+- **Segundo nivel:** al elegir una categoría, toda la esfera gira 52° hacia arriba en 0,3 s. Las categorías quedan arriba, atenuadas, y el anillo de opciones sube al ecuador. «Volver» queda justo a la izquierda de la primera opción. Tocar una categoría atenuada también vuelve.
+- **Clic** al pasar cada casilla por el frente y al elegir; con mando, además, una vibración corta.
+- Mientras el menú está abierto se oculta el reloj de herramientas de la muñeca.
+
+**Cómo está hecho**
+- **6 draw calls:** cuerpo, casillas y textos de cada anillo, y el marco del frente (más el aviso del temporizador cuando aparece). Texturas de 128 px y 8×1.
+- **Textos propios:** los de cada anillo son una sola malla hecha con los glifos de la fuente integrada, curvada sobre la esfera. Se ajustan a su casilla en una o dos líneas y se achican lo necesario: siempre caben.
+- **Cuerpo:** esfera azul con una textura radial que siempre mira al lector (centro translúcido, borde claro). Escribe profundidad, así las casillas de la cara de atrás no se ven a través de ella.
+- **Anillos largos:** con más de cinco casillas (Ajustes tiene 16 con «Volver») solo existe la ventana de cinco alrededor del frente. Se rehace cuando cambia la casilla del frente; las que entran y salen lo hacen por detrás.
+- **Mallas:** se rehacen solo cuando cambia su contenido (opciones, marcas, minuto del reloj, ventana). Al girar solo se mueven transformaciones.
+
+**Diferencias con el diseño**
+- Los textos miden entre 0,7 y 1,1 cm según su largo, no 1 cm como mínimo: se priorizó que siempre quepan.
+- El centro de la esfera queda 13 cm sobre la mano, no 10, para que los dedos no la toquen al abrir la palma.
+- El stick izquierdo también gira la esfera, además del derecho.
+
+**Riesgos**
+- Hay que calibrar en el visor las distancias de toque: zona de 8 mm fuera a 3,5 cm dentro de la superficie, y 7° de deslizamiento para empezar a girar.
+- Al escribir profundidad, la esfera tapa los objetos transparentes que queden justo detrás (el aviso del libro, el resaltador).
+- El texto usa el atlas dinámico de la fuente. Si Unity lo reconstruye, los textos se rehacen en el cuadro siguiente.
+

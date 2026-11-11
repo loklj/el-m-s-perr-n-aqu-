@@ -18,6 +18,8 @@ namespace FolioXR.Menu
         void Bind(MenuModel model, Action close);
         void SetOpen(bool open, Transform head);
         void Refresh();
+        /// <summary>Deja de escuchar al modelo (al cambiar de estilo solo la vista activa se actualiza).</summary>
+        void Unbind();
         void ShowNotice(string message, Transform head);
     }
 
@@ -49,7 +51,8 @@ namespace FolioXR.Menu
 
         private readonly FolioBook _book;
         private readonly FolioEnvironmentController _environment;
-        private readonly Action _useSimple;
+        private readonly Func<bool> _sphereStyle;
+        private readonly Action<bool> _setSphereStyle;
         private IReadOnlyList<MenuOption> _options;
         private bool _lastEnvironmentActive;
         private float _lastRenderScale;
@@ -58,11 +61,13 @@ namespace FolioXR.Menu
         private int _pendingClear; // 0 = nada, 1 = página, 2 = casa.
         private float _pendingClearUntil;
 
-        public MenuModel(FolioBook book, FolioEnvironmentController environment, Action useSimple)
+        public MenuModel(FolioBook book, FolioEnvironmentController environment, Func<bool> sphereStyle,
+            Action<bool> setSphereStyle)
         {
             _book = book;
             _environment = environment;
-            _useSimple = useSimple;
+            _sphereStyle = sphereStyle;
+            _setSphereStyle = setSphereStyle;
             RebuildOptions();
         }
 
@@ -166,8 +171,8 @@ namespace FolioXR.Menu
                             () => _book.SetRenderScale(scale), () => _book != null,
                             () => _book != null && Mathf.Approximately(_book.RenderScale, scale)));
                     }
-                    options.Add(new MenuOption("Estilo de menú:\nSimple", _useSimple, marked: () => true));
-                    options.Add(new MenuOption("Esfera\n(próximamente)"));
+                    options.Add(new MenuOption("Menú:\nEsfera", () => _setSphereStyle(true), marked: () => _sphereStyle()));
+                    options.Add(new MenuOption("Menú:\nSimple", () => _setSphereStyle(false), marked: () => !_sphereStyle()));
                     options.Add(new MenuOption("Física: " + (_book != null && _book.RealisticPhysics ? "Realista" : "Flotante"),
                         () => { _book.SetRealisticPhysics(!_book.RealisticPhysics); RebuildOptions(); }, () => _book != null));
                     options.Add(new MenuOption("Viñeta: " + (FolioLocomotion.VignetteEnabled ? "sí" : "no"),

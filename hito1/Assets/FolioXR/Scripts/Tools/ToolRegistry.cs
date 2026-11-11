@@ -196,7 +196,8 @@ namespace FolioXR.Tools
                      : _inputs[0].Reliable ? (_inputs[0].Wrist != null ? _inputs[0].Wrist : _inputs[0].Hand.transform)
                                            : null;
             _wristValid = _wrist != null && _focused;
-            _watch.gameObject.SetActive(_wristValid);
+            // Con el menú abierto (controles en pausa) el reloj se oculta: no compite con la esfera de la mano.
+            _watch.gameObject.SetActive(_wristValid && !_book.InputPaused);
             if (!_wristValid)
                 return;
             Camera camera = Camera.main;

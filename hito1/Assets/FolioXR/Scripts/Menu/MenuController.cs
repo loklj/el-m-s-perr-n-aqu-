@@ -12,13 +12,19 @@ namespace FolioXR.Menu
     public sealed class MenuController : MonoBehaviour
     {
         public const string StylePrefsKey = "folioxr.menuStyle";
+        private const string StyleChosenKey = "folioxr.menuStyleChosen";
         public bool IsOpen { get; private set; }
+        /// <summary>Estilo elegido: esfera (por defecto) o panel simple.</summary>
+        public bool SphereStyle { get; private set; } = true;
         public MenuModel Model { get; private set; }
         private FolioBook _book;
         private FolioEnvironmentController _environment;
         private OVRCameraRig _rig;
         private PanelMenuView _panel;
-        private IMenuView _view; // Punto de extensión para la futura SphereMenuView.
+        private SphereMenuView _sphere;
+        private IMenuView _view; // La vista activa: _sphere o _panel.
+        private InputDevice _sphereDevice;
+        private bool _styleDirty;
         private readonly MenuHandInput _left = new MenuHandInput();
         private readonly MenuHandInput _right = new MenuHandInput();
         private readonly bool[] _triggerWas = { true, true };
@@ -42,7 +48,9 @@ namespace FolioXR.Menu
 
         private void Awake()
         {
-            UseSimpleStyle();
+            // Antes de existir la esfera se guardaba «simple» a la fuerza: solo vale lo que el usuario eligió.
+            SphereStyle = PlayerPrefs.GetInt(StyleChosenKey, 0) == 0 ||
+                PlayerPrefs.GetString(StylePrefsKey, "sphere") != "simple";
             _audio = gameObject.AddComponent<AudioSource>();
             _audio.playOnAwake = false;
             _audio.spatialBlend = 0f;
@@ -50,12 +58,35 @@ namespace FolioXR.Menu
             _notice = Tone("Fin de lectura", 440f, 0.65f, 0.07f);
         }
 
-        public void UseSimpleStyle()
+        public void SetSphereStyle(bool sphere)
         {
-            // Hasta implementar la otra vista, incluso una preferencia antigua usa el panel.
-            PlayerPrefs.SetString(StylePrefsKey, "simple");
+            PlayerPrefs.SetString(StylePrefsKey, sphere ? "sphere" : "simple");
+            PlayerPrefs.SetInt(StyleChosenKey, 1);
             PlayerPrefs.Save();
+            SphereStyle = sphere;
+            _styleDirty = true; // Se cambia de vista al final del cuadro, fuera de la acción del botón.
         }
+
+        private void ApplyStyle()
+        {
+            if (Model == null || _panel == null) return;
+            IMenuView next = SphereStyle && _sphere != null ? (IMenuView)_sphere : _panel;
+            if (next == _view) return;
+            Transform head = Camera.main != null ? Camera.main.transform : null;
+            if (IsOpen) _view.SetOpen(false, head);
+            _view.Unbind();
+            _view = next;
+            _view.Bind(Model, Close);
+            if (IsOpen)
+            {
+                for (int i = 0; i < 2; i++) { _touchArmed[i] = _hasTip[i] = false; _triggerWas[i] = true; }
+                _view.SetOpen(true, head);
+                if (_rig != null) _lastRigPosition = _rig.transform.position;
+            }
+            Debug.Log("[FolioXR] Menú: estilo " + StyleName + ".");
+        }
+
+        private string StyleName => _view != null && _view == (IMenuView)_sphere ? "Esfera" : "Simple";
 
         private void ResolveScene()
         {
@@ -78,8 +109,17 @@ namespace FolioXR.Menu
                     _panel = null;
                     return;
                 }
-                Model = new MenuModel(_book, _environment, UseSimpleStyle);
-                _view = _panel;
+                Model = new MenuModel(_book, _environment, () => SphereStyle, SetSphereStyle);
+                var sphereRoot = new GameObject("Menú esférico (Folio XR)");
+                sphereRoot.transform.SetParent(transform, false);
+                _sphere = sphereRoot.AddComponent<SphereMenuView>();
+                if (_sphere.Initialize(_book)) _sphere.Feedback = SphereFeedback;
+                else
+                {
+                    Destroy(sphereRoot);
+                    _sphere = null;
+                }
+                _view = SphereStyle && _sphere != null ? (IMenuView)_sphere : _panel;
                 _view.Bind(Model, Close);
                 Model.TimerElapsed += OnTimerElapsed;
             }
@@ -111,8 +151,18 @@ namespace FolioXR.Menu
             bool toggle = (menu && !_menuWas) || gesture;
             _menuWas = !leftDevice.isValid || menu;
             if (toggle) { if (IsOpen) Close(); else Open(); }
-            else if (IsOpen && close) Close();
-            if (IsOpen)
+            else if (IsOpen && close)
+            {
+                // B/Y: en la esfera vuelve del anillo de opciones al de categorías; si no, cierra.
+                if (_view == (IMenuView)_sphere && _sphere != null && _sphere.Back()) _audio.PlayOneShot(_click);
+                else Close();
+            }
+            if (IsOpen && _view != (IMenuView)_panel)
+            {
+                PauseControls(true);
+                DriveSphere();
+            }
+            else if (IsOpen)
             {
                 PauseControls(true);
                 FollowRigJump();
@@ -140,6 +190,74 @@ namespace FolioXR.Menu
                 if (_clearFrames >= 2) { _waitingRelease = false; PauseControls(false); }
             }
             Model?.Tick();
+            if (_styleDirty)
+            {
+                _styleDirty = false;
+                ApplyStyle();
+            }
+        }
+
+        /// <summary>Entradas de la esfera: ancla izquierda, índice derecho, sticks y gatillos de los mandos libres.</summary>
+        private void DriveSphere()
+        {
+            Camera camera = Camera.main;
+            if (camera == null || _rig == null) return;
+            var input = new SphereInput
+            {
+                Head = camera.transform,
+                Space = _rig.trackingSpace != null ? _rig.trackingSpace : _rig.transform
+            };
+            if (TrackedController(XRNode.LeftHand, out _) && _rig.leftControllerAnchor != null)
+            {
+                input.AnchorValid = true;
+                input.Anchor = _rig.leftControllerAnchor.position;
+            }
+            else if (_left.TryBone(OVRSkeleton.BoneId.Hand_WristRoot, out Vector3 wrist) &&
+                _left.TryBone(OVRSkeleton.BoneId.Hand_Middle1, out Vector3 knuckle))
+            {
+                input.AnchorValid = true;
+                input.Anchor = (wrist + knuckle) * 0.5f; // Centro de la palma.
+            }
+            if (!ToolRegistry.HoldsHand(XRNode.RightHand) && !ToolRegistry.HoldsController(XRNode.RightHand) &&
+                _right.TryBone(OVRSkeleton.BoneId.Hand_IndexTip, out Vector3 tip))
+            {
+                input.TipValid = true;
+                input.Tip = tip;
+            }
+            for (int i = 0; i < 2; i++)
+            {
+                XRNode node = i == 0 ? XRNode.LeftHand : XRNode.RightHand;
+                bool tracked = TrackedController(node, out InputDevice device);
+                bool trigger = Down(device, CommonUsages.triggerButton);
+                bool edge = trigger && !_triggerWas[i];
+                _triggerWas[i] = !device.isValid || trigger;
+                // Un mando con herramienta conserva su gatillo y su stick.
+                if (!tracked || ToolRegistry.HoldsController(node)) continue;
+                if (device.TryGetFeatureValue(CommonUsages.primary2DAxis, out Vector2 axis) &&
+                    Mathf.Abs(axis.x) > Mathf.Abs(input.StickX))
+                {
+                    input.StickX = axis.x;
+                    if (Mathf.Abs(axis.x) > 0.7f) _sphereDevice = device;
+                }
+                if (edge)
+                {
+                    input.Select = true;
+                    _sphereDevice = device;
+                }
+            }
+            _sphere.Drive(input);
+        }
+
+        private static bool TrackedController(XRNode node, out InputDevice device)
+        {
+            device = InputDevices.GetDeviceAtXRNode(node);
+            return device.isValid && (device.characteristics & InputDeviceCharacteristics.Controller) != 0 &&
+                device.TryGetFeatureValue(CommonUsages.isTracked, out bool tracked) && tracked;
+        }
+
+        private void SphereFeedback(bool fromController)
+        {
+            Feedback(_sphereDevice, fromController && _sphereDevice.isValid);
         }
 
         public void Open()
@@ -152,7 +270,7 @@ namespace FolioXR.Menu
             for (int i = 0; i < 2; i++) { _touchArmed[i] = _hasTip[i] = false; _triggerWas[i] = true; }
             _view.SetOpen(true, camera.transform);
             if (_rig != null) _lastRigPosition = _rig.transform.position;
-            Debug.Log("[FolioXR] Menú abierto: Simple.");
+            Debug.Log("[FolioXR] Menú abierto: " + StyleName + ".");
         }
 
         public void Close()
@@ -172,7 +290,7 @@ namespace FolioXR.Menu
         {
             if (_rig == null) return;
             Vector3 position = _rig.transform.position;
-            if ((position - _lastRigPosition).sqrMagnitude > 0.0025f && Camera.main != null)
+            if (_view == (IMenuView)_panel && (position - _lastRigPosition).sqrMagnitude > 0.0025f && Camera.main != null)
                 _panel.PlaceInFront(Camera.main.transform);
             _lastRigPosition = position;
         }
