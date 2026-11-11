@@ -15,8 +15,8 @@ namespace FolioXR.Books
         public int pages, position;
 
         public bool IsPdf => format == "pdf";
-        /// <summary>Formatos que el libro 3D ya abre: PDF y cómics CBZ (o ZIP de imágenes).</summary>
-        public bool CanOpen => format == "pdf" || format == "cbz" || format == "zip";
+        /// <summary>Formatos que el libro 3D ya abre: PDF, EPUB y cómics CBZ (o ZIP de imágenes).</summary>
+        public bool CanOpen => format == "pdf" || format == "cbz" || format == "zip" || format == "epub";
 
         /// <summary>Progreso para el menú: porcentaje, o si aún no se abrió.</summary>
         public string ProgressText => pages <= 0
@@ -108,6 +108,8 @@ namespace FolioXR.Books
         private void Awake()
         {
             Instance = this;
+            PdfPageRenderer.PageCounted += OnPageCounted;
+            PdfPageRenderer.RenderFailed += OnRenderFailed;
 #if UNITY_ANDROID && !UNITY_EDITOR
             try
             {
@@ -202,6 +204,28 @@ namespace FolioXR.Books
         private void OnSpreadShown(int leftPage, int pageCount)
         {
             BookEntry entry = Find(_book.DocumentId);
+            if (!Repaginating && entry != null && entry != Current && entry.format == "epub" &&
+                entry.pages > 1 && entry.pages != pageCount)
+            {
+                _repaginateId = entry.id;
+                Repaginating = true;
+                _awaitingPagination = false;
+                _relocatePage = Mathf.Clamp(Mathf.RoundToInt(entry.position / (float)(entry.pages - 1) * (pageCount - 1)), 0, pageCount - 1);
+                _relocatePage -= _relocatePage % 2;
+                return;
+            }
+            if (Repaginating && _book.DocumentId == _repaginateId)
+            {
+                if (_awaitingPagination)
+                {
+                    if (!_paginationReady) return; // La doble página anterior puede terminar antes de comenzar la recarga.
+                    _awaitingPagination = false;
+                    _relocatePage = Mathf.Clamp(Mathf.RoundToInt(_epubProgress * (pageCount - 1)), 0, pageCount - 1);
+                    _relocatePage -= _relocatePage % 2;
+                    return; // No guardar la posición provisional antes de reubicarla.
+                }
+                Repaginating = false;
+            }
             if (entry != Current)
             {
                 if (_dirty) Save(false); // La página del libro anterior no se pierde al cambiar.
@@ -222,7 +246,10 @@ namespace FolioXR.Books
 
         private void OnDocumentFailed(string id, string message)
         {
+            if (id == _repaginateId) { Repaginating = _awaitingPagination = false; _relocatePage = -1; }
             BookEntry entry = Find(id);
+            if (entry != null && entry.path == PdfPageRenderer.DrmFailurePath)
+                message = "Este libro tiene DRM y no se puede abrir";
             Notify(entry != null ? "«" + entry.title + "»\n" + message : message);
         }
 
@@ -248,7 +275,7 @@ namespace FolioXR.Books
 
         public void Open(BookEntry entry)
         {
-            if (entry == null || _book == null) return;
+            if (entry == null || _book == null || Repaginating) return;
             if (!entry.CanOpen)
             {
                 Notify("Formato aún no compatible: «" + entry.title + "» (" + entry.format.ToUpperInvariant() +
@@ -265,9 +292,48 @@ namespace FolioXR.Books
             Debug.Log("[FolioXR] Biblioteca: abrir «" + entry.title + "» en la página " + (entry.position + 1));
         }
 
+        public bool Repaginating { get; private set; }
+        private string _repaginateId;
+        private float _epubProgress;
+        private bool _awaitingPagination, _paginationReady;
+        private int _relocatePage = -1;
+
+        private void OnPageCounted(string path)
+        {
+            if (Repaginating && Current != null && Current.path == path) _paginationReady = true;
+        }
+
+        private void OnRenderFailed(string path)
+        {
+            if (!Repaginating || (_book.DocumentId != _repaginateId && (Current == null || Current.path != path))) return;
+            Repaginating = _awaitingPagination = false;
+            _relocatePage = -1;
+            Notify("No se pudo dibujar el EPUB. Vuelve a abrirlo para reintentar.");
+            StateChanged?.Invoke();
+        }
+
+        public void SetEpubFontScale(float scale)
+        {
+            if (Repaginating) return;
+            scale = Mathf.Clamp(scale, 0.8f, 1.25f);
+            if (Mathf.Approximately(scale, PdfPageRenderer.EpubFontScale)) return;
+            PlayerPrefs.SetFloat(PdfPageRenderer.EpubFontPrefsKey, scale);
+            PlayerPrefs.Save();
+            if (Current != null && Current.format == "epub")
+            {
+                _repaginateId = Current.id;
+                _epubProgress = Current.pages > 1 ? Current.position / (float)(Current.pages - 1) : 0f;
+                Repaginating = _awaitingPagination = true;
+                _paginationReady = false;
+                _book.RequestDocument(Current.path, Current.id, Current.position);
+                Notify("Actualizando páginas del EPUB…");
+            }
+            StateChanged?.Invoke();
+        }
+
         public void Remove(BookEntry entry)
         {
-            if (entry == null || !Available) return;
+            if (entry == null || !Available || Repaginating) return;
             bool removed = false;
 #if UNITY_ANDROID && !UNITY_EDITOR
             try
@@ -457,6 +523,9 @@ namespace FolioXR.Books
 
         private void Update()
         {
+            // SpreadShown ocurre antes de liberar _busy en FolioBook: reintentar en el siguiente cuadro.
+            if (_relocatePage >= 0 && _book != null && _book.DocumentId == _repaginateId && _book.GoToPage(_relocatePage))
+                _relocatePage = -1;
             if (!_hooked && Time.unscaledTime >= _nextFind)
             {
                 _nextFind = Time.unscaledTime + 1f;
@@ -539,6 +608,8 @@ namespace FolioXR.Books
 
         private void OnDestroy()
         {
+            PdfPageRenderer.PageCounted -= OnPageCounted;
+            PdfPageRenderer.RenderFailed -= OnRenderFailed;
             if (_hooked && _book != null)
             {
                 _book.SpreadShown -= OnSpreadShown;

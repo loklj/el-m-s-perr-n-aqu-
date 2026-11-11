@@ -123,6 +123,14 @@ En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
 
 | Prueba | Resultado esperado |
 | --- | --- |
+| EPUB · Importación y apertura | Importar libro-prueba.epub desde Biblioteca; aparece como abrible. Muestra capítulos en el orden del spine, primera y última página, tildes, listas, cursivas e imágenes en ambas páginas 3D |
+| EPUB · Nitidez y captura | Con renderScale 1,4 y letra normal, leer 12 pt a 45 cm; comprobar que no falte texto en bordes ni se repita una columna. Revisar tiempos `[FolioXR] EPUB captura` y capturas de capítulos de distinta longitud |
+| EPUB · Letra y progreso | Ajustes → Letra pequeña/normal/grande repagina. Conserva fracción aproximada de lectura, alineada a doble página; reiniciar conserva letra y página. Probar abrir otro EPUB guardado con otro conteo y volver |
+| EPUB · Cancelación y caché | Cambiar de documento durante carga, cerrar/suspender y alternar PDF/CBZ/EPUB. No aparecen páginas del libro anterior. Recorrer más de 24 MiB de PNG y verificar LRU, memoria estable y precarga de la siguiente doble página; medir latencia real |
+| EPUB · DRM y fuentes | rights.xml o AES en encryption.xml: «Este libro tiene DRM y no se puede abrir». Solo ofuscación IDPF/Adobe de fuentes: abre con fuente del sistema, sin descifrar. XML corrupto da error de lectura |
+| EPUB · Contenido complejo y límites | Probar nav EPUB3, NCX EPUB2, imágenes y CSS relativos, caracteres escapados en rutas, scripts/URL externos bloqueados; capítulo >4 MiB debe fallar de forma controlada. Revisar SVG, tablas, RTL y maquetación fija por separado, sin darlos por soportados |
+| EPUB · Regresiones | PDF y cómics mantienen su lector, páginas, agarre, escala y progreso; ambos menús muestran ajustes de letra; herramientas y esfera conservan su código |
+
 | Abrir la app | Ves tu habitación (passthrough) y un libro frente a ti |
 | Portada | La página izquierda muestra la portada azul «Folio XR» |
 | A o X | Avanza dos páginas; el texto de abajo dice «Páginas 3-4 de 8» |

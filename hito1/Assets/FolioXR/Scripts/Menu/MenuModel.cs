@@ -259,6 +259,16 @@ namespace FolioXR.Menu
                         }
                     break;
                 case MenuCategory.Ajustes:
+                    string[] fontNames = { "pequeña", "normal", "grande" };
+                    float[] fontScales = { 0.8f, 1f, 1.25f };
+                    for (int f = 0; f < fontScales.Length; f++)
+                    {
+                        float fontScale = fontScales[f];
+                        options.Add(new MenuOption("Letra: " + fontNames[f],
+                            () => BookLibrary.Instance.SetEpubFontScale(fontScale),
+                            () => BookLibrary.Instance != null && !BookLibrary.Instance.Repaginating,
+                            () => Mathf.Approximately(PdfPageRenderer.EpubFontScale, fontScale)));
+                    }
                     for (int i = 0; i < 5; i++)
                     {
                         float scale = FolioBook.MinRenderScale + i * FolioBook.RenderScaleStep;

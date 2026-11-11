@@ -1,0 +1,220 @@
+package com.loklj.folioxr;
+
+import android.content.Context;
+import android.graphics.*;
+import android.os.*;
+import android.util.Log;
+import android.webkit.*;
+import android.view.View;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/** EPUB: cola serial, UI para WebView y trabajador para ZIP/PNG. Sin Unity ni Gradle. */
+public final class FolioEpubRenderer {
+    private static final Handler UI = new Handler(Looper.getMainLooper());
+    private static final ExecutorService WORK = Executors.newSingleThreadExecutor();
+    private static final ConcurrentHashMap<String,String> STATUS = new ConcurrentHashMap<>();
+    private static final AtomicInteger GENERATION = new AtomicInteger();
+    private static android.app.Activity context;
+    private static WebView web;
+    private static FolioEpubContainer book;
+    private static String path;
+    private static float fontScale = 1f;
+    private static int[] counts;
+    private static int loaded = -1;
+    private static final int WIDTH = 596, HEIGHT = 842;
+    private static final LinkedHashMap<String,byte[]> CACHE = new LinkedHashMap<>(8, .75f, true);
+    private static int cacheBytes;
+    private static final int CACHE_LIMIT = 24 * 1024 * 1024;
+
+    public static void init(Context activity, float scale) {
+        context = (android.app.Activity)activity;
+        WORK.execute(() -> { if (fontScale != scale) { fontScale = scale; reset(); } });
+    }
+    public static String getStatus(String key) { return STATUS.get(key); }
+    public static void clearStatus(String key) {
+        if ("PENDING".equals(STATUS.remove(key))) { GENERATION.incrementAndGet(); WORK.execute(FolioEpubRenderer::reset); }
+    }
+    public static void close() {
+        GENERATION.incrementAndGet(); STATUS.clear();
+        WORK.execute(FolioEpubRenderer::reset);
+    }
+    private static void reset() {
+        try { ui(() -> { if (web != null) { web.stopLoading(); if (web.getParent() instanceof android.view.ViewGroup) ((android.view.ViewGroup)web.getParent()).removeView(web); web.destroy(); web = null; } return null; }); }
+        catch (Exception ignored) { }
+        try { if (book != null) book.close(); } catch (IOException ignored) { }
+        book = null; path = null; counts = null; loaded = -1; CACHE.clear(); cacheBytes = 0;
+    }
+    private interface Job { String run(int generation) throws Exception; }
+    private static void submit(String key, Job job) {
+        int generation = GENERATION.get();
+        STATUS.put(key, "PENDING");
+        WORK.execute(() -> {
+            try {
+                check(generation, key);
+                String result = job.run(generation);
+                check(generation, key); STATUS.replace(key, result);
+            } catch (Throwable e) {
+                String kind = e instanceof FolioEpubContainer.DrmException ? "DRM" :
+                    e instanceof OutOfMemoryError ? "MEMORY" : e instanceof TimeoutException ? "TIMEOUT" : "IO";
+                STATUS.replace(key, "ERROR:" + kind + ":" + e.getMessage());
+                Log.w("FolioXR", "[FolioXR] EPUB: " + kind);
+            }
+        });
+    }
+    private static void check(int generation, String key) throws IOException {
+        if (generation != GENERATION.get() || (key != null && !STATUS.containsKey(key))) throw new IOException("Cancelado");
+    }
+    private static <T> T ui(Callable<T> action) throws Exception {
+        FutureTask<T> task = new FutureTask<>(action); UI.post(task);
+        try { return task.get(20, TimeUnit.SECONDS); }
+        catch (Exception e) { task.cancel(false); throw e; }
+    }
+    private static void open(String file, int generation) throws Exception {
+        if (file.equals(path) && counts != null) return;
+        reset();
+        if (context == null) throw new IOException("EPUB sin contexto Android");
+        book = new FolioEpubContainer(file);
+        ui(() -> {
+            WebView.enableSlowWholeDocumentDraw();
+            web = new WebView(context);
+            web.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+            web.getSettings().setJavaScriptEnabled(true);
+            web.getSettings().setAllowFileAccess(false);
+            web.getSettings().setAllowContentAccess(false);
+            web.getSettings().setBlockNetworkLoads(true);
+            web.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
+            web.getSettings().setDefaultTextEncodingName("UTF-8");
+            web.setInitialScale(100);
+            ((android.view.ViewGroup)context.getWindow().getDecorView()).addView(web,
+                new android.view.ViewGroup.LayoutParams(WIDTH, HEIGHT));
+            web.setTranslationX(-10000f);
+            web.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+            web.layout(0, 0, WIDTH, HEIGHT);
+            return null;
+        });
+        int[] result = new int[book.spine.size()];
+        for (int i = 0; i < result.length; i++) {
+            check(generation, null); load(i);
+            String number = js("Math.max(1,Math.ceil((document.body.scrollWidth+48)/596))");
+            result[i] = Integer.parseInt(number);
+            if (result[i] > 100000) throw new IOException("Capitulo demasiado extenso");
+        }
+        counts = result; path = file;
+    }
+    private static String js(String script) throws Exception {
+        CompletableFuture<String> result = new CompletableFuture<>();
+        ui(() -> { web.evaluateJavascript(script, result::complete); return null; });
+        return result.get(20, TimeUnit.SECONDS);
+    }
+    private static void load(int chapter) throws Exception {
+        if (chapter == loaded) return;
+        final FolioEpubContainer source = book;
+        String resource = source.spine.get(chapter);
+        String content = new String(source.read(resource, 4 * 1024 * 1024), StandardCharsets.UTF_8);
+        String policy = "default-src 'none'; img-src https://folio.invalid data:; style-src 'unsafe-inline' https://folio.invalid; font-src 'none'; script-src 'none';";
+        String prefix = "<meta http-equiv='Content-Security-Policy' content=\"" + policy + "\"><meta name='viewport' content='width=596'>";
+        String css = "<style>html{width:596px!important;height:842px!important;overflow:hidden!important;}" +
+            "body{box-sizing:content-box!important;margin:48px!important;padding:0!important;width:500px!important;" +
+            "height:746px!important;column-width:500px!important;column-gap:96px!important;column-fill:auto!important;" +
+            "font-size:" + (16 * fontScale) + "px!important;line-height:1.4!important;color:#111!important;background:white!important;}" +
+            "*{font-family:serif!important;max-width:100%!important;}img,svg{max-height:700px!important;object-fit:contain;}" +
+            "script,iframe,object,embed,form{display:none!important;}</style>";
+        // CSP precede al contenido del editor; evaluateJavascript solo ejecuta codigo propio.
+        String html = "<!doctype html><html><head>" + prefix + "</head><body>" + content + css + "</body></html>";
+        CompletableFuture<Void> ready = new CompletableFuture<>();
+        ui(() -> {
+            web.setWebViewClient(new WebViewClient() {
+                @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) { return true; }
+                @Override public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest request) {
+                    try {
+                        String name = FolioEpubContainer.resolve("", request.getUrl().toString());
+                        if (source.fonts.contains(name)) throw new IOException("Fuente del sistema");
+                        String mime = name.endsWith(".css") ? "text/css" : name.endsWith(".svg") ? "image/svg+xml" :
+                            name.endsWith(".png") ? "image/png" : "image/jpeg";
+                        byte[] data = source.read(name, FolioEpubContainer.MAX_RESOURCE);
+                        if (!mime.equals("text/css") && !mime.equals("image/svg+xml")) {
+                            BitmapFactory.Options bounds = new BitmapFactory.Options(); bounds.inJustDecodeBounds = true;
+                            BitmapFactory.decodeByteArray(data, 0, data.length, bounds);
+                            if (bounds.outWidth <= 0 || bounds.outHeight <= 0 ||
+                                (long)bounds.outWidth * bounds.outHeight > 4000000L) throw new IOException("Imagen demasiado grande");
+                        }
+                        return new WebResourceResponse(mime, "UTF-8", new ByteArrayInputStream(data));
+                    } catch (Exception e) { return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0])); }
+                }
+                @Override public void onPageFinished(WebView v, String url) {
+                    v.postVisualStateCallback(1, new WebView.VisualStateCallback() {
+                        @Override public void onComplete(long id) { ready.complete(null); }
+                    });
+                }
+            });
+            String url = new java.net.URI("https", "folio.invalid", "/" + resource, null).toASCIIString();
+            web.loadDataWithBaseURL(url, html, "text/html", "UTF-8", null);
+            return null;
+        });
+        ready.get(20, TimeUnit.SECONDS); loaded = chapter;
+    }
+    public static void requestPageCount(String file, String key) {
+        submit(key, generation -> { open(file, generation); int total = 0; for (int n : counts) total += n; return "OK:" + total; });
+    }
+    private static byte[] page(int index, int width, int generation) throws Exception {
+        check(generation, null);
+        String cacheKey = index + ":" + width;
+        byte[] cached = CACHE.get(cacheKey); if (cached != null) return cached;
+        int chapter = 0, local = index;
+        while (chapter < counts.length && local >= counts[chapter]) local -= counts[chapter++];
+        if (index < 0 || chapter >= counts.length) throw new IOException("Pagina fuera de rango");
+        load(chapter);
+        js("document.body.style.transform='translateX(-" + (local * 596L) + "px)';true");
+        CompletableFuture<Void> visual = new CompletableFuture<>();
+        ui(() -> { web.postVisualStateCallback(2, new WebView.VisualStateCallback() {
+            @Override public void onComplete(long id) { visual.complete(null); }
+        }); return null; });
+        visual.get(20, TimeUnit.SECONDS);
+        long start = SystemClock.elapsedRealtime();
+        Bitmap bitmap = ui(() -> {
+            Bitmap b = Bitmap.createBitmap(width, Math.round(width * HEIGHT / (float)WIDTH), Bitmap.Config.ARGB_8888);
+            b.eraseColor(Color.WHITE);
+            Canvas canvas = new Canvas(b); canvas.scale(width / (float)WIDTH, width / (float)WIDTH);
+            try { web.draw(canvas); return b; } catch (Throwable e) { b.recycle(); throw e; }
+        });
+        byte[] bytes;
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) throw new IOException("PNG fallido");
+            bytes = out.toByteArray();
+        } finally { bitmap.recycle(); }
+        Log.i("FolioXR", "[FolioXR] EPUB captura pagina=" + index + " ms=" + (SystemClock.elapsedRealtime()-start) + " ancho=" + width);
+        while (cacheBytes + bytes.length > CACHE_LIMIT && !CACHE.isEmpty()) {
+            String first = CACHE.keySet().iterator().next(); cacheBytes -= CACHE.remove(first).length;
+        }
+        if (bytes.length <= CACHE_LIMIT) { CACHE.put(cacheKey, bytes); cacheBytes += bytes.length; }
+        return bytes;
+    }
+    public static void requestRenderPage(String file, int index, int targetWidth, String output, String key) {
+        submit(key, generation -> {
+            open(file, generation);
+            int width = Math.max(64, Math.min(3072, targetWidth));
+            byte[] bytes = page(index, width, generation); check(generation, key);
+            File out = new File(output), tmp = new File(output + ".tmp");
+            try {
+                File parent = out.getParentFile();
+                if (parent != null && !parent.isDirectory() && !parent.mkdirs()) throw new IOException("No se pudo crear cache");
+                try (FileOutputStream stream = new FileOutputStream(tmp)) { stream.write(bytes); }
+                check(generation, key);
+                if (!tmp.renameTo(out)) throw new IOException("No se pudo publicar pagina");
+            } finally { tmp.delete(); }
+            // Precarga en la misma cola; nunca mantiene bitmaps de varias paginas.
+            if ((index & 1) == 1) WORK.execute(() -> {
+                try {
+                    int total = 0; for (int n : counts) total += n;
+                    for (int i = index + 1; i <= index + 2 && i < total; i++) page(i, width, generation);
+                } catch (Exception ignored) { }
+            });
+            return "OK:" + width + "x" + Math.round(width * HEIGHT / (float)WIDTH);
+        });
+    }
+}

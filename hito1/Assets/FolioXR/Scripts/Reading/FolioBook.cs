@@ -881,6 +881,9 @@ namespace FolioXR.Reading
                 case "PASSWORD":
                     message = "Este PDF necesita una contraseña para abrirse.\n(El Hito 1 todavía no la pide.)";
                     break;
+                case "DRM":
+                    message = "Este libro tiene DRM y no se puede abrir.";
+                    break;
                 case "IO":
                     // PdfRenderer avisa así de un daño estructural («file not in PDF format or corrupted»).
                     string detail = result.ErrorDetail ?? string.Empty;

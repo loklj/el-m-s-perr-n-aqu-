@@ -1,6 +1,6 @@
 # Hito 2 — Enfoque propuesto: páginas EPUB en el libro 3D
 
-Estado: **propuesta para aprobar antes de programar** (5 de noviembre de 2026, escrita por Claude). No hay código del Hito 2 todavía.
+Propuesta original del 5 de noviembre de 2026. **Hito 2 autorizado por el usuario; implementación del 11 de noviembre en revisión**, descrita en Estado.
 
 > **Decisión del usuario (5 de noviembre de 2026):** la app se venderá en la Meta Horizon Store a USD 4,99, con código cerrado. Por eso **MuPDF queda descartado** (AGPL-3.0: exigiría publicar todo el código de la app o pagar una licencia comercial a Artifex). **Se adopta la opción A (WebView del sistema) para EPUB**, y PDFium/PdfRenderer para PDF, como en la Fase 0. La medición de MuPDF queda solo como referencia de rendimiento; `tools/prototipos/medir_epub_mupdf.py` es una herramienta de desarrollo y no se incluye en la app.
 
@@ -64,3 +64,27 @@ Prototipo con un WebView fuera de pantalla: `enableSlowWholeDocumentDraw()` ante
 - `WebView.enableSlowWholeDocumentDraw()` (documentación de Android, vía referencia .NET para Android): <https://learn.microsoft.com/dotnet/api/android.webkit.webview.enableslowwholedocumentdraw>
 - Simple Unity 3D WebView (MIT, Android/Meta Quest): <https://github.com/t-34400/SimpleUnity3DWebView>
 - Vuplex 3D WebView: <https://developer.vuplex.com/webview/overview>
+
+
+## Estado
+
+11 de noviembre de 2026 — implementación en `hito2/epub`, pendiente de revisión de Claude y de compilación Unity/prueba en Quest 3. No se ha acreditado todavía nitidez, latencia ni 72 FPS.
+
+- `FolioEpubRenderer` conserva el protocolo de PDF/cómic. `PdfPageRenderer` selecciona EPUB por extensión e inicializa el plugin con la Activity y la preferencia de letra. `FolioBook` no cambia.
+- Contenedor propio `FolioEpubContainer`: ZIP, container.xml, OPF, spine y navegación NCX/nav. El índice se analiza internamente; esta entrega no añade una pantalla de índice. No se integra Readium ni se agregan dependencias Gradle.
+- WebView del sistema con columnas de 500 px, separación de 96 px y página lógica 596 × 842; cuerpo de 746 px y márgenes de 48 px. Letra normal 16 px CSS (12 pt), fuente serif del sistema. Pequeña 0,8 y grande 1,25; `folioxr.epubFontScale` persiste en PlayerPrefs. La resolución de captura no modifica la paginación.
+- El WebView permanece adjunto fuera de pantalla a la Activity para recibir estados visuales; creación, carga, JavaScript propio, medidas, captura y destrucción ocurren en UI. La cola Java serializa ZIP, capítulos y PNG. `enableSlowWholeDocumentDraw` se llama antes de crear la vista; los PNG se publican mediante temporal y renombrado. Log `[FolioXR] EPUB captura pagina=… ms=… ancho=…` incluye captura y codificación.
+- `close` y la cancelación de un estado pendiente invalidan la generación. Esperas WebView acotadas a 20 s; Unity concede hasta 300 s al trabajo EPUB completo. La paginación inicial visita todos los capítulos y mantiene solo sus conteos; aún no existe un índice persistente en disco.
+- Caché LRU de PNG comprimidos: 24 MiB; un bitmap transitorio, ancho máximo 3072. Tras completar una página derecha se precargan las dos siguientes en la cola. La precarga evita captura/codificación repetidas; Unity todavía decodifica PNG y carga textura, por lo que no se promete <100 ms.
+- Límites explícitos: XML 2 MiB, capítulo 4 MiB, recurso 8 MiB, imagen raster 4 millones de píxeles, 10.000 capítulos. Los recursos de imagen rechazados no se dibujan. El capítulo de estrés de 30 MB queda fuera de este prototipo; requiere paginación segmentada futura. La memoria interna de WebView y SVG necesita medición específica.
+- Rights.xml o algoritmos distintos de las dos ofuscaciones de fuentes reconocidas producen «Este libro tiene DRM y no se puede abrir». La ofuscación IDPF/Adobe de fuentes no se descifra: se ignoran las fuentes incrustadas. CSP bloquea scripts del libro, fuentes y contenido remoto; acceso a file/content desactivado y recursos limitados al ZIP. Se rechazan entidades XML declaradas y rutas externas.
+- Biblioteca admite `epub`. Cambiar letra solicita una recarga mediante el ciclo existente del libro; al recibir el nuevo conteo reubica proporcionalmente y redondea al inicio de una doble página. Conserva progreso como página en SQLite. La reubicación es aproximada: no garantiza conservar el mismo párrafo; los marcadores anteriores siguen siendo páginas, no localizadores EPUB.
+
+Validación realizada: `javac --release 8` contra `android.jar` API 34, sin bibliotecas externas; pruebas JVM del contenedor en `tests/epub/`. Esta compilación no ejecuta WebView ni valida Unity. Probar las filas EPUB del Paso 10: primera/última página, capítulos, estilos e imágenes, letra y progreso, cancelación, DRM, memoria y precisión de captura fuera de pantalla. El renderizado reflow horizontal es el alcance inicial; maquetación fija, escritura vertical y libros RTL complejos necesitan validación y adaptación.
+
+**Revisión de Claude (11 de noviembre de 2026), integrada en `fase-1/preparacion`:**
+- `DocumentBuilderFactory.setFeature` con entidades externas lanza `ParserConfigurationException` en Android (solo admite `namespaces` y `validation`): ningún EPUB habría abierto. Ahora se intenta y se ignora el rechazo; la defensa sigue siendo rechazar `<!ENTITY>`.
+- Se aceptan EPUB sin el archivo `mimetype` si tienen `META-INF/container.xml`.
+- `FolioBook` traduce los errores `DRM` («Este libro tiene DRM y no se puede abrir.») y `TIMEOUT`.
+- Riesgo pendiente: la primera apertura recorre todos los capítulos para contar páginas; un libro con muchos capítulos puede tardar decenas de segundos. Conviene guardar los conteos por libro y tamaño de letra.
+

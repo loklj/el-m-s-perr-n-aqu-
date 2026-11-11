@@ -57,9 +57,10 @@ El Meta XR All-in-One SDK está en la Asset Store como «activo restringido»: s
 | Motor Unity, URP, TextMeshPro, OpenXR | Condiciones de Unity | Motor | Plan Personal vigente | En uso |
 | Meta XR SDK | Licencia SDK de Meta | VR, passthrough, manos | Ver sección 3 | En uso |
 | `PdfRenderer` de Android | Parte del sistema | PDF (Hito 1) | Ninguna: no se incluye en el APK | En uso |
-| Android System WebView | Parte del sistema | EPUB (Hito 2) | Ninguna: no se incluye en el APK | Decidido |
+| Android System WebView | Parte del sistema (versión instalada en Horizon OS) | EPUB, API Android 34 | No se distribuye el motor ni fuentes del sistema | Implementado; prueba Quest pendiente |
+| FolioEpubContainer / FolioEpubRenderer | Código propio; APIs java.util.zip, XML y Android del sistema | OPF, spine, NCX/nav, columnas y captura | Sin dependencia externa ni Gradle nueva | Hito 2, 11 de noviembre de 2026 |
 | PDFium propio | BSD-3 / Apache-2.0 + terceros | Solo si `PdfRenderer` no basta | Avisos del conjunto. **FreeType** (licencia FTL) exige un crédito en la documentación; libjpeg-turbo, el crédito del Independent JPEG Group | Candidato |
-| Readium Kotlin Toolkit | BSD-3-Clause | Modelo EPUB | Aviso | Candidato |
+| Readium Kotlin Toolkit | BSD-3-Clause | Modelo EPUB | Aviso si se incorpora | No integrado: lector propio para evitar complejidad Gradle en Unity (decisión del usuario, Hito 2) |
 | libarchive | BSD-2-Clause (y algunos archivos BSD-3, dominio público o CC0) | CBZ, CBR | Aviso | Candidato |
 | UnRAR | Licencia UnRAR (freeware) | CBR, si libarchive falla | Se permite usarlo gratis en cualquier programa para **extraer** RAR. Se prohíbe usarlo para crear un compresor compatible con RAR. Si se modifica, incluir el párrafo de la licencia. [R1] | Alternativa |
 | libmobi | **LGPL-3.0+** | MOBI/AZW/AZW3 | Exige permitir al usuario reemplazar la biblioteca, algo dudoso en un APK firmado y vendido en tienda. Choca con la cláusula de Meta sobre licencias abiertas. [L1] | **Descartado** → parser propio |
