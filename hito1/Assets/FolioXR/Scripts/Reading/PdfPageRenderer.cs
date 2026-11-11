@@ -30,6 +30,12 @@ namespace FolioXR.Reading
             string extension = string.IsNullOrEmpty(path) ? string.Empty : Path.GetExtension(path).ToLowerInvariant();
             return extension == ".cbz" || extension == ".zip";
         }
+        public static bool IsEpub(string path) => string.Equals(Path.GetExtension(path), ".epub", StringComparison.OrdinalIgnoreCase);
+        public const string EpubFontPrefsKey = "folioxr.epubFontScale";
+        public static float EpubFontScale => Mathf.Clamp(PlayerPrefs.GetFloat(EpubFontPrefsKey, 1f), 0.8f, 1.25f);
+        public static string DrmFailurePath { get; private set; }
+        public static event Action<string> PageCounted;
+        public static event Action<string> RenderFailed;
         private const float TimeoutSeconds = 30f;
 
         private readonly string _pdfPath;
@@ -46,7 +52,11 @@ namespace FolioXR.Reading
             _cacheDir = Path.Combine(Application.temporaryCachePath, "folio-paginas");
             Directory.CreateDirectory(_cacheDir);
 #if UNITY_ANDROID && !UNITY_EDITOR
-            _java = new AndroidJavaClass(IsComic(pdfPath) ? ComicJavaClass : JavaClass);
+            _java = new AndroidJavaClass(IsEpub(pdfPath) ? "com.loklj.folioxr.FolioEpubRenderer" : IsComic(pdfPath) ? ComicJavaClass : JavaClass);
+            if (IsEpub(pdfPath))
+                using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                using (var activity = player.GetStatic<AndroidJavaObject>("currentActivity"))
+                    _java.CallStatic("init", activity, EpubFontScale);
 #endif
         }
 
@@ -81,9 +91,12 @@ namespace FolioXR.Reading
             {
                 result = Fail("OTHER", "respuesta inesperada: " + result.Data);
             }
+            DrmFailurePath = result.ErrorKind == "DRM" ? _pdfPath : null;
+            if (result.Ok) PageCounted?.Invoke(_pdfPath);
             done(count, result);
 #else
             yield return null;
+            PageCounted?.Invoke(_pdfPath);
             done(EditorPreviewPages, new PdfResult { Ok = true, Data = EditorPreviewPages.ToString() });
 #endif
         }
@@ -102,6 +115,7 @@ namespace FolioXR.Reading
             yield return WaitFor(key, r => result = r);
             if (!result.Ok)
             {
+                RenderFailed?.Invoke(_pdfPath);
                 done(null, result);
                 yield break;
             }
@@ -130,6 +144,7 @@ namespace FolioXR.Reading
                 TryDelete(pngPath);
             }
 
+            if (!result.Ok) RenderFailed?.Invoke(_pdfPath);
             if (texture != null) ConfigureTexture(texture);
             done(texture, result);
 #else
@@ -172,9 +187,10 @@ namespace FolioXR.Reading
                     done(Parse(status));
                     yield break;
                 }
-                if (Time.realtimeSinceStartup - start > TimeoutSeconds)
+                if (Time.realtimeSinceStartup - start > (IsEpub(_pdfPath) ? 300f : TimeoutSeconds))
                 {
-                    done(Fail("TIMEOUT", "el PDF tardo mas de " + TimeoutSeconds + " s"));
+                    _java.CallStatic("clearStatus", key);
+                    done(Fail("TIMEOUT", "El lector tardó demasiado en responder"));
                     yield break;
                 }
                 yield return null;
