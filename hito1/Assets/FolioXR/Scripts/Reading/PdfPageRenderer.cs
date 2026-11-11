@@ -123,14 +123,19 @@ namespace FolioXR.Reading
             Texture2D texture = null;
             try
             {
-                byte[] png = File.ReadAllBytes(pngPath);
-                texture = new Texture2D(2, 2, TextureFormat.RGBA32, true);
-                // Las páginas solo se muestrean en GPU; evitar la copia CPU a 4096 px.
-                if (!texture.LoadImage(png, true))
+                texture = LoadRaw(pngPath);
+                if (texture == null)
                 {
-                    UnityEngine.Object.Destroy(texture);
-                    texture = null;
-                    result = Fail("IO", "no se pudo leer el PNG de la pagina");
+                    // PNG (EPUB) o JPEG (cómics).
+                    byte[] png = File.ReadAllBytes(pngPath);
+                    texture = new Texture2D(2, 2, TextureFormat.RGBA32, true);
+                    // Las páginas solo se muestrean en GPU; evitar la copia CPU a 4096 px.
+                    if (!texture.LoadImage(png, true))
+                    {
+                        UnityEngine.Object.Destroy(texture);
+                        texture = null;
+                        result = Fail("IO", "no se pudo leer la imagen de la pagina");
+                    }
                 }
             }
             catch (Exception e)
@@ -215,6 +220,46 @@ namespace FolioXR.Reading
         private static PdfResult Fail(string kind, string detail)
         {
             return new PdfResult { Ok = false, ErrorKind = kind, ErrorDetail = detail };
+        }
+
+        /// <summary>
+        /// Encargo 6: píxeles crudos del PDF (cabecera "FXR1", ancho, alto, filas de abajo hacia arriba).
+        /// Se leen directo a la memoria de la textura, sin PNG y sin un arreglo intermedio de 24 MB.
+        /// Devuelve null si el archivo no tiene esa cabecera.
+        /// </summary>
+        private static Texture2D LoadRaw(string path)
+        {
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16))
+            {
+                var header = new byte[16];
+                if (stream.Read(header, 0, 16) != 16 || header[0] != 'F' || header[1] != 'X' || header[2] != 'R' ||
+                    header[3] != '1')
+                    return null;
+                int width = BitConverter.ToInt32(header, 4), height = BitConverter.ToInt32(header, 8);
+                if (width <= 0 || height <= 0 || width > 8192 || height > 16384 ||
+                    stream.Length - 16 < (long)width * height * 4)
+                    throw new IOException("pagina cruda incompleta");
+                var texture = new Texture2D(width, height, TextureFormat.RGBA32, true);
+                try
+                {
+                    Unity.Collections.NativeArray<byte> pixels = texture.GetPixelData<byte>(0);
+                    Span<byte> target = pixels.AsSpan();
+                    int read = 0;
+                    while (read < target.Length)
+                    {
+                        int n = stream.Read(target.Slice(read));
+                        if (n <= 0) throw new IOException("pagina cruda truncada");
+                        read += n;
+                    }
+                    texture.Apply(true, true); // Mipmaps y fuera de la RAM de CPU.
+                    return texture;
+                }
+                catch
+                {
+                    UnityEngine.Object.Destroy(texture);
+                    throw;
+                }
+            }
         }
 
         private static void ConfigureTexture(Texture2D texture)

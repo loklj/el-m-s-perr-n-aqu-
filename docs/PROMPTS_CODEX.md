@@ -29,7 +29,7 @@ Responde siempre en español. Repositorio: https://github.com/loklj/el-m-s-perr-
 | | 🧪 Prueba en el visor: herramientas, movimiento y libro | | |
 | 4 | Menú esférico | `fase-1/preparacion` | Escrito por Claude el 11 de noviembre de 2026 (Ultra agotó el cupo de Codex en 6 min, sin subir nada) |
 | 5 | Biblioteca persistente e importación local | `fase-1/preparacion` | Escrito por Claude el 11 de noviembre de 2026 (SQLite del sistema en vez de Room) |
-| 6 | Formatos base: PDF robusto y CBZ/ZIP | `fase1/formatos-base` | Pendiente |
+| 6 | Formatos base: PDF robusto y CBZ/ZIP | `fase-1/preparacion` | Hecho por Claude el 11 de noviembre de 2026: CBZ, píxeles crudos, precarga, páginas enormes y PDF con contraseña. Pendiente: portadas de CBZ |
 | 7 | Hito 2: EPUB en el libro 3D (WebView + Readium) | `fase-1/preparacion` | Escrito por Codex (Astra Alto) e integrado por Claude el 11 de noviembre de 2026; lector propio del contenedor en vez de Readium. Claude corrigió `setFeature` (Android lo rechaza) y aceptó EPUB sin `mimetype` |
 | 8 | Animación de páginas, tres libros y cómics | `fase-1/preparacion` | Parcial (Claude, 11 nov 2026): animación, manga y cerrar libro. Pendiente: tres libros a la vez, arrastrar la esquina y portada sola |
 | 9 | Estabilidad: recentrar, reanudar y seguimiento | `fase-1/preparacion` | Escrito por Claude el 11 de noviembre de 2026 (el menú aún no se orienta en modo acostado) |

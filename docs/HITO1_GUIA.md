@@ -253,6 +253,8 @@ En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
 | Encargo 14 · Agregar catálogo OPDS | Con la carga por Wi-Fi abierta, en la página del PC, sección «Agregar un catálogo (OPDS)»: nombre, dirección (p. ej. `http://192.168.1.10:8083/opds` en Calibre-Web, `/api/opds/<clave>` en Kavita, `/opds/v1.2/catalog` o `/opds/v2/catalog` en Komga), usuario, contraseña y el código del visor → «Agregar al visor». En unos segundos aparece «Catálogo: nombre» en Importar y nubes |
 | Encargo 14 · Navegar y descargar | Tocar el catálogo: se ven sus carpetas (▸) y libros, de 6 en 6 («Más»), «Siguiente página del catálogo» y «Volver». Tocar un libro descarga el mejor formato (EPUB > PDF > CBZ > MOBI > TXT) con porcentaje y aviso al terminar; aparece en la Biblioteca. Un libro con DRM (Adobe o LCP) se ve como «con DRM: no se puede». Contraseña errada: «Usuario o contraseña incorrectos» |
 | Encargo 14 · Quitar catálogo | «Quitar un catálogo» → tocar el catálogo → «¿Quitar? Toca otra vez» |
+| Encargo 6 · PDF rápido | Pasar páginas de un PDF: el registro dice `PDF: página N lista en X ms` y, al avanzar, «(precargada)». Ya no se codifica PNG: las páginas llegan como píxeles crudos |
+| Encargo 6 · Páginas enormes | Un PDF con páginas gigantes (carteles, planos) se ve en menor resolución en vez de fallar (registro: «sin memoria… se reduce a») |
 
 El entorno de prueba ya está en `fase-1/preparacion`; consulta [instalación, presupuesto y comprobaciones pendientes](ENTORNOS.md). El eje vertical del stick izquierdo conserva el ajuste de nitidez del Hito 1.2 también dentro de la casa.
 
