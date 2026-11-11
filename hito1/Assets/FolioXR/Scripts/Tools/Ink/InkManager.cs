@@ -59,7 +59,7 @@ namespace FolioXR.Tools.Ink
         private InkCanvas _leftCanvas, _rightCanvas, _houseCanvas;
         private Transform _houseRoot;
         private string _shownDocument;
-        private int _shownLeft = -2;
+        private int _shownLeft = -2, _shownRightPage = -2;
         private bool _shownRight;
         private float _nextReveal, _nextRebuild, _nextEnvironmentFind;
         private bool _initialized;
@@ -295,20 +295,22 @@ namespace FolioXR.Tools.Ink
         private void RefreshBookPages()
         {
             string document = _book != null ? _book.DocumentId : null;
-            int left = _book != null ? _book.LeftPageIndex : -1;
-            bool right = _book != null && _book.RightPageVisible;
-            if (document == _shownDocument && left == _shownLeft && right == _shownRight)
+            // Página de cada lado (en manga van cambiadas); -1 = lado vacío.
+            int left = _book != null ? _book.LeftSlotPage : -1;
+            int rightPage = _book != null ? _book.RightSlotPage : -1;
+            if (document == _shownDocument && left == _shownLeft && rightPage == _shownRightPage)
                 return;
             _shownDocument = document;
             _shownLeft = left;
-            _shownRight = right;
+            _shownRightPage = rightPage;
             InkCanvas previousLeft = _leftCanvas, previousRight = _rightCanvas;
             _leftCanvas = _rightCanvas = null;
-            if (!string.IsNullOrEmpty(document) && left >= 0)
+            if (!string.IsNullOrEmpty(document))
             {
-                _leftCanvas = BookPage(document, left);
-                if (right)
-                    _rightCanvas = BookPage(document, left + 1);
+                if (left >= 0)
+                    _leftCanvas = BookPage(document, left);
+                if (rightPage >= 0)
+                    _rightCanvas = BookPage(document, rightPage);
             }
             SetShown(previousLeft, false);
             SetShown(previousRight, false);

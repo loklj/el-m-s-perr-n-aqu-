@@ -127,7 +127,8 @@ namespace FolioXR.Locomotion
         {
             if (Time.unscaledTime >= _nextFind)
             { _nextFind = Time.unscaledTime + 1f; Resolve(); }
-            if (!_focused || _paused || _environment == null || !_environment.IsActive ||
+            // Modo acostado (encargo 9): sin movimiento libre.
+            if (FolioXR.Reading.FolioBook.LyingMode || !_focused || _paused || _environment == null || !_environment.IsActive ||
                 _rig == null || _rig.centerEyeAnchor == null || _rig.trackingSpace == null || _capsule == null ||
                 _environment.InputPaused || _relocatedFrame == Time.frameCount)
             { Stop(); return; }

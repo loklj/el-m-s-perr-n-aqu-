@@ -213,6 +213,10 @@ namespace FolioXR.Menu
                             () => { _removing = !_removing; _removeId = null; RebuildOptions(); },
                             () => library.Books.Count > 0, () => _removing));
                     }
+                    options.Add(new MenuOption("Lectura: " + (_book != null && _book.RightToLeft ? "manga" : "normal"),
+                        () => { _book.SetRightToLeft(!_book.RightToLeft); RebuildOptions(); }, () => _book != null,
+                        () => _book != null && _book.RightToLeft));
+                    options.Add(new MenuOption("Cerrar libro", library.CloseCurrent, () => library.Current != null));
                     BookEntry current = library.Current;
                     bool bookmarked = library.IsBookmarked;
                     options.Add(new MenuOption(current == null ? "Marcar página"
@@ -265,6 +269,9 @@ namespace FolioXR.Menu
                     options.Add(new MenuOption("Menú:\nSimple", () => _setSphereStyle(false), marked: () => !_sphereStyle()));
                     options.Add(new MenuOption("Física: " + (_book != null && _book.RealisticPhysics ? "Realista" : "Flotante"),
                         () => { _book.SetRealisticPhysics(!_book.RealisticPhysics); RebuildOptions(); }, () => _book != null));
+                    options.Add(new MenuOption("Acostado: " + (FolioBook.LyingMode ? "sí" : "no"),
+                        () => { FolioBook.SetLyingMode(!FolioBook.LyingMode); if (_book != null) _book.PlaceInFrontOfView(); RebuildOptions(); },
+                        marked: () => FolioBook.LyingMode));
                     options.Add(new MenuOption("Velocidad: " + (FolioLocomotion.Jog ? "trotar" : "caminar"),
                         () => { FolioLocomotion.SetJog(!FolioLocomotion.Jog); RebuildOptions(); }, marked: () => FolioLocomotion.Jog));
                     options.Add(new MenuOption("Viñeta: " + (FolioLocomotion.VignetteEnabled ? "sí" : "no"),

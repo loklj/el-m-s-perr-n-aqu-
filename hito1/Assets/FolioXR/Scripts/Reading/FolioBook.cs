@@ -87,6 +87,39 @@ namespace FolioXR.Reading
         public int LeftPageIndex => _spreadReady ? _leftIndex : -1;
         public bool RightPageVisible => _spreadReady && rightPage != null && rightPage.enabled;
         public int PageCount => _pageCount;
+
+        // ── Encargos 8 y 9 (Claude, 11 nov 2026): manga, animación, modo acostado ──
+        public const string LyingPrefsKey = "folioxr.lying";
+        private const string RtlPrefsPrefix = "folioxr.rtl.";
+        /// <summary>Lectura de derecha a izquierda (manga), guardada por libro.</summary>
+        public bool RightToLeft { get; private set; }
+        /// <summary>Página (desde 0) que muestra cada lado, o -1 si ese lado está vacío.</summary>
+        public int LeftSlotPage => !_spreadReady ? -1 : !RightToLeft ? _leftIndex : _leftIndex + 1 < _pageCount ? _leftIndex + 1 : -1;
+        public int RightSlotPage => !_spreadReady ? -1 : RightToLeft ? _leftIndex : _leftIndex + 1 < _pageCount ? _leftIndex + 1 : -1;
+        /// <summary>Modo acostado: el libro se coloca hacia donde mira la cabeza, aunque sea el techo.</summary>
+        public static bool LyingMode => PlayerPrefs.GetInt(LyingPrefsKey, 0) != 0;
+        private PageTurnEffect _turn;
+
+        public static void SetLyingMode(bool value)
+        {
+            PlayerPrefs.SetInt(LyingPrefsKey, value ? 1 : 0);
+            PlayerPrefs.Save();
+            Debug.Log("[FolioXR] Modo acostado: " + (value ? "sí" : "no"));
+        }
+
+        public void SetRightToLeft(bool value)
+        {
+            if (RightToLeft == value) return;
+            RightToLeft = value;
+            if (!string.IsNullOrEmpty(DocumentId))
+            {
+                PlayerPrefs.SetInt(RtlPrefsPrefix + DocumentId, value ? 1 : 0);
+                PlayerPrefs.Save();
+            }
+            Debug.Log("[FolioXR] Lectura: " + (value ? "manga (derecha a izquierda)" : "normal"));
+            // Vuelve a mostrar la doble página con los lados cambiados (mismo índice: sin animación).
+            if (!_busy && _spreadReady && _renderer != null) StartCoroutine(ShowSpread(_leftIndex));
+        }
         /// <summary>Doble página mostrada: página izquierda (desde 0) y total. La biblioteca guarda el progreso.</summary>
         public event System.Action<int, int> SpreadShown;
         /// <summary>Un documento pedido no se pudo abrir: identificador (o null) y mensaje para el usuario.</summary>
@@ -300,6 +333,8 @@ namespace FolioXR.Reading
             _renderer = renderer;
             _pageCount = pages;
             DocumentId = documentId ?? BuildDocumentId(path);
+            RightToLeft = PlayerPrefs.GetInt(RtlPrefsPrefix + DocumentId, 0) != 0;
+            _spreadReady = false; // Otro documento: sin animación de hoja.
             Debug.Log("[FolioXR] PDF: " + path + " (" + pages + " páginas, id=" + DocumentId + ")");
             int start = Mathf.Clamp(leftPage, 0, pages - 1);
             yield return ShowSpread(start - start % 2);
@@ -333,6 +368,13 @@ namespace FolioXR.Reading
             else _renderScaleStickLatched = true;
             UpdateRenderScaleStatus();
             UpdateBookRecovery();
+            if (!_recenterHooked && OVRManager.display != null)
+            {
+                OVRManager.display.RecenteredPose += OnRecentered;
+                _recenterHooked = true;
+            }
+            // Dos cuadros después del recentrado, cuando la cabeza ya tiene su pose nueva.
+            if (_recenterPending > 0 && --_recenterPending == 0) PlaceInFrontOfView();
             if (_pendingPath != null && _started && !_busy)
             {
                 string path = _pendingPath, id = _pendingId;
@@ -641,14 +683,16 @@ namespace FolioXR.Reading
             Vector3 flatForward = Vector3.ProjectOnPlane(head.forward, Vector3.up);
             // Si se mira casi en vertical (por ejemplo, acostado), usar la vista tal cual.
             Vector3 direction = flatForward.sqrMagnitude > 0.04f ? flatForward.normalized : head.forward;
+            bool lying = LyingMode;
+            if (lying) direction = head.forward;
 
-            Vector3 position = head.position + direction * viewDistance + Vector3.down * belowEyes;
+            Vector3 position = head.position + direction * viewDistance + (lying ? -head.up : Vector3.down) * belowEyes;
             Vector3 awayFromEyes = position - head.position;
             if (awayFromEyes.sqrMagnitude < 0.0001f) return;
 
             // Las paginas miran hacia -Z local: apuntar +Z lejos de los ojos
             // deja las paginas de frente, inclinadas como en un atril.
-            Quaternion rotation = Quaternion.LookRotation(awayFromEyes.normalized, Vector3.up);
+            Quaternion rotation = Quaternion.LookRotation(awayFromEyes.normalized, lying ? head.up : Vector3.up);
 
             var body = GetComponent<Rigidbody>();
             if (body != null && body.isKinematic)
@@ -694,19 +738,40 @@ namespace FolioXR.Reading
                 yield break;
             }
 
+            bool turning = _spreadReady && leftIndex != _leftIndex && _leftTexture != null;
+            bool forward = leftIndex > _leftIndex;
             _leftIndex = leftIndex;
             _spreadReady = true;
             _renderedWidth = width;
             SpreadShown?.Invoke(leftIndex, _pageCount);
-            ReplaceTexture(ref _leftTexture, left, leftPage);
-            ReplaceTexture(ref _rightTexture, right, rightPage);
-            if (rightPage != null) rightPage.enabled = right != null;
-
+            // En manga la primera página de la pareja va a la derecha.
+            Texture2D newLeft = RightToLeft ? right : left, newRight = RightToLeft ? left : right;
             if (left.width > 0)
             {
                 _aspectHeightOverWidth = left.height / (float)left.width;
                 ApplyLayout();
             }
+            if (_turn == null) _turn = PageTurnEffect.Create(leftPage != null ? leftPage : rightPage);
+            if (turning && _turn != null && leftPage != null && rightPage != null)
+            {
+                // La hoja sale del lado que se deja y cae sobre el otro; debajo ya está la página nueva.
+                bool towardLeft = forward != RightToLeft;
+                Texture2D lifted = towardLeft ? _rightTexture : _leftTexture;
+                if (lifted != null)
+                {
+                    if (towardLeft) ShowPage(rightPage, newRight);
+                    else ShowPage(leftPage, newLeft);
+                    float pageWidth = rightPage.transform.localScale.x;
+                    yield return _turn.Play(towardLeft, lifted, towardLeft ? newLeft : newRight, pageWidth,
+                        rightPage.transform.localScale.y, gutter * 0.5f);
+                }
+            }
+            if (_leftTexture != null && _leftTexture != newLeft) Destroy(_leftTexture);
+            if (_rightTexture != null && _rightTexture != newRight) Destroy(_rightTexture);
+            _leftTexture = newLeft;
+            _rightTexture = newRight;
+            ShowPage(leftPage, newLeft);
+            ShowPage(rightPage, newRight);
 
             if (rightResult != null && !rightResult.Ok)
             {
@@ -739,6 +804,14 @@ namespace FolioXR.Reading
             {
                 return System.IO.Path.GetFileNameWithoutExtension(path);
             }
+        }
+
+        private static void ShowPage(Renderer page, Texture2D texture)
+        {
+            if (page == null) return;
+            page.enabled = texture != null;
+            // .material crea una copia propia del material para este libro.
+            if (texture != null) page.material.mainTexture = texture;
         }
 
         private static void ReplaceTexture(ref Texture2D slot, Texture2D incoming, Renderer target)
@@ -908,7 +981,26 @@ namespace FolioXR.Reading
         private void OnApplicationPause(bool paused)
         {
             if (paused) SaveBookScale();
+            // Al suspender o reanudar el libro queda quieto: el primer cuadro tras la pausa trae un salto de
+            // tiempo y de seguimiento que podría lanzarlo o hacerlo atravesar el suelo.
+            if (_body != null && !_body.isKinematic)
+            {
+                _body.linearVelocity = Vector3.zero;
+                _body.angularVelocity = Vector3.zero;
+                _body.Sleep();
+            }
         }
+
+        private void OnRecentered()
+        {
+            // Recentrar del sistema (botón Meta mantenido): el libro vuelve frente a la vista, salvo en la mano.
+            if (IsGrabbed) return;
+            Debug.Log("[FolioXR] Recentrado del sistema: libro frente a la vista");
+            _recenterPending = 2;
+        }
+
+        private int _recenterPending;
+        private bool _recenterHooked;
 
         private void OnDestroy()
         {
@@ -917,6 +1009,7 @@ namespace FolioXR.Reading
                 _renderer.Dispose();
                 _renderer = null;
             }
+            if (_recenterHooked && OVRManager.display != null) OVRManager.display.RecenteredPose -= OnRecentered;
             if (_physicsMaterial != null) Destroy(_physicsMaterial);
             if (_leftTexture != null) Destroy(_leftTexture);
             if (_rightTexture != null) Destroy(_rightTexture);

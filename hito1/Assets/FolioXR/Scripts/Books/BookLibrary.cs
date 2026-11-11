@@ -280,6 +280,15 @@ namespace FolioXR.Books
             Notify("Se quitó «" + entry.title + "» de la biblioteca.");
         }
 
+        /// <summary>Cierra el libro abierto (guarda su página) y vuelve al de muestra.</summary>
+        public void CloseCurrent()
+        {
+            if (Current == null || _book == null) return;
+            Save(false);
+            Debug.Log("[FolioXR] Biblioteca: cerrar «" + Current.title + "»");
+            _book.OpenDefaultDocument();
+        }
+
         public void ToggleBookmark()
         {
             if (Current == null || !Available) return;

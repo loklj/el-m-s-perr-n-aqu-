@@ -494,6 +494,14 @@ namespace FolioXR.Tools
         }
         private void OnApplicationPause(bool paused)
         {
+            // Encargo 9: las herramientas sueltas quedan quietas al suspender y al reanudar.
+            foreach (FolioTool tool in _tools)
+                if (tool != null && tool.State == ToolState.World && tool.Body != null && !tool.Body.isKinematic)
+                {
+                    tool.Body.linearVelocity = Vector3.zero;
+                    tool.Body.angularVelocity = Vector3.zero;
+                    tool.Body.Sleep();
+                }
             OnApplicationFocus(!paused);
         }
         private void OnDisable()

@@ -234,6 +234,13 @@ En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
 | 11 nov · Contorno de gravedad | Al apuntar a una herramienta o al libro lejano aparece un contorno blanco que late; al pellizcar (fijar) brilla fijo y sale un haz blanco hasta la mano |
 | 11 nov · Cómics CBZ | Importar un .cbz desde la biblioteca y tocarlo: se abre como libro, una imagen por página, en orden natural de nombre |
 | 11 nov · Esfera con manos | Al abrirla con la mano queda fija donde apareció (con mando sigue al mando). Tocar con el índice cualquier casilla visible la elige al retirar el dedo, aunque el dedo se hunda en la esfera. El registro anota «dedo sobre la esfera» y «toque con el índice» |
+| Encargo 8 · Hoja que pasa | Pasar página: una hoja curvada cruza de un lado al otro en 0,35 s con un roce de papel. Al cambiar de nitidez o de libro no hay animación |
+| Encargo 8 · Manga | Biblioteca → «Lectura: normal/manga»: en manga la primera página queda a la derecha y la hoja pasa hacia la derecha. Se recuerda por libro. Los trazos siguen en su página |
+| Encargo 8 · Cerrar libro | Biblioteca → «Cerrar libro»: guarda la página y vuelve al libro de muestra |
+| Encargo 9 · Acostado | Ajustes → «Acostado: sí»: el libro se coloca hacia donde mira la cabeza (también hacia el techo) y el movimiento libre se desactiva |
+| Encargo 9 · Recentrar | Mantener el botón Meta para recentrar: el libro vuelve frente a la vista (si no está en la mano) |
+| Encargo 9 · Suspender | Quitarse el visor con el libro o una herramienta apoyados y volver: nada sale lanzado ni atraviesa el suelo; el progreso quedó guardado |
+| Encargo 9 · Interrupciones | Cerrar la app a mitad de una importación y volver a abrir: no queda un libro a medias (el registro dice «parciales borrados»). Importar sin espacio: aviso «No hay espacio suficiente…» |
 
 El entorno de prueba ya está en `fase-1/preparacion`; consulta [instalación, presupuesto y comprobaciones pendientes](ENTORNOS.md). El eje vertical del stick izquierdo conserva el ajuste de nitidez del Hito 1.2 también dentro de la casa.
 

@@ -30,9 +30,9 @@ Responde siempre en español. Repositorio: https://github.com/loklj/el-m-s-perr-
 | 4 | Menú esférico | `fase-1/preparacion` | Escrito por Claude el 11 de noviembre de 2026 (Ultra agotó el cupo de Codex en 6 min, sin subir nada) |
 | 5 | Biblioteca persistente e importación local | `fase-1/preparacion` | Escrito por Claude el 11 de noviembre de 2026 (SQLite del sistema en vez de Room) |
 | 6 | Formatos base: PDF robusto y CBZ/ZIP | `fase1/formatos-base` | Pendiente |
-| 7 | Hito 2: EPUB en el libro 3D (WebView + Readium) | `hito2/epub` | Necesita la autorización del usuario |
-| 8 | Animación de páginas, tres libros y cómics | `fase1/tres-libros` | Pendiente |
-| 9 | Estabilidad: recentrar, reanudar y seguimiento | `fase1/estabilidad` | Pendiente |
+| 7 | Hito 2: EPUB en el libro 3D (WebView + Readium) | `hito2/epub` | Autorizado el 11 de noviembre de 2026; enviado a Codex (Astra Alto) con lector propio del contenedor en vez de Readium |
+| 8 | Animación de páginas, tres libros y cómics | `fase-1/preparacion` | Parcial (Claude, 11 nov 2026): animación, manga y cerrar libro. Pendiente: tres libros a la vez, arrastrar la esquina y portada sola |
+| 9 | Estabilidad: recentrar, reanudar y seguimiento | `fase-1/preparacion` | Escrito por Claude el 11 de noviembre de 2026 (el menú aún no se orienta en modo acostado) |
 | | 🧪 Prueba en el visor: MVP de la Fase 1 | | |
 | 10 | Formatos 2: TXT, CBR, MOBI/AZW/AZW3 | `fase2/formatos` | Pendiente |
 | 11 | Formatos 3: DOCX, ODT, RTF y diagnóstico de no compatibles | `fase2/documentos` | Pendiente |
