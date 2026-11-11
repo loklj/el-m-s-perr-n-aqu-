@@ -24,6 +24,22 @@ namespace FolioXR.Tools
 
         public static bool Reveals(Vector3 point) => Reveals(point, null);
 
+        /// <summary>Linterna encendida en modo ultravioleta (Tanda D: para no recorrer trazos en vano).</summary>
+        public static bool Active => _source != null && _source.isActiveAndEnabled && _source.Powered &&
+                                     _source.Mode == FlashlightMode.Ultraviolet && _source.Emitter != null;
+        public static Vector3 EmitterPosition => Active ? _source.Emitter.position : Vector3.zero;
+
+        /// <summary>Solo cono y alcance, sin rayo de oclusión: barato para probar cada punto de un trazo.</summary>
+        public static bool InCone(Vector3 point)
+        {
+            if (!Active)
+                return false;
+            Transform emitter = _source.Emitter;
+            Vector3 delta = point - emitter.position;
+            float distance = delta.magnitude;
+            return distance >= 0.001f && distance < 3f && Vector3.Dot(emitter.forward, delta / distance) >= ConeCosine;
+        }
+
         /// <summary>
         /// Revisión de Claude: el soporte de la tinta puede ser una caja con grosor (por ejemplo, el libro),
         /// y la superficie dibujada queda dentro de ella. El rayo chocaría primero con su cara y la

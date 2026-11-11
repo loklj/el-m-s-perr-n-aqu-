@@ -4,6 +4,7 @@ using System.Globalization;
 using FolioXR.Environments;
 using FolioXR.Reading;
 using FolioXR.Tools;
+using FolioXR.Tools.Ink;
 using FolioXR.Locomotion;
 using UnityEngine;
 
@@ -53,6 +54,9 @@ namespace FolioXR.Menu
         private bool _lastEnvironmentActive;
         private float _lastRenderScale;
         private double _timerEnd;
+        // Borrar trazos pide un segundo toque antes de 4 s (Tanda D).
+        private int _pendingClear; // 0 = nada, 1 = página, 2 = casa.
+        private float _pendingClearUntil;
 
         public MenuModel(FolioBook book, FolioEnvironmentController environment, Action useSimple)
         {
@@ -94,12 +98,34 @@ namespace FolioXR.Menu
                 _lastRenderScale = scale;
                 Changed?.Invoke();
             }
+            if (_pendingClear != 0 && Time.unscaledTime >= _pendingClearUntil)
+            {
+                _pendingClear = 0;
+                if (SelectedCategory == MenuCategory.Ajustes) RebuildOptions();
+                Changed?.Invoke();
+            }
             if (TimerMinutes > 0 && Time.realtimeSinceStartupAsDouble >= _timerEnd)
             {
                 TimerMinutes = 0;
                 Changed?.Invoke();
                 TimerElapsed?.Invoke();
             }
+        }
+
+        private void ConfirmClear(int kind)
+        {
+            if (_pendingClear != kind || Time.unscaledTime >= _pendingClearUntil)
+            {
+                _pendingClear = kind;
+                _pendingClearUntil = Time.unscaledTime + 4f;
+            }
+            else
+            {
+                _pendingClear = 0;
+                if (kind == 1) InkManager.ClearVisibleBookPages();
+                else InkManager.ClearHouse();
+            }
+            RebuildOptions();
         }
 
         private void SetTimer(int minutes)
@@ -150,6 +176,10 @@ namespace FolioXR.Menu
                         () => { FolioLocomotion.SetSmoothTurn(!FolioLocomotion.SmoothTurn); RebuildOptions(); }));
                     options.Add(new MenuOption("Tamaño normal", () => _book.ResetBookScale(), () => _book != null));
                     options.Add(new MenuOption("Guardar herramientas", ToolRegistry.StoreAll, () => ToolRegistry.Instance != null));
+                    options.Add(new MenuOption(_pendingClear == 1 ? "¿Borrar? Toca\notra vez" : "Borrar trazos\nde esta página",
+                        () => ConfirmClear(1), () => InkManager.Instance != null));
+                    options.Add(new MenuOption(_pendingClear == 2 ? "¿Borrar? Toca\notra vez" : "Borrar trazos\nde la casa",
+                        () => ConfirmClear(2), () => InkManager.HasHouse));
                     options.Add(new MenuOption("Traer libro", () => _book.PlaceInFrontOfView(), () => _book != null));
                     break;
                 case MenuCategory.ImportarYNubes:

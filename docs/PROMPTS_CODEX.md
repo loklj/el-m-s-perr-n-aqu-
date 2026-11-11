@@ -9,6 +9,8 @@ Fecha: 9 de noviembre de 2026. Escritos por Claude a pedido del usuario. Esta es
 3. **Orden.** Van uno a la vez, en el orden de la lista. Claude revisa e integra cada entrega en `fase-1/preparacion` antes del siguiente.
 4. **Pruebas.** Donde dice **🧪 Prueba en el visor**, el usuario compila una vez y prueba todo lo acumulado.
 5. **Cupo.** Si a Codex se le acaba el cupo, se espera a que se renueve y se le pide «continúa donde quedaste, commit y push».
+7. **Un solo chat.** Pedido del usuario (10 de noviembre de 2026): no crear chats nuevos en Codex. Todos los encargos siguientes se envían como seguimiento en el mismo chat; los chats viejos se archivan (Codex no permite eliminarlos).
+8. **Esfuerzo.** El usuario pidió GPT-6 Astra **Ultra** (10 de noviembre de 2026); con el plan Plus agotó el cupo en 6 minutos.
 6. **Ajustes.** Los prompts se pueden ajustar según lo que salga en cada prueba. Las reglas que valen para todos están en [REGLAS_CODEX.md](REGLAS_CODEX.md).
 
 ### Encabezado común
@@ -21,11 +23,11 @@ Responde siempre en español. Repositorio: https://github.com/loklj/el-m-s-perr-
 
 | # | Encargo | Rama | Estado |
 | --- | --- | --- | --- |
-| 1 | Tanda C: reloj de herramientas y linterna triple | `interaccion/tanda-c` | En curso (enviado el 9 de noviembre de 2026) |
-| 2 | Tanda D: lápices, tinta invisible y libreta | `interaccion/tanda-d` | Pendiente |
-| 3 | Tanda E: lupa y regla | `interaccion/tanda-e` | Pendiente |
+| 1 | Tanda C: reloj de herramientas y linterna triple | `interaccion/tanda-c` | Integrada el 9 de noviembre de 2026 |
+| 2 | Tanda D: lápices, tinta invisible y libreta | `fase-1/preparacion` | Escrita por Claude el 11 de noviembre de 2026 (Codex sin cupo) |
+| 3 | Tanda E: lupa y regla | `fase-1/preparacion` | Escrita por Claude el 11 de noviembre de 2026 |
 | | 🧪 Prueba en el visor: herramientas, movimiento y libro | | |
-| 4 | Menú esférico | `menus/esfera-1` | Pendiente |
+| 4 | Menú esférico | `menus/esfera-1` | En curso (enviado el 10 de noviembre de 2026; Ultra agotó el cupo en 6 min) |
 | 5 | Biblioteca persistente e importación local | `fase1/biblioteca` | Pendiente |
 | 6 | Formatos base: PDF robusto y CBZ/ZIP | `fase1/formatos-base` | Pendiente |
 | 7 | Hito 2: EPUB en el libro 3D (WebView + Readium) | `hito2/epub` | Necesita la autorización del usuario |
@@ -48,7 +50,7 @@ Responde siempre en español. Repositorio: https://github.com/loklj/el-m-s-perr-
 
 ---
 
-## 1. Tanda C: reloj de herramientas y linterna triple (en curso)
+## 1. Tanda C: reloj de herramientas y linterna triple (integrada)
 
 Ya se envió a Codex el 9 de noviembre de 2026. Especificación en `docs/INTERACCION.md`, sección «Tanda C».
 

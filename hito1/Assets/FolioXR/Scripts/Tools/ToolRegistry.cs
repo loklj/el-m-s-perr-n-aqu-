@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using FolioXR.Reading;
+using FolioXR.Tools.Ink;
 using UnityEngine;
 using UnityEngine.XR;
 
@@ -27,6 +28,7 @@ namespace FolioXR.Tools
         private BookGrab _grab;
         private OVRCameraRig _rig;
         private ToolVisuals _visuals;
+        private InkManager _ink;
         private Transform _watch, _wrist;
         private TextMesh _notice;
         private float _nextFind, _noticeUntil, _watchScale = 0.65f;
@@ -50,8 +52,29 @@ namespace FolioXR.Tools
         /// <summary>Consulta para reservar los botones del mando propietario, también frente al menú.</summary>
         public static bool HoldsController(XRNode side) => Instance != null
                                                            && Instance._held[side == XRNode.LeftHand ? 2 : 3] != null;
+        /// <summary>Tanda E: la lupa en un mando usa su stick para el aumento; el movimiento lo ignora.</summary>
+        public static bool ReservesStick(XRNode side) => Instance != null
+                                                         && Instance._held[side == XRNode.LeftHand ? 2 : 3] is MagnifierTool;
         public static bool HoldsHand(XRNode side) => Instance != null
                                                      && Instance._held[side == XRNode.LeftHand ? 0 : 1] != null;
+        /// <summary>
+        /// Punta para tocar (libreta): índice de la mano o un punto 3 cm delante del mando. El mando real
+        /// tiene prioridad sobre la mano emulada del mismo lado, como en el resto del registro.
+        /// </summary>
+        internal bool TryPointer(XRNode side, out Vector3 tip)
+        {
+            int hand = side == XRNode.LeftHand ? 0 : 1;
+            GrabInput controller = _inputs[hand + 2];
+            if (controller.Reliable)
+            {
+                tip = controller.Position + controller.Rotation * Vector3.forward * 0.03f;
+                return true;
+            }
+            GrabInput input = _inputs[hand];
+            tip = input.Reliable && input.IndexTip != null ? input.IndexTip.position : Vector3.zero;
+            return input.Reliable && input.IndexTip != null;
+        }
+
         public static void StoreAll()
         {
             if (Instance != null)
@@ -101,15 +124,48 @@ namespace FolioXR.Tools
                 float a = i * Mathf.PI / 24f;
                 ring.SetPosition(i, new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f) * 0.052f);
             }
+            // Tanda D: lienzos y guardado de trazos, antes que los lápices que los usan.
+            _ink = gameObject.AddComponent<InkManager>();
+            _ink.Initialize(_visuals, _book, _rig.transform);
             for (int i = 0; i < 6; i++)
             {
-                var go = new GameObject("Herramienta " + (ToolKind)i);
-                FolioTool tool = i == (int)ToolKind.Flashlight ? (FolioTool)go.AddComponent<TripleFlashlight>()
-                                                               : go.AddComponent<UnavailableTool>();
-                Register(tool, (ToolKind)i, new Vector3(0.045f, 0.045f, 0.16f));
-                if (tool is TripleFlashlight flashlight)
+                var kind = (ToolKind)i;
+                var go = new GameObject("Herramienta " + kind);
+                switch (kind)
+                {
+                case ToolKind.Flashlight:
+                    var flashlight = go.AddComponent<TripleFlashlight>();
+                    Register(flashlight, kind, new Vector3(0.045f, 0.045f, 0.16f));
                     flashlight.Build(_visuals);
+                    break;
+                case ToolKind.Pencils:
+                case ToolKind.InvisibleInk:
+                    var pencil = go.AddComponent<PencilTool>();
+                    Register(pencil, kind, new Vector3(0.014f, 0.014f, 0.18f));
+                    pencil.Build(_visuals, kind == ToolKind.InvisibleInk);
+                    break;
+                case ToolKind.Notebook:
+                    var notebook = go.AddComponent<NotebookTool>();
+                    Register(notebook, kind, NotebookTool.ColliderSize);
+                    notebook.Build(_visuals);
+                    break;
+                case ToolKind.Magnifier:
+                    var magnifier = go.AddComponent<MagnifierTool>();
+                    Register(magnifier, kind, MagnifierTool.ColliderSize);
+                    magnifier.Build(_visuals);
+                    break;
+                case ToolKind.Ruler:
+                    var ruler = go.AddComponent<RulerTool>();
+                    Register(ruler, kind, RulerTool.ColliderSize);
+                    ruler.Build(_visuals);
+                    break;
+                default:
+                    Register(go.AddComponent<UnavailableTool>(), kind, new Vector3(0.045f, 0.045f, 0.16f));
+                    break;
+                }
             }
+            // Tanda E: la cámara de la lupa excluye la capa UI; el reloj vive en ella.
+            SetLayer(_watch, 5);
             var label = new GameObject("Aviso de herramientas");
             label.transform.SetParent(transform, false);
             _notice = label.AddComponent<TextMesh>();
@@ -122,6 +178,13 @@ namespace FolioXR.Tools
                 label.GetComponent<MeshRenderer>().sharedMaterial = _notice.font.material;
             ToolVisuals.Configure(label.GetComponent<Renderer>());
             label.SetActive(false);
+        }
+
+        private static void SetLayer(Transform root, int layer)
+        {
+            root.gameObject.layer = layer;
+            for (int i = 0; i < root.childCount; i++)
+                SetLayer(root.GetChild(i), layer);
         }
 
         private void UpdateWatch()

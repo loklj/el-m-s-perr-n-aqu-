@@ -11,30 +11,18 @@ namespace FolioXR.Tools
         private readonly List<UnityEngine.Object> _owned = new List<UnityEngine.Object>();
         internal readonly Material Dark, White, Cyan, Red, Violet, Cone;
         private readonly Mesh _box;
+        private readonly Material _source;
 
         internal ToolVisuals(Material source)
         {
+            _source = source;
             Dark = Clone(source, "cuerpo", new Color(0.055f, 0.07f, 0.09f));
             White = Clone(source, "íconos", Color.white);
             Cyan = Clone(source, "encendido", new Color(0.1f, 0.9f, 0.8f));
             Red = Clone(source, "láser", Color.red);
             Violet = Clone(source, "selector", new Color(0.65f, 0.25f, 1f));
             Cone = Clone(source, "cono suave", Color.white);
-            Cone.SetFloat("_Surface", 1f);
-            Cone.SetFloat("_Blend", 0f);
-            Cone.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
-            Cone.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
-            Cone.SetFloat("_SrcBlendAlpha", (float)BlendMode.One);
-            Cone.SetFloat("_DstBlendAlpha", (float)BlendMode.OneMinusSrcAlpha);
-            Cone.SetFloat("_ZWrite", 0f);
-            Cone.DisableKeyword("_SURFACE_TYPE_TRANSPARENT");
-            Cone.DisableKeyword("_ALPHATEST_ON");
-            Cone.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-            Cone.DisableKeyword("_ALPHAMODULATE_ON");
-            Cone.SetOverrideTag("RenderType", "Transparent");
-            Cone.renderQueue = (int)RenderQueue.Transparent;
-            Cone.SetShaderPassEnabled("DepthOnly", false);
-            Cone.SetShaderPassEnabled("DepthNormalsOnly", false);
+            MakeTransparent(Cone);
             var texture = Own(new Texture2D(32, 32, TextureFormat.RGBA32, false));
             texture.name = "FolioXR degradado del cono";
             texture.wrapMode = TextureWrapMode.Clamp;
@@ -59,7 +47,44 @@ namespace FolioXR.Tools
             _box.RecalculateBounds();
         }
 
-        private T Own<T>(T item)
+        /// <summary>Transparente con mezcla alfa (URP 17.3 usa el uniforme _Surface en OutputAlpha).</summary>
+        internal static void MakeTransparent(Material m)
+        {
+            m.SetFloat("_Surface", 1f);
+            m.SetFloat("_Blend", 0f);
+            m.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+            m.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+            m.SetFloat("_SrcBlendAlpha", (float)BlendMode.One);
+            m.SetFloat("_DstBlendAlpha", (float)BlendMode.OneMinusSrcAlpha);
+            m.SetFloat("_ZWrite", 0f);
+            m.DisableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            m.DisableKeyword("_ALPHATEST_ON");
+            m.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+            m.DisableKeyword("_ALPHAMODULATE_ON");
+            m.SetOverrideTag("RenderType", "Transparent");
+            m.renderQueue = (int)RenderQueue.Transparent;
+            m.SetShaderPassEnabled("DepthOnly", false);
+            m.SetShaderPassEnabled("DepthNormalsOnly", false);
+        }
+
+        /// <summary>Materiales adicionales de las tandas D/E; el registro los destruye al final.</summary>
+        internal Material Solid(string name, Color color) => Clone(_source, name, color);
+
+        internal Material Transparent(string name, Color color)
+        {
+            Material m = Clone(_source, name, color);
+            MakeTransparent(m);
+            return m;
+        }
+
+        internal Material Textured(string name, Texture texture)
+        {
+            Material m = Clone(_source, name, Color.white);
+            m.mainTexture = texture;
+            return m;
+        }
+
+        internal T Own<T>(T item)
             where T : UnityEngine.Object
         {
             _owned.Add(item);
@@ -95,7 +120,7 @@ namespace FolioXR.Tools
             return t;
         }
 
-        private static MeshRenderer MeshObject(Transform parent, string name, Mesh mesh, Material material)
+        internal static MeshRenderer MeshObject(Transform parent, string name, Mesh mesh, Material material)
         {
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);

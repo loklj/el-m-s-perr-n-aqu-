@@ -225,3 +225,44 @@ Implementada en `interaccion/tanda-c`, desde `origin/fase-1/preparacion` (`46c1f
 - El láser usa un raycast y el ultravioleta usa un cono.
 
 Hubo un cambio: se agregó `UltravioletLight.Reveals(punto, soporte)`. Sin el soporte, el rayo chocaba con la cara de colisionadores con grosor, como el libro, y la tinta sobre ellos nunca se habría revelado.
+
+## Estado de la Tanda D
+
+Escrita por Claude el 11 de noviembre de 2026, a pedido del usuario, porque Codex no tenía cupo. Compila con Roslyn (C# 9) contra los stubs de Unity 6000.3 y Meta XR 207. Falta probarla en el Quest 3.
+
+- **Lienzos (`Tools/Ink/`).** `InkManager` (lo crea `ToolRegistry`) mantiene un lienzo por página del libro, por página de la libreta, por casa y uno temporal por objeto (regla, linterna, tapa del libro), que no se guarda.
+  - Los trazos de una página cuelgan de un ancla que copia la página con escala uniforme igual al alto de página: siguen la escala del libro.
+  - Libro: clave `libro/<nombre-tamaño del PDF>/p<n>`. Libreta: `libreta/p<n>`. Casa: `casa/<tema>` en coordenadas de la raíz de la casa.
+- **Contacto.** Un rayo a lo largo del lápiz, desde 15 cm atrás (con el libro a 5x la punta queda dentro de su caja), elige la superficie más cercana a la punta. Si el lápiz va casi paralelo, se usa `ClosestPoint`. Escribe a ≤ 5 mm, con 1 mm de separación (0,8 mm el resaltador y 1,2 mm la tinta invisible). En el libro y la libreta se proyecta al plano real de la hoja, no a la cara del colisionador.
+- **Mallas.** El trazo en curso crece un par de vértices por punto (máximo 256 puntos; luego sigue en otro trazo sin hueco). Al terminar se combina en trozos de ≤ 16.000 vértices por color y lienzo. La goma rehace el lienzo como máximo 10 veces por segundo.
+- **Guardado.** Un JSON por lienzo en `persistentDataPath/trazos/`, 1,5 s después del último cambio, escrito en segundo plano con archivo temporal y `File.Replace`. Se fuerza al pausar, perder el foco o cerrar. El registro anota trazos y vértices al cargar cada lienzo.
+- **Tinta invisible.** A 10 Hz, solo si la linterna está en ultravioleta. Por trazo cercano se lanza un rayo de oclusión (`Reveals(punto, soporte)`, máximo 64), y luego se prueba el cono por punto (`UltravioletLight.InCone`, sin rayos). Se dibujan solo los tramos iluminados.
+- **Regla.** Interfaz `IStraightEdge` + registro `StraightEdges`. A < 1 cm del borde, el trazo se fija a esa recta mientras siga a < 1,5 cm.
+- **Libreta.** A5 de 20 páginas, con textura rayada generada por código. Tiene un colisionador trigger propio, para escribir en ella aunque esté en la mano. Las esquinas inferiores pasan de página con el índice o la punta del mando, excepto el de la mano que la sostiene o que tiene otra herramienta. La página actual se guarda en `folioxr.notebookPage`.
+- **Menú.** Ajustes agrega «Borrar trazos de esta página» y «Borrar trazos de la casa», con un segundo toque antes de 4 s.
+- **Cambios fuera de Tools.** `FolioBook.DocumentId/LeftPageIndex/RightPageVisible`, `FolioEnvironmentController.HouseRoot/EnvironmentName`, `ToolVisuals.Solid/Transparent/Textured`, `UltravioletLight.Active/InCone`.
+
+**Riesgos.**
+- La orientación del lápiz en la mano depende de la rotación de la muñeca (igual que la linterna).
+- Cargar una casa con miles de trazos puede dar un tirón al entrar: es un JSON grande, leído en el hilo principal.
+- Los trazos sobre la regla, la linterna o la tapa del libro no se guardan.
+- 1 mm de separación podría parpadear de lejos según la precisión de profundidad.
+
+## Estado de la Tanda E
+
+Escrita por Claude el 11 de noviembre de 2026. Compila con los mismos stubs. Falta probarla en el Quest 3.
+
+- **Lupa (`MagnifierTool`).** Lente de 8 cm sobre un mango.
+  - Una cámara secundaria en el ojo apunta al centro del lente, con un campo visual igual al ángulo del lente dividido por el aumento. Dibuja en una RenderTexture de 512 px, sin MSAA, sombras ni postproceso.
+  - El plano cercano queda justo detrás del lente: no se ven ni la mano ni el mango.
+  - Renderiza solo si está en la mano o a menos de 1 m del libro (escalado con el libro) y se mira el lente de frente. Lo hace un cuadro sí y uno no (36 Hz).
+  - El reloj pasa a la capa UI, que la cámara excluye. El menú no se tocó, porque Codex lo está cambiando para la esfera.
+  - Aumento de 1,5× a 4×: con el stick (que deja de mover y girar mientras se sostiene la lupa con ese mando), con A/X y B/Y, o con los botones + y − por toque.
+- **Regla (`RulerTool`).** 30 × 3,5 cm, transparente, con marcas de 1 mm, 5 mm y 1 cm, y números de un mapa de bits de 3×5 hecho por código. Implementa `IStraightEdge` con sus bordes largos inferiores.
+- **Medición opcional (punto 3):** no se hizo, para no complicar la tanda.
+
+**Riesgos.**
+- La imagen de la lupa es monoscópica.
+- En passthrough, lo real se ve negro dentro del lente (la cámara no ve el passthrough).
+- Hay que medir el costo de la segunda cámara en la casa.
+

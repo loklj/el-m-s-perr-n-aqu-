@@ -81,6 +81,11 @@ namespace FolioXR.Reading
         public float BookScale { get; private set; } = 1f;
         public event System.Action Recalled;
         public event System.Action ScaleReset;
+        /// <summary>Identificador estable del documento (nombre + tamaño) para guardar trazos por página.</summary>
+        public string DocumentId { get; private set; }
+        /// <summary>Página izquierda visible (desde 0) o -1 mientras no hay doble página lista.</summary>
+        public int LeftPageIndex => _spreadReady ? _leftIndex : -1;
+        public bool RightPageVisible => _spreadReady && rightPage != null && rightPage.enabled;
         private Rigidbody _body;
         private PhysicsMaterial _physicsMaterial;
         private Vector3 _baseScale;
@@ -209,6 +214,7 @@ namespace FolioXR.Reading
 
             _renderer = new PdfPageRenderer(pdfPath);
             Debug.Log("[FolioXR] PDF: " + _renderer.PdfPath);
+            DocumentId = BuildDocumentId(_renderer.PdfPath);
 
             PdfResult countResult = null;
             yield return _renderer.GetPageCount((count, r) =>
@@ -363,7 +369,8 @@ namespace FolioXR.Reading
                 _renderScaleStickLatched = true;
                 return;
             }
-            float y = ReadAxis(XRNode.LeftHand, CommonUsages.primary2DAxis).y;
+            float y = FolioXR.Tools.ToolRegistry.ReservesStick(XRNode.LeftHand)
+                ? 0f : ReadAxis(XRNode.LeftHand, CommonUsages.primary2DAxis).y;
             if (Mathf.Abs(y) < 0.3f) _renderScaleStickLatched = false;
             if (_renderScaleStickLatched || Mathf.Abs(y) <= 0.7f) return;
 
@@ -641,6 +648,20 @@ namespace FolioXR.Reading
             }
 
             _busy = false;
+        }
+
+        private static string BuildDocumentId(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return "vista-previa";
+            try
+            {
+                var info = new System.IO.FileInfo(path);
+                return System.IO.Path.GetFileNameWithoutExtension(path) + "-" + (info.Exists ? info.Length : 0L);
+            }
+            catch (System.Exception)
+            {
+                return System.IO.Path.GetFileNameWithoutExtension(path);
+            }
         }
 
         private static void ReplaceTexture(ref Texture2D slot, Texture2D incoming, Renderer target)

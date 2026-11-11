@@ -184,6 +184,7 @@ namespace FolioXR.Locomotion
         private static bool ControllerAxis(XRNode node, out Vector2 axis)
         {
             axis = Vector2.zero;
+            if (FolioXR.Tools.ToolRegistry.ReservesStick(node)) return false; // Aumento de la lupa (Tanda E).
             InputDevice device = InputDevices.GetDeviceAtXRNode(node);
             if (!device.isValid || (device.characteristics & InputDeviceCharacteristics.Controller) == 0 ||
                 !device.TryGetFeatureValue(CommonUsages.isTracked, out bool tracked) || !tracked ||
