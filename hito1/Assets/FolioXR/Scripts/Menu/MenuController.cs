@@ -11,6 +11,15 @@ namespace FolioXR.Menu
     [DisallowMultipleComponent]
     public sealed class MenuController : MonoBehaviour
     {
+        public static MenuController Instance { get; private set; }
+
+        /// <summary>Botón «Menú» del reloj de la muñeca (revisión del 11 nov 2026).</summary>
+        public static void ToggleFromWatch()
+        {
+            if (Instance == null) return;
+            if (Instance.IsOpen) Instance.Close();
+            else Instance.Open();
+        }
         public const string StylePrefsKey = "folioxr.menuStyle";
         private const string StyleChosenKey = "folioxr.menuStyleChosen";
         public bool IsOpen { get; private set; }
@@ -48,12 +57,14 @@ namespace FolioXR.Menu
 
         private void Awake()
         {
+            Instance = this;
             // Antes de existir la esfera se guardaba «simple» a la fuerza: solo vale lo que el usuario eligió.
             SphereStyle = PlayerPrefs.GetInt(StyleChosenKey, 0) == 0 ||
                 PlayerPrefs.GetString(StylePrefsKey, "sphere") != "simple";
             _audio = gameObject.AddComponent<AudioSource>();
             _audio.playOnAwake = false;
             _audio.spatialBlend = 0f;
+            FolioXR.Books.BookLibrary.Notice += OnLibraryNotice;
             _click = Tone("Clic del menú", 800f, 0.035f, 0.08f);
             _notice = Tone("Fin de lectura", 440f, 0.65f, 0.07f);
         }
@@ -368,6 +379,14 @@ namespace FolioXR.Menu
                 capabilities.supportsImpulse) device.SendHapticImpulse(0, 0.25f, 0.035f);
         }
 
+        /// <summary>Avisos de la biblioteca (importación, errores al abrir): se muestran frente a la vista.</summary>
+        private void OnLibraryNotice(string message)
+        {
+            if (_view == null || Camera.main == null) return;
+            _audio.PlayOneShot(_click);
+            _view.ShowNotice(message, Camera.main.transform);
+        }
+
         private void OnTimerElapsed()
         {
             _audio.PlayOneShot(_notice);
@@ -414,6 +433,7 @@ namespace FolioXR.Menu
 
         private void OnDestroy()
         {
+            FolioXR.Books.BookLibrary.Notice -= OnLibraryNotice;
             if (Model != null) Model.TimerElapsed -= OnTimerElapsed;
             if (_click != null) Destroy(_click);
             if (_notice != null) Destroy(_notice);

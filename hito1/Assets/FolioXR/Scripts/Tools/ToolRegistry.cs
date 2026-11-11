@@ -9,7 +9,7 @@ namespace FolioXR.Tools
 {
     /// <summary>Un dueño por lado físico, reloj izquierdo y registro extensible para D/E.</summary>
     [DefaultExecutionOrder(125)] // Menú 100 → herramientas 125 → libro 150/200.
-    public sealed class ToolRegistry : MonoBehaviour
+    public sealed partial class ToolRegistry : MonoBehaviour
     {
         public static ToolRegistry Instance { get; private set; }
         public IReadOnlyList<FolioTool> Tools => _tools;
@@ -124,6 +124,7 @@ namespace FolioXR.Tools
                 float a = i * Mathf.PI / 24f;
                 ring.SetPosition(i, new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f) * 0.052f);
             }
+            BuildWatchFace(); // Hora, botón «Menú» y marcadores del guante de gravedad.
             // Tanda D: lienzos y guardado de trazos, antes que los lápices que los usan.
             _ink = gameObject.AddComponent<InkManager>();
             _ink.Initialize(_visuals, _book, _rig.transform);
@@ -196,8 +197,8 @@ namespace FolioXR.Tools
                      : _inputs[0].Reliable ? (_inputs[0].Wrist != null ? _inputs[0].Wrist : _inputs[0].Hand.transform)
                                            : null;
             _wristValid = _wrist != null && _focused;
-            // Con el menú abierto (controles en pausa) el reloj se oculta: no compite con la esfera de la mano.
-            _watch.gameObject.SetActive(_wristValid && !_book.InputPaused);
+            // Visible también con el menú abierto: su botón «Menú» lo cierra con la mano.
+            _watch.gameObject.SetActive(_wristValid);
             if (!_wristValid)
                 return;
             Camera camera = Camera.main;
@@ -292,6 +293,7 @@ namespace FolioXR.Tools
                         else
                         {
                             _held[i] = tool;
+                            _sticky[i] = false; // Tomada con pellizco: se suelta al abrir, como siempre.
                             input.LostSince = -1f;
                             tool.Take(input.Node, input.IsHand,
                                       _rig.trackingSpace != null ? _rig.trackingSpace : _rig.transform, input.Position,
@@ -304,6 +306,8 @@ namespace FolioXR.Tools
                 Dispatch(i, justTaken);
             }
             TouchPlaceholders();
+            UpdateWatchTouches();
+            UpdateGravity();
             if (!_book.RealisticPhysics)
                 foreach (FolioTool tool in _tools)
                     tool.FreezeWorld();
@@ -337,6 +341,8 @@ namespace FolioXR.Tools
             }
             input.LostSince = -1f;
             tool.Hold(input.Position, input.Rotation);
+            if (UpdateSticky(i, tool, input))
+                return;
             if (input.Pressed)
                 return;
             // Se evalúa la pose de suelta actual, no la del cuadro anterior.
@@ -346,6 +352,7 @@ namespace FolioXR.Tools
             {
                 tool.Release(_book.RealisticPhysics);
                 _held[i] = null;
+                _sticky[i] = false;
             }
         }
 
@@ -432,6 +439,7 @@ namespace FolioXR.Tools
                 if (_held[i] == tool)
                 {
                     _held[i] = null;
+                    _sticky[i] = false;
                     _reserved[i % 2] = true;
                 }
             tool.ReturnToWatch();
@@ -442,6 +450,7 @@ namespace FolioXR.Tools
 
         public void ReturnAll()
         {
+            CancelFlights();
             foreach (FolioTool tool in _tools)
                 if (tool != null && tool.State != ToolState.Stored)
                     Return(tool);

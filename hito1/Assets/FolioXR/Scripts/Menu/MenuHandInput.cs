@@ -20,9 +20,10 @@ namespace FolioXR.Menu
             Reset();
         }
 
+        // Sin exigir confianza alta (revisión del 11 nov 2026): con la palma hacia arriba y el puño cerrado
+        // los dedos quedan tapados, la confianza baja y el gesto se reiniciaba siempre.
         internal bool Reliable => Hand != null && Hand.isActiveAndEnabled && Hand.IsTracked &&
-            Hand.IsDataHighConfidence && !Hand.IsSystemGestureInProgress &&
-            _skeleton != null && _skeleton.isActiveAndEnabled && _skeleton.IsDataValid && _skeleton.IsDataHighConfidence;
+            !Hand.IsSystemGestureInProgress && _skeleton != null && _skeleton.isActiveAndEnabled && _skeleton.IsDataValid;
 
         internal bool TryBone(OVRSkeleton.BoneId id, out Vector3 position)
         {
@@ -78,7 +79,7 @@ namespace FolioXR.Menu
                 // Cada segundo solo cerca de la palma arriba; si no, cada 10 s para no llenar el registro.
                 _nextLog = now + (angle < 60f ? 1f : 10f);
             }
-            PalmUp = angle < 45f;
+            PalmUp = angle < 55f;
             if (!PalmUp || now < _cooldownUntil) { _stage = 0; return false; }
             if (!TryBone(OVRSkeleton.BoneId.Hand_IndexTip, out Vector3 a) ||
                 !TryBone(OVRSkeleton.BoneId.Hand_MiddleTip, out Vector3 b) ||
@@ -93,22 +94,22 @@ namespace FolioXR.Menu
                 Vector3.Distance(c, center) + Vector3.Distance(d, center)) * 0.25f;
             if (_stage == 0)
             {
-                if (distance > 0.08f) _stage = 1;
+                if (distance > 0.075f) { _stage = 1; Debug.Log("[FolioXR] Menú: palma abierta hacia arriba"); }
             }
             else if (_stage == 1)
             {
-                if (distance < 0.055f) { _stage = 2; _fistSince = now; }
+                if (distance < 0.062f) { _stage = 2; _fistSince = now; }
             }
             else
             {
                 if (now - _fistSince > 1.2f) { _stage = 0; return false; }
                 if (_stage == 2)
                 {
-                    // Debe permanecer bajo 5,5 cm durante 0,15 s continuos.
-                    if (distance >= 0.055f) { _stage = 1; return false; }
-                    if (now - _fistSince >= 0.15f) _stage = 3;
+                    // Debe permanecer bajo 6,2 cm durante 0,12 s continuos.
+                    if (distance >= 0.062f) { _stage = 1; return false; }
+                    if (now - _fistSince >= 0.12f) { _stage = 3; Debug.Log("[FolioXR] Menú: puño cerrado"); }
                 }
-                else if (distance > 0.08f)
+                else if (distance > 0.075f)
                 {
                     _cooldownUntil = now + 0.8f;
                     _stage = 0;

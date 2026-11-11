@@ -1,0 +1,436 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using FolioXR.Reading;
+using UnityEngine;
+
+namespace FolioXR.Books
+{
+    /// <summary>Ficha de un libro de la biblioteca (campos con los nombres del JSON del plugin Java).</summary>
+    [Serializable]
+    public sealed class BookEntry
+    {
+        public string id, title, author, format, path, cover;
+        public long size, lastRead;
+        public int pages, position;
+
+        public bool IsPdf => format == "pdf";
+
+        /// <summary>Progreso para el menú: porcentaje, o si aún no se abrió.</summary>
+        public string ProgressText => pages <= 0
+            ? "sin leer"
+            : Mathf.Clamp(Mathf.RoundToInt(Mathf.Min(position + 2, pages) * 100f / pages), 1, 100) + "%";
+    }
+
+    [Serializable]
+    internal sealed class BookList
+    {
+        public List<BookEntry> books = new List<BookEntry>();
+    }
+
+    [Serializable]
+    internal sealed class BookmarkList
+    {
+        public List<int> positions = new List<int>();
+    }
+
+    [Serializable]
+    internal sealed class ImportStatus
+    {
+        public string state, file, message;
+        public int index, count, imported, serial;
+        public long copied, total;
+    }
+
+    /// <summary>
+    /// Encargo 5 (escrito por Claude). Puente con el plugin Java FolioLibrary: biblioteca en SQLite,
+    /// importación con el selector del sistema, progreso de lectura y marcadores.
+    /// Fuera del visor (Editor) queda desactivada y el libro abre el PDF de prueba, como antes.
+    /// </summary>
+    [DefaultExecutionOrder(-50)]
+    public sealed class BookLibrary : MonoBehaviour
+    {
+        private const string JavaClass = "com.loklj.folioxr.FolioLibrary";
+        private const float SaveDelay = 2f, PollInterval = 0.3f;
+
+        public static BookLibrary Instance { get; private set; }
+        /// <summary>Cambió la lista, el libro abierto, los marcadores o el avance de una importación.</summary>
+        public static event Action StateChanged;
+        /// <summary>Mensaje para mostrar al usuario (lo presenta el menú).</summary>
+        public static event Action<string> Notice;
+
+        public bool Available { get; private set; }
+        public IReadOnlyList<BookEntry> Books => _books;
+        public IReadOnlyList<int> Bookmarks => _bookmarks;
+        public BookEntry Current { get; private set; }
+        public bool Importing => _importState == "picking" || _importState == "copying";
+        public string ImportLine { get; private set; } = string.Empty;
+        public bool IsBookmarked => Current != null && _bookmarks.Contains(Current.position);
+
+        private List<BookEntry> _books = new List<BookEntry>();
+        private List<int> _bookmarks = new List<int>();
+        private FolioBook _book;
+        private string _importState = "idle";
+        private int _lastSerial = -1;
+        private float _saveAt, _nextPoll, _nextFind;
+        private bool _dirty, _polling, _hooked;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        private AndroidJavaClass _java;
+        private AndroidJavaObject _activity;
+#endif
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+        private static void Create()
+        {
+            if (FindFirstObjectByType<BookLibrary>(FindObjectsInactive.Include) == null)
+                new GameObject("Biblioteca (Folio XR)").AddComponent<BookLibrary>();
+        }
+
+        private void Awake()
+        {
+            Instance = this;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                _java = new AndroidJavaClass(JavaClass);
+                using (var player = new AndroidJavaClass("com.unity3d.player.UnityPlayer"))
+                    _activity = player.GetStatic<AndroidJavaObject>("currentActivity");
+                Available = _activity != null && _java.CallStatic<bool>("init", _activity);
+            }
+            catch (Exception e)
+            {
+                Available = false;
+                Debug.LogWarning("[FolioXR] Biblioteca: no se pudo iniciar el plugin: " + e.Message);
+            }
+#endif
+            Reload();
+            Debug.Log("[FolioXR] Biblioteca: " + (Available ? _books.Count + " libro(s)" : "no disponible fuera del visor"));
+            Hook();
+            OpenLastRead();
+        }
+
+        private void Hook()
+        {
+            if (_hooked) return;
+            if (_book == null) _book = FindFirstObjectByType<FolioBook>();
+            if (_book == null) return;
+            _book.SpreadShown += OnSpreadShown;
+            _book.DocumentFailed += OnDocumentFailed;
+            _hooked = true;
+        }
+
+        /// <summary>Al arrancar vuelve al último libro leído, en su página.</summary>
+        private void OpenLastRead()
+        {
+            if (!Available || _book == null) return;
+            foreach (BookEntry entry in _books)
+            {
+                if (entry.lastRead <= 0) break; // Vienen ordenados por última lectura.
+                if (!entry.IsPdf || !File.Exists(entry.path)) continue;
+                _book.RequestDocument(entry.path, entry.id, entry.position);
+                Debug.Log("[FolioXR] Biblioteca: se retoma «" + entry.title + "» en la página " + (entry.position + 1));
+                return;
+            }
+        }
+
+        private void Reload()
+        {
+            string openId = Current != null ? Current.id : null;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (Available)
+            {
+                try
+                {
+                    BookList list = JsonUtility.FromJson<BookList>(_java.CallStatic<string>("listBooksJson"));
+                    _books = list != null && list.books != null ? list.books : new List<BookEntry>();
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning("[FolioXR] Biblioteca: no se pudo leer la lista: " + e.Message);
+                }
+            }
+#endif
+            Current = openId != null ? Find(openId) : null;
+        }
+
+        private BookEntry Find(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return null;
+            foreach (BookEntry entry in _books)
+                if (entry.id == id) return entry;
+            return null;
+        }
+
+        private void LoadBookmarks()
+        {
+            _bookmarks = new List<int>();
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (!Available || Current == null) return;
+            try
+            {
+                BookmarkList list = JsonUtility.FromJson<BookmarkList>(_java.CallStatic<string>("bookmarksJson", Current.id));
+                if (list != null && list.positions != null) _bookmarks = list.positions;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[FolioXR] Biblioteca: no se pudieron leer los marcadores: " + e.Message);
+            }
+#endif
+        }
+
+        // ───────────────────────── Progreso ─────────────────────────
+
+        private void OnSpreadShown(int leftPage, int pageCount)
+        {
+            BookEntry entry = Find(_book.DocumentId);
+            if (entry != Current)
+            {
+                if (_dirty) Save(false); // La página del libro anterior no se pierde al cambiar.
+                Current = entry;
+                LoadBookmarks();
+                _dirty = entry != null; // Abrirlo ya lo vuelve «el último leído».
+                _saveAt = Time.unscaledTime + 0.5f;
+            }
+            if (Current != null && (Current.position != leftPage || Current.pages != pageCount))
+            {
+                Current.position = leftPage;
+                Current.pages = pageCount;
+                _dirty = true;
+                _saveAt = Time.unscaledTime + SaveDelay; // Varias páginas seguidas, una sola escritura.
+            }
+            StateChanged?.Invoke();
+        }
+
+        private void OnDocumentFailed(string id, string message)
+        {
+            BookEntry entry = Find(id);
+            Notify(entry != null ? "«" + entry.title + "»\n" + message : message);
+        }
+
+        private void Save(bool sync)
+        {
+            _dirty = false;
+            if (Current == null) return;
+            Current.lastRead = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (!Available) return;
+            try
+            {
+                _java.CallStatic("setProgress", Current.id, Current.position, Current.pages, sync);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[FolioXR] Biblioteca: no se pudo guardar el progreso: " + e.Message);
+            }
+#endif
+        }
+
+        // ───────────────────────── Acciones del menú ─────────────────────────
+
+        public void Open(BookEntry entry)
+        {
+            if (entry == null || _book == null) return;
+            if (!entry.IsPdf)
+            {
+                Notify("Formato aún no compatible: «" + entry.title + "» (" + entry.format.ToUpperInvariant() +
+                    ").\nSe podrá abrir en una próxima versión.");
+                return;
+            }
+            if (!File.Exists(entry.path))
+            {
+                Notify("No se encontró la copia de «" + entry.title + "».\nQuítalo de la biblioteca y vuelve a importarlo.");
+                return;
+            }
+            if (Current != null && Current.id == entry.id) return;
+            _book.RequestDocument(entry.path, entry.id, entry.position);
+            Debug.Log("[FolioXR] Biblioteca: abrir «" + entry.title + "» en la página " + (entry.position + 1));
+        }
+
+        public void Remove(BookEntry entry)
+        {
+            if (entry == null || !Available) return;
+            bool removed = false;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                removed = _java.CallStatic<bool>("removeBook", entry.id);
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[FolioXR] Biblioteca: no se pudo quitar: " + e.Message);
+            }
+#endif
+            if (!removed)
+            {
+                Notify("No se pudo quitar «" + entry.title + "».");
+                return;
+            }
+            if (Current != null && Current.id == entry.id)
+            {
+                Current = null;
+                _dirty = false;
+                _bookmarks = new List<int>();
+                if (_book != null) _book.OpenDefaultDocument();
+            }
+            Reload();
+            StateChanged?.Invoke();
+            Notify("Se quitó «" + entry.title + "» de la biblioteca.");
+        }
+
+        public void ToggleBookmark()
+        {
+            if (Current == null || !Available) return;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                bool marked = _java.CallStatic<bool>("toggleBookmark", Current.id, Current.position);
+                Debug.Log("[FolioXR] Biblioteca: marcador " + (marked ? "puesto" : "quitado") + " en la página " +
+                    (Current.position + 1));
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[FolioXR] Biblioteca: no se pudo cambiar el marcador: " + e.Message);
+            }
+#endif
+            LoadBookmarks();
+            StateChanged?.Invoke();
+        }
+
+        public void GoToBookmark(int position)
+        {
+            if (_book != null) _book.GoToPage(position);
+        }
+
+        public void Import()
+        {
+            if (!Available || Importing) return;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                _java.CallStatic("pickAndImport", _activity);
+                _polling = true;
+                _nextPoll = 0f;
+                Debug.Log("[FolioXR] Importar: se pidió el selector de archivos del sistema");
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[FolioXR] Importar: no se pudo abrir el selector: " + e.Message);
+                Notify("El selector de archivos no está disponible en este visor.\nPronto podrás cargar libros desde el PC por Wi-Fi.");
+            }
+#endif
+        }
+
+        public void CancelImport()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (!Available) return;
+            try
+            {
+                _java.CallStatic("cancelImport");
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[FolioXR] Importar: no se pudo cancelar: " + e.Message);
+            }
+#endif
+        }
+
+        private static void Notify(string message)
+        {
+            Debug.Log("[FolioXR] Aviso: " + message.Replace("\n", " "));
+            Notice?.Invoke(message);
+        }
+
+        // ───────────────────────── Ciclo ─────────────────────────
+
+        private void Update()
+        {
+            if (!_hooked && Time.unscaledTime >= _nextFind)
+            {
+                _nextFind = Time.unscaledTime + 1f;
+                Hook();
+            }
+            if (_dirty && Time.unscaledTime >= _saveAt) Save(false);
+            if (_polling && Time.unscaledTime >= _nextPoll)
+            {
+                _nextPoll = Time.unscaledTime + PollInterval;
+                Poll();
+            }
+        }
+
+        private void Poll()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            ImportStatus status;
+            try
+            {
+                status = JsonUtility.FromJson<ImportStatus>(_java.CallStatic<string>("importStatusJson"));
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[FolioXR] Importar: no se pudo leer el estado: " + e.Message);
+                _polling = false;
+                _importState = "idle";
+                StateChanged?.Invoke();
+                return;
+            }
+            if (status == null || status.serial == _lastSerial) return;
+            _lastSerial = status.serial;
+            _importState = status.state ?? "idle";
+            switch (_importState)
+            {
+                case "picking":
+                    ImportLine = "Elige los archivos\nen el selector";
+                    break;
+                case "copying":
+                    int percent = status.total > 0 ? Mathf.Clamp((int)(status.copied * 100L / status.total), 0, 100) : 0;
+                    ImportLine = "Importando " + Mathf.Max(1, status.index) + " de " + Mathf.Max(1, status.count) +
+                        "\n" + percent + "%";
+                    break;
+                default:
+                    // Terminó: hecho, con error, cancelado o sin selector en este visor.
+                    _polling = false;
+                    string message = status.message ?? string.Empty;
+                    if (_importState == "unavailable")
+                    {
+                        Debug.LogWarning("[FolioXR] Importar: Horizon OS no abrió el selector de archivos (SAF).");
+                        message = "El selector de archivos no está disponible en este visor.\n" +
+                            "Pronto podrás cargar libros desde el PC por Wi-Fi.";
+                    }
+                    _importState = "idle";
+                    ImportLine = string.Empty;
+                    Reload();
+                    if (message.Length > 0) Notify(message);
+                    break;
+            }
+            StateChanged?.Invoke();
+#endif
+        }
+
+        private void OnApplicationPause(bool paused)
+        {
+            if (paused && _dirty) Save(true); // Escritura inmediata: el sistema puede cerrar la app en pausa.
+            if (!paused) _nextPoll = 0f;      // Al volver del selector, leer el estado enseguida.
+        }
+
+        private void OnApplicationQuit()
+        {
+            if (_dirty) Save(true);
+        }
+
+        private void OnDestroy()
+        {
+            if (_hooked && _book != null)
+            {
+                _book.SpreadShown -= OnSpreadShown;
+                _book.DocumentFailed -= OnDocumentFailed;
+            }
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (_java != null) _java.Dispose();
+            if (_activity != null) _activity.Dispose();
+#endif
+            if (Instance == this) Instance = null;
+        }
+    }
+}

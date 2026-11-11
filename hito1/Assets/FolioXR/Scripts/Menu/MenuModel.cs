@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using FolioXR.Books;
 using FolioXR.Environments;
 using FolioXR.Reading;
 using FolioXR.Tools;
@@ -60,6 +61,12 @@ namespace FolioXR.Menu
         // Borrar trazos pide un segundo toque antes de 4 s (Tanda D).
         private int _pendingClear; // 0 = nada, 1 = página, 2 = casa.
         private float _pendingClearUntil;
+        // Biblioteca: seis libros por página; quitar pide elegir el libro y un segundo toque antes de 4 s.
+        private const int BooksPerPage = 6;
+        private int _libraryPage;
+        private bool _removing;
+        private string _removeId;
+        private float _removeUntil;
 
         public MenuModel(FolioBook book, FolioEnvironmentController environment, Func<bool> sphereStyle,
             Action<bool> setSphereStyle)
@@ -68,8 +75,41 @@ namespace FolioXR.Menu
             _environment = environment;
             _sphereStyle = sphereStyle;
             _setSphereStyle = setSphereStyle;
+            BookLibrary.StateChanged += OnLibraryChanged;
             RebuildOptions();
         }
+
+        private void OnLibraryChanged()
+        {
+            if (SelectedCategory == MenuCategory.Biblioteca) RebuildOptions();
+            Changed?.Invoke();
+        }
+
+        private void TapBook(BookEntry entry)
+        {
+            BookLibrary library = BookLibrary.Instance;
+            if (library == null) return;
+            if (!_removing)
+            {
+                library.Open(entry);
+                return;
+            }
+            if (_removeId != entry.id || Time.unscaledTime >= _removeUntil)
+            {
+                _removeId = entry.id;
+                _removeUntil = Time.unscaledTime + 4f;
+            }
+            else
+            {
+                _removeId = null;
+                _removing = false;
+                library.Remove(entry);
+            }
+            RebuildOptions();
+        }
+
+        private static string Shorten(string text, int length) =>
+            string.IsNullOrEmpty(text) ? "(sin título)" : text.Length <= length ? text : text.Substring(0, length - 1) + "…";
 
         public void Select(MenuCategory category)
         {
@@ -101,6 +141,12 @@ namespace FolioXR.Menu
             if (!Mathf.Approximately(scale, _lastRenderScale))
             {
                 _lastRenderScale = scale;
+                Changed?.Invoke();
+            }
+            if (_removeId != null && Time.unscaledTime >= _removeUntil)
+            {
+                _removeId = null;
+                if (SelectedCategory == MenuCategory.Biblioteca) RebuildOptions();
                 Changed?.Invoke();
             }
             if (_pendingClear != 0 && Time.unscaledTime >= _pendingClearUntil)
@@ -145,11 +191,55 @@ namespace FolioXR.Menu
             switch (SelectedCategory)
             {
                 case MenuCategory.Biblioteca:
-                    // El Hito 1 solo abre uno de estos dos PDF; no existe biblioteca todavía.
-                    string name = System.IO.File.Exists(System.IO.Path.Combine(Application.persistentDataPath,
-                        FolioBook.UserPdfName)) ? FolioBook.UserPdfName : FolioBook.BundledPdfName;
-                    options.Add(new MenuOption("Libro abierto:\n" + name));
-                    options.Add(new MenuOption("Próximamente:\ntu biblioteca"));
+                    BookLibrary library = BookLibrary.Instance;
+                    if (library == null || !library.Available)
+                    {
+                        // Fuera del visor (Editor) no hay biblioteca: solo se informa el PDF abierto.
+                        string name = System.IO.File.Exists(System.IO.Path.Combine(Application.persistentDataPath,
+                            FolioBook.UserPdfName)) ? FolioBook.UserPdfName : FolioBook.BundledPdfName;
+                        options.Add(new MenuOption("Libro abierto:\n" + name));
+                        options.Add(new MenuOption("La biblioteca solo\nfunciona en el visor"));
+                        break;
+                    }
+                    if (library.Importing)
+                    {
+                        options.Add(new MenuOption(library.ImportLine));
+                        options.Add(new MenuOption("Cancelar\nimportación", library.CancelImport));
+                    }
+                    else
+                    {
+                        options.Add(new MenuOption("Importar libros", library.Import));
+                        options.Add(new MenuOption(_removing ? "Elige el libro\na quitar" : "Quitar de la\nbiblioteca",
+                            () => { _removing = !_removing; _removeId = null; RebuildOptions(); },
+                            () => library.Books.Count > 0, () => _removing));
+                    }
+                    BookEntry current = library.Current;
+                    bool bookmarked = library.IsBookmarked;
+                    options.Add(new MenuOption(current == null ? "Marcar página"
+                            : (bookmarked ? "Quitar marcador\npág. " : "Marcar pág. ") + (current.position + 1),
+                        library.ToggleBookmark, () => library.Current != null, () => library.IsBookmarked));
+                    for (int i = 0; i < library.Bookmarks.Count && i < 4; i++)
+                    {
+                        int position = library.Bookmarks[i];
+                        options.Add(new MenuOption("Ir al marcador\npág. " + (position + 1),
+                            () => library.GoToBookmark(position)));
+                    }
+                    int bookPages = Mathf.Max(1, (library.Books.Count + BooksPerPage - 1) / BooksPerPage);
+                    _libraryPage = Mathf.Clamp(_libraryPage, 0, bookPages - 1);
+                    int last = Mathf.Min(library.Books.Count, (_libraryPage + 1) * BooksPerPage);
+                    for (int i = _libraryPage * BooksPerPage; i < last; i++)
+                    {
+                        BookEntry entry = library.Books[i];
+                        string text = _removeId == entry.id ? "¿Quitar? Toca\notra vez"
+                            : Shorten(entry.title, 30) + "\n" +
+                              (entry.IsPdf ? entry.ProgressText : entry.format.ToUpperInvariant() + " · pronto");
+                        options.Add(new MenuOption(text, () => TapBook(entry),
+                            marked: () => library.Current != null && library.Current.id == entry.id));
+                    }
+                    if (bookPages > 1)
+                        options.Add(new MenuOption("Más libros\n" + (_libraryPage + 1) + " de " + bookPages,
+                            () => { _libraryPage = (_libraryPage + 1) % bookPages; RebuildOptions(); }));
+                    if (library.Books.Count == 0) options.Add(new MenuOption("Aún no hay libros:\nimporta el primero"));
                     break;
                 case MenuCategory.Entornos:
                     options.Add(new MenuOption("Passthrough", () => _environment.Leave(),
@@ -175,6 +265,8 @@ namespace FolioXR.Menu
                     options.Add(new MenuOption("Menú:\nSimple", () => _setSphereStyle(false), marked: () => !_sphereStyle()));
                     options.Add(new MenuOption("Física: " + (_book != null && _book.RealisticPhysics ? "Realista" : "Flotante"),
                         () => { _book.SetRealisticPhysics(!_book.RealisticPhysics); RebuildOptions(); }, () => _book != null));
+                    options.Add(new MenuOption("Velocidad: " + (FolioLocomotion.Jog ? "trotar" : "caminar"),
+                        () => { FolioLocomotion.SetJog(!FolioLocomotion.Jog); RebuildOptions(); }, marked: () => FolioLocomotion.Jog));
                     options.Add(new MenuOption("Viñeta: " + (FolioLocomotion.VignetteEnabled ? "sí" : "no"),
                         () => { FolioLocomotion.SetVignette(!FolioLocomotion.VignetteEnabled); RebuildOptions(); }));
                     options.Add(new MenuOption("Giro: " + (FolioLocomotion.SmoothTurn ? "suave" : "por pasos"),

@@ -12,7 +12,15 @@ namespace FolioXR.Locomotion
     {
         public const string VignettePrefsKey = "folioxr.locomotionVignette";
         public const string SmoothTurnPrefsKey = "folioxr.smoothTurn";
-        private const float Speed = 1.4f, Acceleration = 3.5f, Radius = 0.20f;
+        public const string JogPrefsKey = "folioxr.jog";
+        // Caminar 1,4 m/s; trotar 3 m/s (pedido del usuario, 11 nov 2026).
+        private const float WalkSpeed = 1.4f, JogSpeed = 3f, Radius = 0.20f;
+        private static float Speed => Jog ? JogSpeed : WalkSpeed;
+        private static float Acceleration => Jog ? 6f : 3.5f;
+        public static bool Jog => PlayerPrefs.GetInt(JogPrefsKey, 0) != 0;
+        // Pellizco de pulgar y dedo medio: fuerza en vez de confianza «High» de cada dedo, que casi nunca
+        // se cumplía y dejaba sin movimiento a quien usa las manos.
+        private const float MiddleOn = 0.7f, MiddleOff = 0.4f, IndexBlock = 0.6f;
         private const float Press = 0.7f, Release = 0.3f, MaxTeleport = 10f;
         private static FolioLocomotion _instance;
         public static bool VignetteEnabled => PlayerPrefs.GetInt(VignettePrefsKey, 1) != 0;
@@ -21,7 +29,8 @@ namespace FolioXR.Locomotion
         private OVRCameraRig _rig;
         private FolioBook _book;
         private BookGrab _grab;
-        private OVRHand _hand;
+        private OVRHand _hand, _leftHand;
+        private bool _leftWalking;
         private CharacterController _capsule;
         private LocomotionVisuals _visuals;
         private readonly RaycastHit[] _hits = new RaycastHit[64];
@@ -50,6 +59,13 @@ namespace FolioXR.Locomotion
             PlayerPrefs.Save();
         }
 
+        public static void SetJog(bool value)
+        {
+            PlayerPrefs.SetInt(JogPrefsKey, value ? 1 : 0);
+            PlayerPrefs.Save();
+            Debug.Log("[FolioXR] Movimiento: " + (value ? "trotar (3 m/s)" : "caminar (1,4 m/s)"));
+        }
+
         public static void SetSmoothTurn(bool value)
         {
             PlayerPrefs.SetInt(SmoothTurnPrefsKey, value ? 1 : 0);
@@ -68,9 +84,12 @@ namespace FolioXR.Locomotion
 
         public static bool ReservesMiddlePinch(OVRHand hand) => _instance != null &&
             _instance._environment != null && _instance._environment.IsActive && hand != null &&
-            hand.GetHand() == OVRPlugin.Hand.HandRight &&
-            hand.GetFingerIsPinching(OVRHand.HandFinger.Middle) &&
-            !hand.GetFingerIsPinching(OVRHand.HandFinger.Index);
+            MiddlePinch(hand, MiddleOn);
+
+        private static bool MiddlePinch(OVRHand hand, float threshold) => hand != null && hand.isActiveAndEnabled &&
+            hand.IsTracked && !hand.IsSystemGestureInProgress &&
+            hand.GetFingerPinchStrength(OVRHand.HandFinger.Middle) >= threshold &&
+            hand.GetFingerPinchStrength(OVRHand.HandFinger.Index) < IndexBlock;
 
         private void Resolve()
         {
@@ -96,6 +115,10 @@ namespace FolioXR.Locomotion
                 foreach (OVRHand hand in FindObjectsByType<OVRHand>(FindObjectsInactive.Include, FindObjectsSortMode.None))
                     if (hand.GetHand() == OVRPlugin.Hand.HandRight && hand.isActiveAndEnabled)
                     { _hand = hand; break; }
+            if (_leftHand == null || !_leftHand.isActiveAndEnabled)
+                foreach (OVRHand hand in FindObjectsByType<OVRHand>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                    if (hand.GetHand() == OVRPlugin.Hand.HandLeft && hand.isActiveAndEnabled)
+                    { _leftHand = hand; break; }
             if (_visuals == null && _book != null && Camera.main != null)
                 _visuals = LocomotionVisuals.TryCreate(transform, _book, Camera.main);
         }
@@ -143,7 +166,12 @@ namespace FolioXR.Locomotion
             Vector3 wanted = _walkArmed && leftValid ?
                 (forward * left.y + Vector3.Cross(Vector3.up, forward) * left.x) * Speed : Vector3.zero;
             if (left.magnitude < 0.15f) wanted = Vector3.zero;
-            _velocity = leftValid ? Vector3.MoveTowards(_velocity, wanted, Acceleration * dt) : Vector3.zero;
+            // Con manos: pellizco de pulgar y medio IZQUIERDO sostenido = caminar hacia donde apunta esa mano.
+            Vector3 handDirection = Vector3.zero;
+            bool handWalk = !leftValid && UpdateHandWalk(out handDirection);
+            if (handWalk) wanted = handDirection * Speed;
+            _velocity = leftValid || handWalk ? Vector3.MoveTowards(_velocity, wanted, Acceleration * dt)
+                : Vector3.MoveTowards(_velocity, Vector3.zero, Acceleration * 2f * dt);
 
             // Barrer también el desplazamiento físico horizontal. Cambiar solo center
             // teletransportaría la cápsula a través de una pared al caminar en room-scale.
@@ -213,17 +241,34 @@ namespace FolioXR.Locomotion
         }
 
         private bool ReliableHand() => _hand != null && _hand.isActiveAndEnabled && _hand.IsTracked &&
-            _hand.IsDataHighConfidence && !_hand.IsSystemGestureInProgress && _hand.IsPointerPoseValid &&
-            _hand.GetFingerConfidence(OVRHand.HandFinger.Middle) == OVRHand.TrackingConfidence.High &&
-            _hand.GetFingerConfidence(OVRHand.HandFinger.Thumb) == OVRHand.TrackingConfidence.High;
+            !_hand.IsSystemGestureInProgress && _hand.IsPointerPoseValid;
+
+        private bool UpdateHandWalk(out Vector3 direction)
+        {
+            direction = Vector3.zero;
+            bool reliable = _leftHand != null && _leftHand.isActiveAndEnabled && _leftHand.IsTracked &&
+                !_leftHand.IsSystemGestureInProgress && _leftHand.IsPointerPoseValid && _leftHand.PointerPose != null;
+            bool walking = reliable && MiddlePinch(_leftHand, _leftWalking ? MiddleOff : MiddleOn) &&
+                !FolioXR.Tools.ToolRegistry.HoldsHand(XRNode.LeftHand);
+            if (walking != _leftWalking)
+            {
+                _leftWalking = walking;
+                Debug.Log("[FolioXR] Movimiento: " + (walking ? "caminar con la mano izquierda" : "detenerse"));
+            }
+            if (!walking) return false;
+            direction = Vector3.ProjectOnPlane(_leftHand.PointerPose.forward, Vector3.up);
+            if (direction.sqrMagnitude < 0.04f) return false; // Apuntando al suelo o al techo: no avanzar.
+            direction.Normalize();
+            return true;
+        }
 
         private void UpdateTeleport(bool controller, Vector2 axis)
         {
             // Nunca saltar si no se ha podido construir la previsualización.
             if (_visuals == null) { CancelAim(); return; }
             bool reliable = ReliableHand();
-            bool middle = reliable && _hand.GetFingerIsPinching(OVRHand.HandFinger.Middle);
-            bool index = reliable && _hand.GetFingerIsPinching(OVRHand.HandFinger.Index);
+            bool middle = reliable && MiddlePinch(_hand, _aim == AimSource.Hand ? MiddleOff : MiddleOn);
+            bool index = reliable && _hand.GetFingerPinchStrength(OVRHand.HandFinger.Index) >= IndexBlock;
             if (!controller) _controllerArmed = false;
             else if (axis.y < Release && Mathf.Abs(axis.x) < Release) _controllerArmed = true;
             if (!reliable || controller || index) _handArmed = false;
@@ -238,7 +283,11 @@ namespace FolioXR.Locomotion
                 if (_controllerArmed && controller && axis.y > Press && Mathf.Abs(axis.x) < Release)
                 { _aim = AimSource.Controller; _controllerArmed = false; }
                 else if (_handArmed && middle && !index && !controller)
-                { _aim = AimSource.Hand; _handArmed = false; }
+                {
+                    _aim = AimSource.Hand;
+                    _handArmed = false;
+                    Debug.Log("[FolioXR] Movimiento: apuntar teletransporte con la mano derecha");
+                }
             }
             if (_aim == AimSource.None) return;
             bool released = _aim == AimSource.Controller ? axis.y < Release : !middle;

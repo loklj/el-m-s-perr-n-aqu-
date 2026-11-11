@@ -86,6 +86,41 @@ namespace FolioXR.Reading
         /// <summary>Página izquierda visible (desde 0) o -1 mientras no hay doble página lista.</summary>
         public int LeftPageIndex => _spreadReady ? _leftIndex : -1;
         public bool RightPageVisible => _spreadReady && rightPage != null && rightPage.enabled;
+        public int PageCount => _pageCount;
+        /// <summary>Doble página mostrada: página izquierda (desde 0) y total. La biblioteca guarda el progreso.</summary>
+        public event System.Action<int, int> SpreadShown;
+        /// <summary>Un documento pedido no se pudo abrir: identificador (o null) y mensaje para el usuario.</summary>
+        public event System.Action<string, string> DocumentFailed;
+        private string _pendingPath, _pendingId, _defaultPath;
+        private int _pendingPage;
+        private bool _started;
+
+        /// <summary>
+        /// Abre otro documento (biblioteca). Si el libro está ocupado o arrancando, se abre apenas pueda;
+        /// pedido durante el arranque, reemplaza al PDF de prueba sin mostrarlo.
+        /// </summary>
+        public void RequestDocument(string path, string documentId, int leftPage)
+        {
+            _pendingPath = path;
+            _pendingId = documentId;
+            _pendingPage = Mathf.Max(0, leftPage);
+        }
+
+        /// <summary>Vuelve al PDF con el que arranca la app (por ejemplo, al quitar el libro abierto).</summary>
+        public void OpenDefaultDocument()
+        {
+            if (_defaultPath != null) RequestDocument(_defaultPath, null, 0);
+        }
+
+        /// <summary>Salta a una página (marcadores). Devuelve false si el libro está ocupado.</summary>
+        public bool GoToPage(int leftIndex)
+        {
+            if (_busy || _renderer == null || _pageCount <= 0) return false;
+            int target = Mathf.Clamp(leftIndex, 0, _pageCount - 1);
+            target -= target % 2;
+            StartCoroutine(ShowSpread(target));
+            return true;
+        }
         private Rigidbody _body;
         private PhysicsMaterial _physicsMaterial;
         private Vector3 _baseScale;
@@ -212,28 +247,62 @@ namespace FolioXR.Reading
                 yield break;
             }
 
-            _renderer = new PdfPageRenderer(pdfPath);
-            Debug.Log("[FolioXR] PDF: " + _renderer.PdfPath);
-            DocumentId = BuildDocumentId(_renderer.PdfPath);
-
-            PdfResult countResult = null;
-            yield return _renderer.GetPageCount((count, r) =>
+            _defaultPath = pdfPath;
+            // Un libro de la biblioteca pedido durante el arranque reemplaza al de prueba.
+            string startPath = pdfPath, startId = null;
+            int startPage = 0;
+            if (_pendingPath != null)
             {
-                _pageCount = count;
+                startPath = _pendingPath;
+                startId = _pendingId;
+                startPage = _pendingPage;
+                _pendingPath = null;
+            }
+            yield return LoadDocument(startPath, startId, startPage);
+            _started = true;
+        }
+
+        /// <summary>Abre un documento y muestra su página. Si falla, sigue el anterior o vuelve al de arranque.</summary>
+        private IEnumerator LoadDocument(string path, string documentId, int leftPage)
+        {
+            _busy = true;
+            string previousPath = _renderer != null ? _renderer.PdfPath : null;
+            if (_renderer != null)
+            {
+                _renderer.Dispose();
+                _renderer = null;
+            }
+            var renderer = new PdfPageRenderer(path);
+            int pages = 0;
+            PdfResult countResult = null;
+            yield return renderer.GetPageCount((count, r) =>
+            {
+                pages = count;
                 countResult = r;
             });
-            if (!countResult.Ok)
+            if (!countResult.Ok || pages <= 0)
             {
-                ShowError(countResult);
-                yield break;
-            }
-            if (_pageCount <= 0)
-            {
-                SetStatus("El PDF no tiene páginas.", true);
+                string message = countResult.Ok ? "El PDF no tiene páginas." : ErrorMessage(countResult);
+                Debug.LogWarning("[FolioXR] No se pudo abrir " + path + ": " +
+                    (countResult.Ok ? "sin páginas" : countResult.ErrorKind + ": " + countResult.ErrorDetail));
+                renderer.Dispose();
+                _busy = false;
+                DocumentFailed?.Invoke(documentId, message);
+                if (previousPath != null)
+                    _renderer = new PdfPageRenderer(previousPath); // Sigue abierto el libro anterior.
+                else if (_defaultPath != null && path != _defaultPath)
+                    yield return LoadDocument(_defaultPath, null, 0);
+                else
+                    SetStatus(message + (countResult.Ok ? string.Empty : "\n" + countResult.ErrorDetail), true);
                 yield break;
             }
 
-            yield return ShowSpread(0);
+            _renderer = renderer;
+            _pageCount = pages;
+            DocumentId = documentId ?? BuildDocumentId(path);
+            Debug.Log("[FolioXR] PDF: " + path + " (" + pages + " páginas, id=" + DocumentId + ")");
+            int start = Mathf.Clamp(leftPage, 0, pages - 1);
+            yield return ShowSpread(start - start % 2);
         }
 
         private void Update()
@@ -264,6 +333,13 @@ namespace FolioXR.Reading
             else _renderScaleStickLatched = true;
             UpdateRenderScaleStatus();
             UpdateBookRecovery();
+            if (_pendingPath != null && _started && !_busy)
+            {
+                string path = _pendingPath, id = _pendingId;
+                _pendingPath = null;
+                _spreadReady = false;
+                StartCoroutine(LoadDocument(path, id, _pendingPage));
+            }
             // Agrupa cambios continuos del gesto; no iniciar renders cada cuadro.
             if (_resolutionDirty && !_busy && _spreadReady && _renderer != null &&
                 Time.unscaledTime - _resolutionChangedAt >= 0.35f)
@@ -621,6 +697,7 @@ namespace FolioXR.Reading
             _leftIndex = leftIndex;
             _spreadReady = true;
             _renderedWidth = width;
+            SpreadShown?.Invoke(leftIndex, _pageCount);
             ReplaceTexture(ref _leftTexture, left, leftPage);
             ReplaceTexture(ref _rightTexture, right, rightPage);
             if (rightPage != null) rightPage.enabled = right != null;
@@ -719,6 +796,12 @@ namespace FolioXR.Reading
 
         private void ShowError(PdfResult result)
         {
+            Debug.LogWarning("[FolioXR] " + result.ErrorKind + ": " + result.ErrorDetail);
+            SetStatus(ErrorMessage(result) + "\n" + result.ErrorDetail, true);
+        }
+
+        private static string ErrorMessage(PdfResult result)
+        {
             string message;
             switch (result.ErrorKind)
             {
@@ -726,7 +809,11 @@ namespace FolioXR.Reading
                     message = "Este PDF necesita una contraseña para abrirse.\n(El Hito 1 todavía no la pide.)";
                     break;
                 case "IO":
-                    message = "No se pudo leer el archivo. Prueba a copiarlo de nuevo.";
+                    // PdfRenderer avisa así de un daño estructural («file not in PDF format or corrupted»).
+                    string detail = result.ErrorDetail ?? string.Empty;
+                    message = detail.Contains("corrupt") || detail.Contains("not in PDF")
+                        ? "El archivo parece estar dañado. Prueba a volver a descargarlo."
+                        : "No se pudo leer el archivo. Prueba a copiarlo de nuevo.";
                     break;
                 case "MEMORY":
                     message = "La página es demasiado grande para la memoria disponible.";
@@ -738,8 +825,7 @@ namespace FolioXR.Reading
                     message = "No se pudo abrir el archivo y no conocemos la causa.";
                     break;
             }
-            Debug.LogWarning("[FolioXR] " + result.ErrorKind + ": " + result.ErrorDetail);
-            SetStatus(message + "\n" + result.ErrorDetail, true);
+            return message;
         }
 
         private void SetStatus(string message, bool isError = false)
