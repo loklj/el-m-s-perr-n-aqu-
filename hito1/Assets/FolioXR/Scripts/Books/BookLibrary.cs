@@ -513,6 +513,16 @@ namespace FolioXR.Books
 #endif
         }
 
+        /// <summary>Relee la lista desde SQLite (por ejemplo, tras una descarga OPDS).</summary>
+        public void ReloadBooks()
+        {
+            Reload();
+            StateChanged?.Invoke();
+        }
+
+        /// <summary>Aviso frente al usuario desde otras partes de la biblioteca (OPDS).</summary>
+        public static void NotifyUser(string message) => Notify(message);
+
         private static void Notify(string message)
         {
             Debug.Log("[FolioXR] Aviso: " + message.Replace("\n", " "));

@@ -225,6 +225,8 @@ public final class FolioWifiServer {
             respond(out, 200, "text/html; charset=utf-8", PAGE);
         } else if ("PUT".equals(method) && "/upload".equals(path)) {
             upload(in, out, query, length);
+        } else if ("POST".equals(method) && "/opds".equals(path)) {
+            addOpds(in, out, length);
         } else {
             respond(out, 404, "text/plain", "No existe");
         }
@@ -336,6 +338,47 @@ public final class FolioWifiServer {
         respond(out, status, "text/plain; charset=utf-8", result);
     }
 
+    /** Formulario del PC para agregar un catalogo OPDS (encargo 14): asi no hay que escribir en el visor. */
+    private static void addOpds(InputStream in, OutputStream out, long length) throws Exception {
+        if (length <= 0 || length > 8192) {
+            respond(out, 413, "text/plain; charset=utf-8", "Datos no v\u00e1lidos.");
+            return;
+        }
+        byte[] data = new byte[(int) length];
+        int offset = 0;
+        while (offset < data.length) {
+            int n = in.read(data, offset, data.length - offset);
+            if (n < 0) {
+                break;
+            }
+            offset += n;
+        }
+        String form = new String(data, 0, offset, "UTF-8");
+        if (!sameCode(param(form, "code"))) {
+            synchronized (LOCK) {
+                badCodes++;
+                if (badCodes >= MAX_BAD_CODES) {
+                    lastMessage = "Se cerr\u00f3 la carga por Wi-Fi: demasiados c\u00f3digos incorrectos.";
+                    stopLocked();
+                }
+            }
+            respond(out, 403, "text/plain; charset=utf-8", "C\u00f3digo incorrecto. M\u00edralo en el visor.");
+            return;
+        }
+        String error = FolioOpds.addServer(param(form, "name"), param(form, "url"), param(form, "user"),
+                param(form, "pass"));
+        if (error.length() > 0) {
+            respond(out, 422, "text/plain; charset=utf-8", error);
+            return;
+        }
+        synchronized (LOCK) {
+            lastMessage = "Cat\u00e1logo agregado: " + param(form, "name");
+            serial++;
+        }
+        respond(out, 200, "text/plain; charset=utf-8",
+                "Listo: el cat\u00e1logo aparece en el visor, en Importar y nubes.");
+    }
+
     private static void respond(OutputStream out, int status, String type, String body) throws Exception {
         byte[] data = body.getBytes("UTF-8");
         String head = "HTTP/1.1 " + status + " X\r\nContent-Type: " + type + "\r\nContent-Length: " + data.length
@@ -365,5 +408,17 @@ public final class FolioWifiServer {
             + "x.upload.onprogress=e=>{if(e.lengthComputable)p.value=e.loaded/e.total};"
             + "x.onload=()=>{t.textContent=x.responseText;p.value=x.status==200?1:0;r()};"
             + "x.onerror=()=>{t.textContent='Se cortó la conexión con el visor: '+f.name;r()};x.send(f)})}};"
+            + "</script>"
+            + "<h2>Agregar un cat\u00e1logo (OPDS)</h2><p>Calibre-Web, Kavita, Komga u otro servidor OPDS."
+            + " El usuario y la contrase\u00f1a son opcionales y se guardan cifrados en el visor.</p>"
+            + "<div class=\"row\"><input id=\"oname\" placeholder=\"nombre (p. ej. Mi Calibre)\"></div>"
+            + "<div class=\"row\"><input id=\"ourl\" style=\"width:95%\" placeholder=\"http://192.168.1.10:8083/opds\"></div>"
+            + "<div class=\"row\"><input id=\"ouser\" placeholder=\"usuario\"> <input id=\"opass\" type=\"password\""
+            + " placeholder=\"contrase\u00f1a\"></div><div class=\"row\"><button id=\"oadd\">Agregar al visor</button>"
+            + " <span id=\"ores\"></span></div><script>$('oadd').onclick=async()=>{const b=new URLSearchParams();"
+            + "b.set('code',$('code').value.trim());b.set('name',$('oname').value);b.set('url',$('ourl').value);"
+            + "b.set('user',$('ouser').value);b.set('pass',$('opass').value);try{const r=await fetch('/opds',"
+            + "{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:b.toString()});"
+            + "$('ores').textContent=await r.text()}catch(e){$('ores').textContent='Sin conexi\u00f3n con el visor.'}};"
             + "</script></body></html>";
 }

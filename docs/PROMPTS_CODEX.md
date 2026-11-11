@@ -38,7 +38,7 @@ Responde siempre en español. Repositorio: https://github.com/loklj/el-m-s-perr-
 | 11 | Formatos 3: DOCX, ODT, RTF y diagnóstico de no compatibles | `fase2/documentos` | Pendiente |
 | 12 | Carga desde el PC por Wi-Fi | `fase-1/preparacion` | Escrito por Claude el 11 de noviembre de 2026 (sin reanudación de subidas; queda abierto hasta cerrarlo o suspender el visor) |
 | 13 | Nubes: Google Drive, Dropbox y MEGA | `fase3/nubes` | Pendiente; Drive con `drive.file` y Picker (decidido) |
-| 14 | OPDS (Calibre-Web, Kavita, Komga) | `fase3/opds` | Pendiente |
+| 14 | OPDS (Calibre-Web, Kavita, Komga) | `fase-1/preparacion` | Escrito por Claude el 11 de noviembre de 2026 (sin búsqueda: no hay teclado en el visor; los catálogos se agregan desde la página del PC) |
 | | 🧪 Prueba en el visor: formatos e importación | | |
 | 15 | Archivos gigantes y rendimiento | `fase4/rendimiento` | Pendiente |
 | 16 | Los otros 19 entornos | `entornos/19-temas` | Pendiente |

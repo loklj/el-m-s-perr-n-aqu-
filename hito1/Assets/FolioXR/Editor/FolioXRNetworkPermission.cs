@@ -13,6 +13,10 @@ namespace FolioXR.EditorTools
         {
             if (!PlayerSettings.Android.forceInternetPermission)
                 PlayerSettings.Android.forceInternetPermission = true;
+            // Catálogos OPDS caseros (Calibre-Web, Kavita, Komga) suelen usar http:// en la red local:
+            // sin esto Android bloquea el tráfico sin cifrar (usesCleartextTraffic).
+            if (PlayerSettings.insecureHttpOption != InsecureHttpOption.AlwaysAllowed)
+                PlayerSettings.insecureHttpOption = InsecureHttpOption.AlwaysAllowed;
         }
     }
 }

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:opds="http://opds-spec.org/2010/catalog">
+  <id>urn:uuid:calibre-web</id>
+  <title>Calibre-Web</title>
+  <link rel="start" href="/opds" type="application/atom+xml;profile=opds-catalog;kind=navigation"/>
+  <link rel="search" href="/opds/osd" type="application/opensearchdescription+xml"/>
+  <link rel="next" href="/opds/new?offset=30" type="application/atom+xml;profile=opds-catalog;kind=acquisition"/>
+  <entry>
+    <title>Libros recientes</title>
+    <id>urn:recientes</id>
+    <link rel="subsection" href="/opds/new" type="application/atom+xml;profile=opds-catalog;kind=acquisition"/>
+  </entry>
+  <entry>
+    <title>Don Quijote de la Mancha</title>
+    <author><name>Miguel de Cervantes</name></author>
+    <id>urn:libro:1</id>
+    <link rel="http://opds-spec.org/acquisition" href="/opds/download/1/epub/" type="application/epub+zip"/>
+    <link rel="http://opds-spec.org/acquisition" href="/opds/download/1/pdf/" type="application/pdf"/>
+    <link rel="http://opds-spec.org/image" href="/opds/cover/1" type="image/jpeg"/>
+  </entry>
+  <entry>
+    <title>Libro con DRM</title>
+    <id>urn:libro:2</id>
+    <link rel="http://opds-spec.org/acquisition/buy" href="/comprar/2" type="text/html">
+      <opds:indirectAcquisition type="application/vnd.adobe.adept+xml">
+        <opds:indirectAcquisition type="application/epub+zip"/>
+      </opds:indirectAcquisition>
+    </link>
+  </entry>
+</feed>

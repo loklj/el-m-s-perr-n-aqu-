@@ -1,0 +1,15 @@
+{
+  "metadata": {"title": "Komga"},
+  "links": [{"rel": "self", "href": "/opds/v2/catalog"}, {"rel": "next", "href": "/opds/v2/series?page=1"}],
+  "navigation": [{"title": "Series", "href": "/opds/v2/series", "type": "application/opds+json"}],
+  "groups": [{
+    "metadata": {"title": "Recientes"},
+    "publications": [{
+      "metadata": {"title": "Comic de prueba", "author": [{"name": "Autora"}]},
+      "links": [{"rel": "http://opds-spec.org/acquisition", "href": "/api/v1/books/7/file", "type": "application/vnd.comicbook+zip"}]
+    }, {
+      "metadata": {"title": "Con LCP", "author": "Alguien"},
+      "links": [{"rel": "http://opds-spec.org/acquisition", "href": "/lcp/9", "type": "application/vnd.readium.lcp.license.v1.0+json"}]
+    }]
+  }]
+}

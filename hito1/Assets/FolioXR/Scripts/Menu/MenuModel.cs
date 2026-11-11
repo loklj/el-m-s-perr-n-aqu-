@@ -76,6 +76,7 @@ namespace FolioXR.Menu
             _sphereStyle = sphereStyle;
             _setSphereStyle = setSphereStyle;
             BookLibrary.StateChanged += OnLibraryChanged;
+            OpdsBrowser.StateChanged += OnLibraryChanged;
             RebuildOptions();
         }
 
@@ -162,6 +163,86 @@ namespace FolioXR.Menu
                 Changed?.Invoke();
                 TimerElapsed?.Invoke();
             }
+        }
+
+        // ── Catálogos OPDS (encargo 14) ──
+        private bool _removingOpds;
+        private string _removeOpdsId;
+        private float _removeOpdsUntil;
+
+        private void AddOpdsOptions(List<MenuOption> options)
+        {
+            OpdsBrowser opds = OpdsBrowser.Instance;
+            if (opds == null || !opds.Available) return;
+            if (opds.Downloading) options.Add(new MenuOption(opds.DownloadLine));
+            if (!opds.Browsing)
+            {
+                foreach (OpdsServer server in opds.Servers)
+                {
+                    OpdsServer target = server;
+                    bool confirming = _removeOpdsId == server.id && Time.unscaledTime < _removeOpdsUntil;
+                    options.Add(new MenuOption(confirming ? "¿Quitar? Toca\notra vez"
+                            : (_removingOpds ? "Quitar: " : "Catálogo: ") + server.name, () =>
+                        {
+                            if (!_removingOpds) { opds.OpenServer(target); return; }
+                            if (_removeOpdsId != target.id || Time.unscaledTime >= _removeOpdsUntil)
+                            {
+                                _removeOpdsId = target.id;
+                                _removeOpdsUntil = Time.unscaledTime + 4f;
+                            }
+                            else
+                            {
+                                _removeOpdsId = null;
+                                _removingOpds = false;
+                                opds.RemoveServer(target);
+                            }
+                            RebuildOptions();
+                        }, marked: () => _removingOpds));
+                }
+                if (opds.Servers.Count > 0)
+                    options.Add(new MenuOption(_removingOpds ? "Elige el catálogo\na quitar" : "Quitar un catálogo",
+                        () => { _removingOpds = !_removingOpds; _removeOpdsId = null; RebuildOptions(); },
+                        marked: () => _removingOpds));
+                options.Add(new MenuOption("Agregar catálogo OPDS: desde la página del PC (Wi-Fi)"));
+                return;
+            }
+            options.Add(new MenuOption(opds.Depth > 1 ? "Volver" : "Salir del catálogo", opds.Back));
+            if (opds.Loading)
+            {
+                options.Add(new MenuOption("Cargando el catálogo…"));
+                return;
+            }
+            if (!string.IsNullOrEmpty(opds.Error))
+            {
+                options.Add(new MenuOption(opds.Error));
+                return;
+            }
+            OpdsFeed feed = opds.Feed;
+            if (feed == null) return;
+            if (!string.IsNullOrEmpty(feed.title)) options.Add(new MenuOption(feed.title));
+            int count = feed.entries.Count;
+            int pages = Mathf.Max(1, (count + OpdsBrowser.EntriesPerPage - 1) / OpdsBrowser.EntriesPerPage);
+            int first = opds.LocalPage * OpdsBrowser.EntriesPerPage;
+            for (int i = first; i < Mathf.Min(count, first + OpdsBrowser.EntriesPerPage); i++)
+            {
+                OpdsEntry entry = feed.entries[i];
+                string title = string.IsNullOrEmpty(entry.title) ? "(sin título)" : entry.title;
+                if (title.Length > 34) title = title.Substring(0, 33) + "…";
+                if (entry.IsNavigation)
+                {
+                    string url = entry.nav;
+                    options.Add(new MenuOption("▸ " + title, () => opds.OpenNav(url)));
+                    continue;
+                }
+                OpdsBook best = entry.Best;
+                options.Add(new MenuOption(title + "\n" + (best != null ? "Descargar " + best.FormatName : "con DRM: no se puede"),
+                    () => opds.Download(entry), () => best != null && !opds.Downloading));
+            }
+            if (pages > 1)
+                options.Add(new MenuOption("Más: " + (opds.LocalPage + 1) + " de " + pages, opds.NextLocalPage));
+            if (!string.IsNullOrEmpty(feed.next))
+                options.Add(new MenuOption("Siguiente página del catálogo", opds.NextRemotePage));
+            if (count == 0) options.Add(new MenuOption("Este catálogo está vacío"));
         }
 
         private void ConfirmClear(int kind)
@@ -304,6 +385,11 @@ namespace FolioXR.Menu
                         options.Add(new MenuOption("Importar solo funciona en el visor"));
                         break;
                     }
+                    if (OpdsBrowser.Instance != null && OpdsBrowser.Instance.Browsing)
+                    {
+                        AddOpdsOptions(options); // Dentro de un catálogo, solo el catálogo.
+                        break;
+                    }
                     options.Add(new MenuOption("Desde el visor: elegir archivos", source.Import, () => !source.Importing));
                     if (!source.WifiRunning)
                         options.Add(new MenuOption("Desde el PC por Wi-Fi", source.StartWifi));
@@ -314,6 +400,7 @@ namespace FolioXR.Menu
                         options.Add(new MenuOption("Cerrar la carga por Wi-Fi", source.StopWifi));
                     }
                     options.Add(new MenuOption("Nubes (Drive, Dropbox, MEGA): próximamente"));
+                    AddOpdsOptions(options);
                     break;
                 case MenuCategory.Hora:
                     foreach (int minutes in new[] { 15, 30, 45, 60 })
