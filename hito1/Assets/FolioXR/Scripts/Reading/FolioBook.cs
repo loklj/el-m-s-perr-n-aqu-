@@ -99,12 +99,53 @@ namespace FolioXR.Reading
         /// <summary>Modo acostado: el libro se coloca hacia donde mira la cabeza, aunque sea el techo.</summary>
         public static bool LyingMode => PlayerPrefs.GetInt(LyingPrefsKey, 0) != 0;
         private PageTurnEffect _turn;
+        /// <summary>Tapas de cuero con título o tapas propias (11 nov 2026).</summary>
+        public BookCover Cover { get; private set; }
+        private bool _coverPagesPending;
+
+        internal void RequestCoverPages(BookCover cover)
+        {
+            if (!_coverPagesPending) StartCoroutine(LoadCoverPages(cover));
+        }
+
+        /// <summary>Primera y última página a 1024 px para las tapas propias, cuando el libro está libre.</summary>
+        private IEnumerator LoadCoverPages(BookCover cover)
+        {
+            _coverPagesPending = true;
+            while (_busy || _renderer == null || _pageCount <= 0) yield return null;
+            string document = DocumentId;
+            _busy = true;
+            Texture2D front = null, back = null;
+            yield return _renderer.RenderPage(0, 1024, (t, r) => front = t);
+            if (_pageCount > 1) yield return _renderer.RenderPage(_pageCount - 1, 1024, (t, r) => back = t);
+            _busy = false;
+            _coverPagesPending = false;
+            if (document != DocumentId)
+            {
+                if (front != null) Destroy(front);
+                if (back != null) Destroy(back);
+                yield break;
+            }
+            cover.SetCoverPages(front, back);
+        }
 
         public static void SetLyingMode(bool value)
         {
             PlayerPrefs.SetInt(LyingPrefsKey, value ? 1 : 0);
             PlayerPrefs.Save();
             Debug.Log("[FolioXR] Modo acostado: " + (value ? "sí" : "no"));
+        }
+
+        public static bool GetRightToLeft(string documentId) =>
+            !string.IsNullOrEmpty(documentId) && PlayerPrefs.GetInt(RtlPrefsPrefix + documentId, 0) != 0;
+
+        /// <summary>Lectura manga de un libro que puede no estar abierto (configuración al agregarlo).</summary>
+        public void SetRightToLeftFor(string documentId, bool value)
+        {
+            if (documentId == DocumentId) { SetRightToLeft(value); return; }
+            if (string.IsNullOrEmpty(documentId)) return;
+            PlayerPrefs.SetInt(RtlPrefsPrefix + documentId, value ? 1 : 0);
+            PlayerPrefs.Save();
         }
 
         public void SetRightToLeft(bool value)
@@ -117,6 +158,7 @@ namespace FolioXR.Reading
                 PlayerPrefs.Save();
             }
             Debug.Log("[FolioXR] Lectura: " + (value ? "manga (derecha a izquierda)" : "normal"));
+            if (Cover != null) Cover.SetRightToLeft(value);
             // Vuelve a mostrar la doble página con los lados cambiados (mismo índice: sin animación).
             if (!_busy && _spreadReady && _renderer != null) StartCoroutine(ShowSpread(_leftIndex));
         }
@@ -281,6 +323,8 @@ namespace FolioXR.Reading
             }
 
             _defaultPath = pdfPath;
+            if (Cover == null) Cover = BookCover.Attach(this);
+            if (_pendingPath == null) Cover.Apply(false, 0, "Libro de muestra", false);
             // Un libro de la biblioteca pedido durante el arranque reemplaza al de prueba.
             string startPath = pdfPath, startId = null;
             int startPage = 0;
@@ -865,6 +909,7 @@ namespace FolioXR.Reading
                 statusText.transform.localPosition = new Vector3(0f, -(coverHeight * 0.5f + 0.012f), -0.002f);
                 statusText.transform.localRotation = Quaternion.identity;
             }
+            if (Cover != null) Cover.Layout();
         }
 
         private void ShowError(PdfResult result)

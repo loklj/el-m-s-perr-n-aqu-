@@ -255,6 +255,10 @@ En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
 | Encargo 14 · Quitar catálogo | «Quitar un catálogo» → tocar el catálogo → «¿Quitar? Toca otra vez» |
 | Encargo 6 · PDF rápido | Pasar páginas de un PDF: el registro dice `PDF: página N lista en X ms` y, al avanzar, «(precargada)». Ya no se codifica PNG: las páginas llegan como píxeles crudos |
 | Encargo 6 · Páginas enormes | Un PDF con páginas gigantes (carteles, planos) se ve en menor resolución en vez de fallar (registro: «sin memoria… se reduce a») |
+| 11 nov · Ajustes compactos | En Ajustes, «Nitidez: 1,4», «Letra: normal» y «Menú: esfera/simple» son una sola casilla cada una: cada toque pasa al valor siguiente |
+| 11 nov · + Agregar libro | Biblioteca → «+ Agregar libro»: «Desde el visor», «Desde el PC por Wi-Fi» (muestra dirección y código), «Desde un catálogo (OPDS)», «Volver» |
+| 11 nov · Libro nuevo | Al terminar de agregar un libro, Biblioteca muestra «Libro nuevo»: «Nombre» (abre el teclado del sistema; por defecto el nombre del archivo), «Lectura: normal/manga», «Tapas: las del archivo / de cuero con el título», «Cuero: color» (marrón, negro, rojo vino, verde bosque, azul marino, morado, miel), «Listo» y «Listo y abrir». «Editar libro» vuelve a esta pantalla para el libro abierto |
+| 11 nov · Tapas | Girar el libro abierto y mirarlo por fuera: tapa de cuero del color elegido con el título dorado en la portada y en el lomo. Con «las del archivo», la portada y la contraportada son la primera y la última página. En manga la portada queda del otro lado |
 
 El entorno de prueba ya está en `fase-1/preparacion`; consulta [instalación, presupuesto y comprobaciones pendientes](ENTORNOS.md). El eje vertical del stick izquierdo conserva el ajuste de nitidez del Hito 1.2 también dentro de la casa.
 

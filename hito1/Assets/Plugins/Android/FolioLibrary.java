@@ -240,6 +240,21 @@ public final class FolioLibrary {
         }
     }
 
+    /** Cambia el titulo que se muestra (biblioteca, tapa y lomo). */
+    public static boolean renameBook(String id, String title) {
+        try {
+            if (title == null || title.trim().length() == 0) {
+                return false;
+            }
+            ContentValues values = new ContentValues();
+            values.put("title", title.trim());
+            return helper.getWritableDatabase().update("books", values, "id = ?", new String[]{id}) > 0;
+        } catch (Throwable t) {
+            Log.w(TAG, "[FolioXR] Biblioteca: no se pudo renombrar", t);
+            return false;
+        }
+    }
+
     /** Pone o quita el marcador de esa pagina. Devuelve true si quedo marcada. */
     public static boolean toggleBookmark(String id, int position) {
         try {

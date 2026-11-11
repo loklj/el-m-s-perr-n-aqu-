@@ -125,6 +125,7 @@ namespace FolioXR.Books
             }
 #endif
             Reload();
+            MigrateStyles();
             Debug.Log("[FolioXR] Biblioteca: " + (Available ? _books.Count + " libro(s)" : "no disponible fuera del visor"));
             Hook();
             OpenLastRead();
@@ -230,6 +231,8 @@ namespace FolioXR.Books
             {
                 if (_dirty) Save(false); // La página del libro anterior no se pierde al cambiar.
                 Current = entry;
+                if (entry != null) ApplyStyle(entry);
+                else if (_book.Cover != null) _book.Cover.Apply(false, 0, "Libro de muestra", _book.RightToLeft);
                 LoadBookmarks();
                 _dirty = entry != null; // Abrirlo ya lo vuelve «el último leído».
                 _saveAt = Time.unscaledTime + 0.5f;
@@ -511,6 +514,96 @@ namespace FolioXR.Books
                 StateChanged?.Invoke();
             }
 #endif
+        }
+
+        // ── Libros nuevos: nombre, lectura y tapas (pedido del usuario, 11 nov 2026) ──
+        private const string StylePrefix = "folioxr.book.";
+        private const string StyleMigratedKey = "folioxr.bookStyleMigrated";
+
+        public static bool IsConfigured(BookEntry entry) => PlayerPrefs.GetInt(StylePrefix + entry.id + ".setup", 0) != 0;
+        public static bool OwnCovers(BookEntry entry) => PlayerPrefs.GetInt(StylePrefix + entry.id + ".covers", 0) != 0;
+        public static int Leather(BookEntry entry) => PlayerPrefs.GetInt(StylePrefix + entry.id + ".leather", 0);
+        public bool RightToLeft(BookEntry entry) => FolioXR.Reading.FolioBook.GetRightToLeft(entry.id);
+
+        /// <summary>Primer libro agregado que todavía no se configuró (el menú lo muestra primero).</summary>
+        public BookEntry PendingSetup
+        {
+            get
+            {
+                foreach (BookEntry entry in _books)
+                    if (!IsConfigured(entry)) return entry;
+                return null;
+            }
+        }
+
+        public void SetOwnCovers(BookEntry entry, bool value)
+        {
+            PlayerPrefs.SetInt(StylePrefix + entry.id + ".covers", value ? 1 : 0);
+            ApplyIfCurrent(entry);
+        }
+
+        public void SetLeather(BookEntry entry, int index)
+        {
+            PlayerPrefs.SetInt(StylePrefix + entry.id + ".leather", index);
+            ApplyIfCurrent(entry);
+        }
+
+        public void SetRightToLeft(BookEntry entry, bool value)
+        {
+            if (_book != null) _book.SetRightToLeftFor(entry.id, value);
+            else PlayerPrefs.SetInt("folioxr.rtl." + entry.id, value ? 1 : 0);
+        }
+
+        public void FinishSetup(BookEntry entry)
+        {
+            PlayerPrefs.SetInt(StylePrefix + entry.id + ".setup", 1);
+            PlayerPrefs.Save();
+            Debug.Log("[FolioXR] Biblioteca: «" + entry.title + "» configurado (" +
+                (OwnCovers(entry) ? "tapas propias" : "cuero " + FolioXR.Reading.BookCover.LeatherNames[Mathf.Clamp(Leather(entry), 0, 6)]) +
+                ", " + (RightToLeft(entry) ? "manga" : "normal") + ")");
+            ApplyIfCurrent(entry);
+            StateChanged?.Invoke();
+        }
+
+        public void Rename(BookEntry entry, string title)
+        {
+            title = title == null ? string.Empty : title.Trim();
+            if (title.Length == 0 || title == entry.title) return;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                if (!_java.CallStatic<bool>("renameBook", entry.id, title)) return;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[FolioXR] Biblioteca: no se pudo renombrar: " + e.Message);
+                return;
+            }
+#endif
+            entry.title = title;
+            ApplyIfCurrent(entry);
+            StateChanged?.Invoke();
+        }
+
+        private void ApplyIfCurrent(BookEntry entry)
+        {
+            PlayerPrefs.Save();
+            if (Current != null && entry != null && Current.id == entry.id) ApplyStyle(entry);
+        }
+
+        private void ApplyStyle(BookEntry entry)
+        {
+            if (_book == null || _book.Cover == null || entry == null) return;
+            _book.Cover.Apply(OwnCovers(entry), Leather(entry), entry.title, RightToLeft(entry));
+        }
+
+        /// <summary>Los libros que ya existían antes de esta versión no piden configuración.</summary>
+        private void MigrateStyles()
+        {
+            if (PlayerPrefs.GetInt(StyleMigratedKey, 0) != 0) return;
+            foreach (BookEntry entry in _books) PlayerPrefs.SetInt(StylePrefix + entry.id + ".setup", 1);
+            PlayerPrefs.SetInt(StyleMigratedKey, 1);
+            PlayerPrefs.Save();
         }
 
         /// <summary>Relee la lista desde SQLite (por ejemplo, tras una descarga OPDS).</summary>

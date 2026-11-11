@@ -132,6 +132,7 @@ namespace FolioXR.Menu
 
         public void Tick()
         {
+            UpdateKeyboard();
             bool active = _environment != null && _environment.IsActive;
             float scale = _book != null ? _book.RenderScale : 0f;
             if (active != _lastEnvironmentActive)
@@ -163,6 +164,111 @@ namespace FolioXR.Menu
                 Changed?.Invoke();
                 TimerElapsed?.Invoke();
             }
+        }
+
+        // ── «+ Agregar libro» y configuración de un libro (pedido del usuario, 11 nov 2026) ──
+        private int _libraryMode; // 0 = lista, 1 = elegir de dónde agregar.
+        private string _setupId;
+        private TouchScreenKeyboard _keyboard;
+        private string _keyboardFor;
+
+        private void AddBookSources(List<MenuOption> options, BookLibrary library)
+        {
+            options.Add(new MenuOption("Volver", () => { _libraryMode = 0; RebuildOptions(); }));
+            options.Add(new MenuOption("Desde el visor\n(archivos del Quest)", () =>
+            {
+                _libraryMode = 0;
+                library.Import();
+                RebuildOptions();
+            }, () => !library.Importing));
+            if (!library.WifiRunning)
+                options.Add(new MenuOption("Desde el PC\npor Wi-Fi", library.StartWifi));
+            else
+            {
+                options.Add(new MenuOption("En el PC abre\n" + library.WifiUrl));
+                options.Add(new MenuOption("Código: " + library.WifiCode));
+                options.Add(new MenuOption("Cerrar la carga\npor Wi-Fi", library.StopWifi));
+            }
+            options.Add(new MenuOption("Desde un catálogo\n(OPDS)", () =>
+            {
+                _libraryMode = 0;
+                Select(MenuCategory.ImportarYNubes);
+            }));
+            options.Add(new MenuOption("Desde la nube\n(próximamente)"));
+        }
+
+        /// <summary>Nombre, lectura y tapas del libro elegido. Devuelve false si el libro ya no existe.</summary>
+        private bool AddSetupOptions(List<MenuOption> options, BookLibrary library)
+        {
+            BookEntry entry = null;
+            foreach (BookEntry book in library.Books)
+                if (book.id == _setupId) entry = book;
+            if (entry == null)
+            {
+                _setupId = null;
+                return false;
+            }
+            bool configured = BookLibrary.IsConfigured(entry);
+            options.Add(new MenuOption((configured ? "Editar libro" : "Libro nuevo") + "\n" + entry.format.ToUpperInvariant()));
+            options.Add(new MenuOption("Nombre:\n" + Shorten(entry.title, 30), () => OpenKeyboard(entry)));
+            bool rtl = library.RightToLeft(entry);
+            options.Add(new MenuOption("Lectura: " + (rtl ? "manga" : "normal"),
+                () => { library.SetRightToLeft(entry, !rtl); RebuildOptions(); }, marked: () => library.RightToLeft(entry)));
+            bool own = BookLibrary.OwnCovers(entry);
+            options.Add(new MenuOption(own ? "Tapas: las del\narchivo" : "Tapas: de cuero\ncon el título",
+                () => { library.SetOwnCovers(entry, !own); RebuildOptions(); }));
+            if (!own)
+            {
+                int leather = Mathf.Clamp(BookLibrary.Leather(entry), 0, BookCover.LeatherNames.Length - 1);
+                options.Add(new MenuOption("Cuero: " + BookCover.LeatherNames[leather],
+                    () => { library.SetLeather(entry, (leather + 1) % BookCover.LeatherNames.Length); RebuildOptions(); }));
+            }
+            options.Add(new MenuOption(configured ? "Listo" : "Listo: guardar", () =>
+            {
+                library.FinishSetup(entry);
+                _setupId = null;
+                RebuildOptions();
+            }));
+            options.Add(new MenuOption("Listo y abrir", () =>
+            {
+                library.FinishSetup(entry);
+                _setupId = null;
+                library.Open(entry);
+                RebuildOptions();
+            }, () => entry.CanOpen));
+            return true;
+        }
+
+        /// <summary>Teclado del sistema de Horizon OS para escribir el nombre del libro.</summary>
+        private void OpenKeyboard(BookEntry entry)
+        {
+            if (!TouchScreenKeyboard.isSupported)
+            {
+                BookLibrary.NotifyUser("El teclado del sistema no está disponible en este visor.");
+                return;
+            }
+            _keyboardFor = entry.id;
+            _keyboard = TouchScreenKeyboard.Open(entry.title, TouchScreenKeyboardType.Default, false, false, false, false,
+                "Nombre del libro");
+            Debug.Log("[FolioXR] Biblioteca: teclado abierto para renombrar");
+        }
+
+        private void UpdateKeyboard()
+        {
+            if (_keyboard == null) return;
+            TouchScreenKeyboard.Status status = _keyboard.status;
+            if (status == TouchScreenKeyboard.Status.Visible) return;
+            if (status == TouchScreenKeyboard.Status.Done && BookLibrary.Instance != null)
+                foreach (BookEntry entry in BookLibrary.Instance.Books)
+                    if (entry.id == _keyboardFor)
+                    {
+                        BookLibrary.Instance.Rename(entry, _keyboard.text);
+                        break;
+                    }
+            _keyboard = null;
+            _keyboardFor = null;
+            if (SelectedCategory == MenuCategory.Biblioteca) RebuildOptions();
+            Changed?.Invoke();
         }
 
         // ── Catálogos OPDS (encargo 14) ──
@@ -283,6 +389,14 @@ namespace FolioXR.Menu
                         options.Add(new MenuOption("La biblioteca solo\nfunciona en el visor"));
                         break;
                     }
+                    BookEntry pending = library.PendingSetup;
+                    if (_setupId == null && pending != null) _setupId = pending.id; // Libro recién agregado.
+                    if (_setupId != null && AddSetupOptions(options, library)) break;
+                    if (_libraryMode == 1)
+                    {
+                        AddBookSources(options, library);
+                        break;
+                    }
                     if (library.Importing)
                     {
                         options.Add(new MenuOption(library.ImportLine));
@@ -290,7 +404,7 @@ namespace FolioXR.Menu
                     }
                     else
                     {
-                        options.Add(new MenuOption("Importar libros", library.Import));
+                        options.Add(new MenuOption("+ Agregar libro", () => { _libraryMode = 1; RebuildOptions(); }));
                         options.Add(new MenuOption(_removing ? "Elige el libro\na quitar" : "Quitar de la\nbiblioteca",
                             () => { _removing = !_removing; _removeId = null; RebuildOptions(); },
                             () => library.Books.Count > 0, () => _removing));
@@ -299,6 +413,8 @@ namespace FolioXR.Menu
                         () => { _book.SetRightToLeft(!_book.RightToLeft); RebuildOptions(); }, () => _book != null,
                         () => _book != null && _book.RightToLeft));
                     options.Add(new MenuOption("Cerrar libro", library.CloseCurrent, () => library.Current != null));
+                    options.Add(new MenuOption("Editar libro", () => { _setupId = library.Current.id; RebuildOptions(); },
+                        () => library.Current != null));
                     BookEntry current = library.Current;
                     bool bookmarked = library.IsBookmarked;
                     options.Add(new MenuOption(current == null ? "Marcar página"
@@ -340,25 +456,26 @@ namespace FolioXR.Menu
                         }
                     break;
                 case MenuCategory.Ajustes:
+                    // Una sola casilla por ajuste: cada toque pasa al valor siguiente (pedido del usuario, 11 nov).
                     string[] fontNames = { "pequeña", "normal", "grande" };
                     float[] fontScales = { 0.8f, 1f, 1.25f };
+                    int font = 1;
                     for (int f = 0; f < fontScales.Length; f++)
+                        if (Mathf.Approximately(PdfPageRenderer.EpubFontScale, fontScales[f])) font = f;
+                    float nextFont = fontScales[(font + 1) % fontScales.Length];
+                    options.Add(new MenuOption("Letra: " + fontNames[font],
+                        () => BookLibrary.Instance.SetEpubFontScale(nextFont),
+                        () => BookLibrary.Instance != null && !BookLibrary.Instance.Repaginating));
+                    if (_book != null)
                     {
-                        float fontScale = fontScales[f];
-                        options.Add(new MenuOption("Letra: " + fontNames[f],
-                            () => BookLibrary.Instance.SetEpubFontScale(fontScale),
-                            () => BookLibrary.Instance != null && !BookLibrary.Instance.Repaginating,
-                            () => Mathf.Approximately(PdfPageRenderer.EpubFontScale, fontScale)));
+                        int steps = Mathf.RoundToInt((FolioBook.MaxRenderScale - FolioBook.MinRenderScale) / FolioBook.RenderScaleStep) + 1;
+                        int sharp = Mathf.Clamp(Mathf.RoundToInt((_book.RenderScale - FolioBook.MinRenderScale) / FolioBook.RenderScaleStep), 0, steps - 1);
+                        float nextScale = FolioBook.MinRenderScale + ((sharp + 1) % steps) * FolioBook.RenderScaleStep;
+                        options.Add(new MenuOption("Nitidez: " + _book.RenderScale.ToString("F1", CultureInfo.InvariantCulture).Replace('.', ','),
+                            () => { _book.SetRenderScale(nextScale); RebuildOptions(); }));
                     }
-                    for (int i = 0; i < 5; i++)
-                    {
-                        float scale = FolioBook.MinRenderScale + i * FolioBook.RenderScaleStep;
-                        options.Add(new MenuOption("Nitidez " + scale.ToString("F1", CultureInfo.InvariantCulture).Replace('.', ','),
-                            () => _book.SetRenderScale(scale), () => _book != null,
-                            () => _book != null && Mathf.Approximately(_book.RenderScale, scale)));
-                    }
-                    options.Add(new MenuOption("Menú:\nEsfera", () => _setSphereStyle(true), marked: () => _sphereStyle()));
-                    options.Add(new MenuOption("Menú:\nSimple", () => _setSphereStyle(false), marked: () => !_sphereStyle()));
+                    options.Add(new MenuOption("Menú: " + (_sphereStyle() ? "esfera" : "simple"),
+                        () => _setSphereStyle(!_sphereStyle())));
                     options.Add(new MenuOption("Física: " + (_book != null && _book.RealisticPhysics ? "Realista" : "Flotante"),
                         () => { _book.SetRealisticPhysics(!_book.RealisticPhysics); RebuildOptions(); }, () => _book != null));
                     options.Add(new MenuOption("Acostado: " + (FolioBook.LyingMode ? "sí" : "no"),
