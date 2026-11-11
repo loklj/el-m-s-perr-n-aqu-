@@ -1,4 +1,35 @@
-# Entorno de prueba 1 — casa moderna cálida
+# Entornos
+
+## Once estilos realistas (Claude, 11 de noviembre de 2026, sin probar en el visor)
+
+Pedido del usuario: entornos realistas tomando como ejemplo los de Meta. Son **originales**: se inspiran en su realismo (paisaje con relieve, cielo con sol, nubes y horizonte, luz coherente), pero no copian nombres, modelos ni texturas de Meta. Todo sigue siendo procedural, sin assets.
+
+| Estilo | Paisaje | Cielo |
+| --- | --- | --- |
+| Moderna cálida | Jardín, colinas, árboles y arbustos | Día |
+| Refugio alpino | Cordillera de 40 m con cumbres nevadas, pinos | Día despejado |
+| Casa del lago | Lago frente a la terraza con muelle caminable, montes | Atardecer con reflejo del sol en el agua |
+| Casa de playa | Arena, mar hacia el frente, palmeras | Día |
+| Cabaña nevada | Nieve, montañas, pinos | Nublado |
+| Casa del desierto | Dunas, mesetas rojas escalonadas, cactus, rocas | Atardecer dorado |
+| Casa del bosque | Bosque denso de árboles y pinos | Día |
+| Otoño en el valle | Árboles rojos, naranjas y amarillos | Día de otoño |
+| Loft nocturno | Parque con farolas y anillo de edificios con ventanas encendidas | Noche con resplandor de ciudad |
+| Isla tropical | Isla pequeña rodeada de mar e islotes lejanos | Día |
+| Noche estrellada | Jardín | Estrellas, vía láctea y luna |
+
+Cómo está hecho (`Environments/HouseGenerator.Exterior.cs`):
+
+- **Terreno:** disco polar de 86 m (8.265 vértices) con alturas de ruido fractal por bioma. La casa queda en un llano de 15 m. La textura elige suelo, roca o nieve según la altura, con manchas para que no se vea repetida.
+- **Agua:** plano sin luz que usa una franja de la textura del cielo: oscura cerca y con el color del horizonte lejos, más el destello del sol o la luna.
+- **Cielo:** 512 × 256 sin mipmaps, pintado al construir. Incluye degradado, halo y disco del sol, nubes proyectadas que se aplanan hacia el horizonte, y de noche estrellas, vía láctea y luna. La esfera mide ahora 150 m para que los picos no la atraviesen.
+- **Luz:** la luz direccional de la escena toma la dirección, el color y la fuerza del sol o la luna de cada estilo; al salir se restaura. La luz ambiente y el color de fondo también cambian por estilo.
+- **Presupuesto:** ocho lotes con un material cada uno. El material nuevo, «Terreno y follaje», también da los tonos de las copas. Las ventanas y farolas de la ciudad usan el material sin luz del cielo, así que brillan sin luces extra.
+- **Menú → Entornos:** muestra Passthrough, los estilos (ocho por página, con «Más entornos») y «Ir a: …» para recorrer los puntos de lectura. El estilo elegido se guarda en `folioxr.theme`. Cambiar de estilo dentro de la casa la reconstruye sin volver al passthrough. Los trazos de tinta se guardan por estilo (`casa/<nombre>`).
+
+Pendiente: medir en el Quest 3 el tiempo de generación (el cielo y el terreno son los más caros) y los FPS de los estilos de bosque y ciudad.
+
+## Entorno de prueba 1 — casa moderna cálida
 
 Este entorno (hecho por Codex en la rama `entornos/prueba-1` e integrado en `fase-1/preparacion` el 8 de noviembre de 2026 tras la revisión de Claude) añade un primer entorno para medir la lectura en VR en Quest 3. La app sigue arrancando en passthrough. El objetivo es probar **una casa de las 20 previstas**; los otros 19 temas se añadirán después. Esta entrega no inicia el Hito 2 ni cambia el lector de PDF.
 

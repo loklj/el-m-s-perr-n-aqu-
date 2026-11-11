@@ -8,10 +8,10 @@ using Stopwatch = System.Diagnostics.Stopwatch;
 
 namespace FolioXR.Environments
 {
-    /// <summary>Casa completa sin assets: siete lotes opacos y ninguna luz adicional.</summary>
-    public static class HouseGenerator
+    /// <summary>Casa completa sin assets: ocho lotes opacos y ninguna luz adicional.</summary>
+    public static partial class HouseGenerator
     {
-        public const float SkyRadius = 90f;
+        public const float SkyRadius = 150f; // Por fuera de los picos más altos (r 84 m, 45 m de altura).
 
         public static HouseBuildResult Build(EnvironmentTheme theme, Transform parent)
         {
@@ -61,14 +61,14 @@ namespace FolioXR.Environments
                 throw new ArgumentOutOfRangeException(name, "Medida fuera del intervalo seguro del generador.");
         }
 
-        private sealed class Builder
+        private sealed partial class Builder
         {
-            private const int Wood = 0, Cream = 1, Fabric = 2, Metal = 3, Green = 4, Books = 5, Sky = 6;
+            private const int Wood = 0, Cream = 1, Fabric = 2, Metal = 3, Green = 4, Books = 5, Sky = 6, Terrain = 7;
             private readonly EnvironmentTheme _theme;
             private readonly HouseBuildResult _result;
             private readonly System.Random _random;
-            private readonly List<CombineInstance>[] _batches = new List<CombineInstance>[7];
-            private readonly Material[] _materials = new Material[7];
+            private readonly List<CombineInstance>[] _batches = new List<CombineInstance>[8];
+            private readonly Material[] _materials = new Material[8];
             private readonly List<Mesh> _templates = new List<Mesh>();
             private readonly Matrix4x4 _planScale;
             private Mesh _box, _cylinder, _octahedron;
@@ -108,8 +108,8 @@ namespace FolioXR.Environments
                 BuildShell();
                 BuildStairs();
                 BuildRooms();
-                BuildGarden();
-                Mesh sky = Template(ProceduralMeshes.Sphere(32, 16, true));
+                BuildExterior();
+                Mesh sky = Template(ProceduralMeshes.Sphere(64, 32, true));
                 AddWorld(sky, Sky, Matrix4x4.Scale(Vector3.one * SkyRadius));
                 SetReadingPoints();
                 Combine();
@@ -312,31 +312,6 @@ namespace FolioXR.Environments
                 }
             }
 
-            private void BuildGarden()
-            {
-                AddWorld(_box, Green, Matrix4x4.TRS(new Vector3(0f, -0.34f, 0f), Quaternion.identity, new Vector3(120f, 0.12f, 120f)), true);
-                for (int i = 0; i < 8; i++)
-                    B(Cream, new Vector3(1.7f, -0.22f, -6f - i * 0.78f), new Vector3(1.25f, 0.13f, 0.55f), true);
-                int treeCount = Mathf.RoundToInt(18f * _theme.FurnitureDensity);
-                for (int i = 0; i < treeCount; i++)
-                {
-                    float angle = i * Mathf.PI * 2f / treeCount + Next() * 0.12f;
-                    float radius = 21f + Next() * 17f;
-                    float height = 3f + Next() * 3f;
-                    Vector3 position = new Vector3(Mathf.Cos(angle) * radius, -0.28f, Mathf.Sin(angle) * radius);
-                    AddWorld(_cylinder, Wood, Matrix4x4.TRS(position + Vector3.up * height * 0.38f, Quaternion.identity,
-                                                          new Vector3(0.35f, height * 0.76f, 0.35f)));
-                    AddWorld(_octahedron, Green, Matrix4x4.TRS(position + Vector3.up * height * 0.78f, Quaternion.Euler(0f, Next() * 90f, 0f),
-                                                            new Vector3(height * 0.43f, height * 0.55f, height * 0.43f)));
-                }
-                for (int i = 0; i < 10; i++)
-                {
-                    float angle = i * Mathf.PI * 0.2f;
-                    AddWorld(_octahedron, Green, Matrix4x4.TRS(new Vector3(Mathf.Cos(angle) * 49f, -2f, Mathf.Sin(angle) * 49f),
-                                                             Quaternion.Euler(0f, i * 23f, 0f), new Vector3(12f, 7f + Next() * 6f, 11f)));
-                }
-            }
-
             private void Rail(Vector3 start, Vector3 end)
             {
                 Vector3 lift = Vector3.up * 1.02f;
@@ -406,7 +381,7 @@ namespace FolioXR.Environments
                 }
                 _result.MaterialCount = _materials.Length;
                 // Reservar un material/malla para el rótulo del controlador. El coste de pases se mide en Quest.
-                if (_result.TriangleCount > 149000 || _result.MeshCount > 7 || _result.MaterialCount > 7)
+                if (_result.TriangleCount > 149000 || _result.MeshCount > 8 || _result.MaterialCount > 8)
                     throw new InvalidOperationException("El entorno excede su presupuesto de geometría/materiales.");
             }
 
@@ -427,7 +402,9 @@ namespace FolioXR.Environments
                 _materials[Metal] = Clone(cover, "Metal mate", _theme.Metal);
                 _materials[Green] = Clone(cover, "Vegetación", _theme.Foliage);
                 _materials[Books] = Clone(cover, "Lomos", Color.white);
-                _materials[Sky] = Clone(page, "Cielo diurno", Color.white);
+                _materials[Sky] = Clone(page, "Cielo", Color.white);
+                _materials[Terrain] = Clone(cover, "Terreno y follaje", Color.white);
+                _materials[Terrain].mainTexture = TerrainTexture();
                 _materials[Wood].mainTexture = WoodTexture();
                 _materials[Books].mainTexture = BookTexture();
                 _materials[Sky].mainTexture = SkyTexture();
@@ -476,22 +453,9 @@ namespace FolioXR.Environments
                 return Texture("Lomos 128", 128, 128, pixels, false);
             }
 
-            private Texture2D SkyTexture()
+            private Texture2D Texture(string name, int width, int height, Color[] pixels, bool repeat, bool mips = true)
             {
-                var pixels = new Color[16 * 128];
-                for (int y = 0; y < 128; y++)
-                {
-                    float elevation = Mathf.Clamp01((y / 127f - 0.5f) * 2f);
-                    Color color = Color.Lerp(_theme.SkyHorizon, _theme.SkyZenith, Mathf.Sqrt(elevation));
-                    color.a = 1f;
-                    for (int x = 0; x < 16; x++) pixels[y * 16 + x] = color;
-                }
-                return Texture("Degradado cielo", 16, 128, pixels, false);
-            }
-
-            private Texture2D Texture(string name, int width, int height, Color[] pixels, bool repeat)
-            {
-                Texture2D texture = _result.Own(new Texture2D(width, height, TextureFormat.RGBA32, true)
+                Texture2D texture = _result.Own(new Texture2D(width, height, TextureFormat.RGBA32, mips)
                 {
                     name = "FolioXR " + name,
                     wrapMode = repeat ? TextureWrapMode.Repeat : TextureWrapMode.Clamp,
@@ -499,7 +463,7 @@ namespace FolioXR.Environments
                     anisoLevel = 2
                 });
                 texture.SetPixels(pixels);
-                texture.Apply(true, true);
+                texture.Apply(mips, true);
                 return texture;
             }
 

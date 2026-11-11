@@ -87,6 +87,73 @@ namespace FolioXR.Environments
         {
             public Light Light;
             public LightShadows Shadows;
+            public Color Color;
+            public float Intensity;
+            public Quaternion Rotation;
+        }
+
+        // ───────────── Estilos de entorno (Claude, 11 nov) ─────────────
+        private const string ThemeKey = "folioxr.theme";
+        private int _requestedTheme = -1;
+
+        /// <summary>Estilo elegido (se recuerda entre sesiones).</summary>
+        public int ThemeIndex
+        {
+            get => Mathf.Clamp(PlayerPrefs.GetInt(ThemeKey, 0), 0, EnvironmentThemes.All.Count - 1);
+            private set { PlayerPrefs.SetInt(ThemeKey, value); PlayerPrefs.Save(); }
+        }
+
+        /// <summary>Cambia de estilo; si estaba en passthrough, además entra al entorno.</summary>
+        public void SetTheme(int index)
+        {
+            if (index < 0 || index >= EnvironmentThemes.All.Count) return;
+            _requestedTheme = index;
+        }
+
+        private void EnsureHouse()
+        {
+            EnvironmentTheme wanted = EnvironmentThemes.All[ThemeIndex];
+            if (_house != null && _theme == wanted) return;
+            // Build devuelve la raíz desactivada. Si falla, la casa anterior sigue intacta.
+            HouseBuildResult built = HouseGenerator.Build(wanted, transform);
+            if (_house != null) _house.Dispose();
+            _house = built;
+            _theme = wanted;
+            _pointNames.Clear();
+            foreach (ReadingPoint point in _house.ReadingPoints) _pointNames.Add(point.Name);
+        }
+
+        /// <summary>Fondo, luz ambiente y sol/luna del estilo activo.</summary>
+        private void ApplyTheme()
+        {
+            Color background = _theme.SkyHorizon;
+            background.a = 1f;
+            _view.backgroundColor = background;
+            _view.farClipPlane = Mathf.Max(_savedFarClip, HouseGenerator.SkyRadius * 2f);
+            RenderSettings.ambientMode = AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = _theme.AmbientSky;
+            RenderSettings.ambientEquatorColor = _theme.AmbientEquator;
+            RenderSettings.ambientGroundColor = _theme.AmbientGround;
+            RenderSettings.ambientIntensity = 1f;
+            // Las reflexiones del skybox de la escena no corresponden a esta casa.
+            RenderSettings.reflectionIntensity = 0f;
+            // Recalcula la sonda de luz ambiente con los colores nuevos (revisión de Claude).
+            DynamicGI.UpdateEnvironment();
+            Vector3 toSun = _house.Root.transform.TransformDirection(HouseGenerator.SunDirection(_theme));
+            bool sunSet = false;
+            foreach (LightSnapshot item in _lights)
+            {
+                if (item.Light == null) continue;
+                item.Light.shadows = LightShadows.None;
+                // La luz direccional principal toma la posición, color y fuerza del sol (o la luna) pintados.
+                if (!sunSet && item.Light.type == LightType.Directional)
+                {
+                    sunSet = true;
+                    item.Light.transform.rotation = Quaternion.LookRotation(-toSun, Vector3.up);
+                    item.Light.color = _theme.SunColor;
+                    item.Light.intensity = _theme.SunIntensity;
+                }
+            }
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -158,6 +225,17 @@ namespace FolioXR.Environments
         {
             // OVRCameraRig actualiza los anchors en Update/FixedUpdate. Movemos su
             // raíz después, conservando intacta la pose local que entrega OpenXR.
+            if (_requestedTheme >= 0)
+            {
+                int theme = _requestedTheme;
+                _requestedTheme = -1;
+                _requestedMode = 0;
+                _toggleRequested = false;
+                ThemeIndex = theme;
+                if (!_active) EnterEnvironment();
+                else SwitchTheme();
+                return;
+            }
             if (_requestedMode != 0)
             {
                 bool enter = _requestedMode > 0;
@@ -217,36 +295,15 @@ namespace FolioXR.Environments
             if (!ResolveScene()) return;
             try
             {
-                if (_house == null)
-                {
-                    _theme = EnvironmentThemes.All[0];
-                    // Build devuelve la raíz desactivada. Si falla, el passthrough
-                    // y la cámara siguen como estaban y se puede volver a intentar.
-                    _house = HouseGenerator.Build(_theme, transform);
-                    _pointNames.Clear();
-                    foreach (ReadingPoint point in _house.ReadingPoints) _pointNames.Add(point.Name);
-                }
+                // Si la construcción falla, el passthrough y la cámara siguen como estaban.
+                EnsureHouse();
                 EnsurePointLabel();
                 CaptureScene();
                 _passthrough.enabled = false;
                 // Meta pide no suprimir el límite del Guardian mientras el passthrough está apagado.
                 if (OVRManager.instance != null) OVRManager.instance.shouldBoundaryVisibilityBeSuppressed = false;
                 _view.clearFlags = CameraClearFlags.SolidColor;
-                Color background = _theme.SkyHorizon;
-                background.a = 1f;
-                _view.backgroundColor = background;
-                _view.farClipPlane = Mathf.Max(_savedFarClip, HouseGenerator.SkyRadius * 2f);
-                RenderSettings.ambientMode = AmbientMode.Trilight;
-                RenderSettings.ambientSkyColor = _theme.AmbientSky;
-                RenderSettings.ambientEquatorColor = _theme.AmbientEquator;
-                RenderSettings.ambientGroundColor = _theme.AmbientGround;
-                RenderSettings.ambientIntensity = 1f;
-                // Las reflexiones del skybox de la escena no corresponden a esta casa.
-                RenderSettings.reflectionIntensity = 0f;
-                // Recalcula la sonda de luz ambiente con los colores nuevos (revisión de Claude).
-                DynamicGI.UpdateEnvironment();
-                foreach (LightSnapshot item in _lights)
-                    if (item.Light != null) item.Light.shadows = LightShadows.None;
+                ApplyTheme();
 
                 _house.Root.SetActive(true);
                 _active = true;
@@ -258,6 +315,29 @@ namespace FolioXR.Environments
             {
                 LeaveEnvironment();
                 Debug.LogError("[FolioXR] No se pudo activar el entorno: " + exception.Message);
+            }
+        }
+
+        /// <summary>Cambia de estilo sin salir: la foto de la escena (passthrough, luces) se conserva.</summary>
+        private void SwitchTheme()
+        {
+            HouseBuildResult previous = _house;
+            try
+            {
+                FolioLocomotion.SuspendForRelocation();
+                EnsureHouse();
+                if (_house == previous) return;
+                ApplyTheme();
+                _house.Root.SetActive(true);
+                EnsurePointLabel();
+                GoToReadingPoint(Mathf.Min(_pointIndex, _house.ReadingPoints.Count - 1));
+                ResetFpsWindow();
+                Debug.Log("[FolioXR] Entorno cambiado a «" + _theme.Name + "».");
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError("[FolioXR] No se pudo cambiar el entorno: " + exception.Message);
+                if (_house != null && _house.Root != null) _house.Root.SetActive(true);
             }
         }
 
@@ -280,7 +360,11 @@ namespace FolioXR.Environments
             if (_hasBoundarySnapshot) _savedBoundarySuppressed = manager.shouldBoundaryVisibilityBeSuppressed;
             _lights.Clear();
             foreach (Light light in FindObjectsByType<Light>(FindObjectsSortMode.None))
-                _lights.Add(new LightSnapshot { Light = light, Shadows = light.shadows });
+                _lights.Add(new LightSnapshot
+                {
+                    Light = light, Shadows = light.shadows, Color = light.color,
+                    Intensity = light.intensity, Rotation = light.transform.rotation
+                });
             _hasSnapshot = true;
         }
 
@@ -312,7 +396,13 @@ namespace FolioXR.Environments
                 OVRManager.instance.shouldBoundaryVisibilityBeSuppressed = _savedBoundarySuppressed;
             _hasBoundarySnapshot = false;
             foreach (LightSnapshot item in _lights)
-                if (item.Light != null) item.Light.shadows = item.Shadows;
+            {
+                if (item.Light == null) continue;
+                item.Light.shadows = item.Shadows;
+                item.Light.color = item.Color;
+                item.Light.intensity = item.Intensity;
+                item.Light.transform.rotation = item.Rotation;
+            }
             _lights.Clear();
             _hasSnapshot = false;
             UpdatePassthroughFloor();

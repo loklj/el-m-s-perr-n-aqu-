@@ -130,6 +130,10 @@ En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
 | EPUB · DRM y fuentes | rights.xml o AES en encryption.xml: «Este libro tiene DRM y no se puede abrir». Solo ofuscación IDPF/Adobe de fuentes: abre con fuente del sistema, sin descifrar. XML corrupto da error de lectura |
 | EPUB · Contenido complejo y límites | Probar nav EPUB3, NCX EPUB2, imágenes y CSS relativos, caracteres escapados en rutas, scripts/URL externos bloqueados; capítulo >4 MiB debe fallar de forma controlada. Revisar SVG, tablas, RTL y maquetación fija por separado, sin darlos por soportados |
 | EPUB · Regresiones | PDF y cómics mantienen su lector, páginas, agarre, escala y progreso; ambos menús muestran ajustes de letra; herramientas y esfera conservan su código |
+| Menús movibles | Panel: barra azul clara bajo el panel. Esfera: barra bajo la esfera. Pellizcar (mano) o apretar el grip (mando) a menos de 6/10 cm de la barra y mover: el menú sigue y mira a la cabeza; al soltar queda ahí. Mientras arrastras no se pulsan botones |
+| Entornos · once estilos | Menú → Entornos: elegir cada estilo. Se construye en ~1 s, mismo plano de casa con otros colores, paisaje, cielo y sol. Revisar que no haya huecos en el horizonte ni árboles dentro de la casa o el camino. Anotar las líneas `[FolioXR] Entorno: triángulos=` y el FPS medio |
+| Entornos · lago y ciudad | Casa del lago: el muelle es caminable y el agua refleja el sol. Loft nocturno: ventanas y farolas encendidas, cielo con pocas estrellas |
+| Entornos · salir y recordar | Passthrough restaura la luz de la escena (color, fuerza y dirección). Al reiniciar la app se recuerda el último estilo |
 
 | Abrir la app | Ves tu habitación (passthrough) y un libro frente a ti |
 | Portada | La página izquierda muestra la portada azul «Folio XR» |

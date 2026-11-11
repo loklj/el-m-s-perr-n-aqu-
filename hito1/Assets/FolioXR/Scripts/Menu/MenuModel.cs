@@ -64,6 +64,17 @@ namespace FolioXR.Menu
         // Biblioteca: seis libros por página; quitar pide elegir el libro y un segundo toque antes de 4 s.
         private const int BooksPerPage = 6;
         private int _libraryPage;
+        private int _themePage, _pointCursor;
+
+        /// <summary>Parte un nombre largo en dos líneas por el espacio más cercano al centro.</summary>
+        private static string TwoLines(string text)
+        {
+            if (text.Length <= 12) return text;
+            int best = -1;
+            for (int i = 0; i < text.Length; i++)
+                if (text[i] == ' ' && (best < 0 || Mathf.Abs(i - text.Length / 2) < Mathf.Abs(best - text.Length / 2))) best = i;
+            return best < 0 ? text : text.Substring(0, best) + "\n" + text.Substring(best + 1);
+        }
         private bool _removing;
         private string _removeId;
         private float _removeUntil;
@@ -444,17 +455,37 @@ namespace FolioXR.Menu
                     if (library.Books.Count == 0) options.Add(new MenuOption("Aún no hay libros:\nimporta el primero"));
                     break;
                 case MenuCategory.Entornos:
+                {
+                    // Once estilos (docs/ENTORNOS.md), en páginas de ocho; el marcado es el activo.
+                    const int themesPerPage = 8;
+                    var themes = EnvironmentThemes.All;
+                    int themePages = (themes.Count + themesPerPage - 1) / themesPerPage;
+                    _themePage = Mathf.Clamp(_themePage, 0, themePages - 1);
                     options.Add(new MenuOption("Passthrough", () => _environment.Leave(),
                         () => _environment != null, () => _environment != null && !_environment.IsActive));
-                    options.Add(new MenuOption("Casa moderna\ncálida", () => _environment.Enter(),
-                        () => _environment != null, () => _environment != null && _environment.IsActive));
-                    if (_environment != null && _environment.IsActive)
-                        for (int i = 0; i < _environment.PointNames.Count; i++)
+                    int lastTheme = Mathf.Min(themes.Count, (_themePage + 1) * themesPerPage);
+                    for (int i = _themePage * themesPerPage; i < lastTheme; i++)
+                    {
+                        int theme = i;
+                        options.Add(new MenuOption(TwoLines(themes[i].Name), () => _environment.SetTheme(theme),
+                            () => _environment != null,
+                            () => _environment != null && _environment.IsActive && _environment.ThemeIndex == theme));
+                    }
+                    if (themePages > 1)
+                        options.Add(new MenuOption("Más entornos\n" + (_themePage + 1) + " de " + themePages,
+                            () => { _themePage = (_themePage + 1) % themePages; RebuildOptions(); }));
+                    if (_environment != null && _environment.IsActive && _environment.PointNames.Count > 0)
+                    {
+                        int next = (_pointCursor + 1) % _environment.PointNames.Count;
+                        options.Add(new MenuOption("Ir a:\n" + _environment.PointNames[next], () =>
                         {
-                            int point = i;
-                            options.Add(new MenuOption(_environment.PointNames[i], () => _environment.GoToPoint(point)));
-                        }
+                            _pointCursor = next;
+                            _environment.GoToPoint(next);
+                            RebuildOptions();
+                        }));
+                    }
                     break;
+                }
                 case MenuCategory.Ajustes:
                     // Una sola casilla por ajuste: cada toque pasa al valor siguiente (pedido del usuario, 11 nov).
                     string[] fontNames = { "pequeña", "normal", "grande" };
