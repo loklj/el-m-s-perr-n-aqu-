@@ -221,6 +221,7 @@ namespace FolioXR.Menu
             if (TrackedController(XRNode.LeftHand, out _) && _rig.leftControllerAnchor != null)
             {
                 input.AnchorValid = true;
+                input.FollowAnchor = true;
                 input.Anchor = _rig.leftControllerAnchor.position;
             }
             else if (_left.TryBone(OVRSkeleton.BoneId.Hand_WristRoot, out Vector3 wrist) &&

@@ -167,6 +167,8 @@ namespace FolioXR.Tools
             }
             // Tanda E: la cámara de la lupa excluye la capa UI; el reloj vive en ella.
             SetLayer(_watch, 5);
+            if (_watchBody != null)
+                SetLayer(_watchBody, 5);
             var label = new GameObject("Aviso de herramientas");
             label.transform.SetParent(transform, false);
             _notice = label.AddComponent<TextMesh>();
@@ -193,15 +195,31 @@ namespace FolioXR.Tools
             if (_watch == null)
                 return;
             // Un mando real tiene prioridad sobre cualquier mano emulada del mismo lado.
-            _wrist = _inputs[2].Reliable   ? _rig.leftControllerAnchor
-                     : _inputs[0].Reliable ? (_inputs[0].Wrist != null ? _inputs[0].Wrist : _inputs[0].Hand.transform)
-                                           : null;
+            bool controller = _inputs[2].Reliable;
+            bool hand = !controller && _inputs[0].Reliable && UpdateWristWatch();
+            if (!hand && _watchBody != null)
+                _watchBody.gameObject.SetActive(false);
+            _wrist = controller ? _rig.leftControllerAnchor : hand ? _watchBody : null;
             _wristValid = _wrist != null && _focused;
-            // Visible también con el menú abierto: su botón «Menú» lo cierra con la mano.
-            _watch.gameObject.SetActive(_wristValid);
+            if (!hand)
+                _trayOpen = false;
+            // Con mando, los íconos rodean el mando como antes. Con manos, salen al tocar el reloj.
+            _watch.gameObject.SetActive(_wristValid && (controller || _trayOpen));
             if (!_wristValid)
                 return;
             Camera camera = Camera.main;
+            if (hand)
+            {
+                // Bandeja sobre el reloj, de cara a la vista y a tamaño completo.
+                Vector3 above = _watchBody.position - _watchBody.forward * 0.075f;
+                Vector3 toward = camera != null ? (camera.transform.position - above).normalized : Vector3.zero;
+                _watch.SetPositionAndRotation(above + toward * 0.02f,
+                                              camera != null ? camera.transform.rotation : _watchBody.rotation);
+                _watch.localScale = Vector3.one * 1.1f;
+                if (_trayOpen && Time.unscaledTime >= _trayCloseAt)
+                    SetTray(false);
+                return;
+            }
             Vector3 position = _wrist.position + _wrist.up * 0.025f;
             // Anclado al hueso/anchor; la cara de los símbolos mira al lector.
             Quaternion rotation = camera != null ? camera.transform.rotation : _wrist.rotation;
@@ -225,8 +243,9 @@ namespace FolioXR.Tools
         {
             FolioTool tool = _tools[slot];
             if (tool.State == ToolState.Stored)
-                return _wristValid && node == XRNode.RightHand ? Vector3.Distance(point, _icons[slot].position)
-                                                               : float.PositiveInfinity;
+                return _wristValid && node == XRNode.RightHand && _watch.gameObject.activeInHierarchy
+                           ? Vector3.Distance(point, _icons[slot].position)
+                           : float.PositiveInfinity;
             if (tool.State != ToolState.World || !tool.GripCollider.enabled)
                 return float.PositiveInfinity;
             return Vector3.Distance(point, tool.GripCollider.ClosestPoint(point));
@@ -335,7 +354,8 @@ namespace FolioXR.Tools
                 if (input.LostSince < 0f)
                     input.LostSince = Time.unscaledTime;
                 tool.OtherIndexTouch(Vector3.zero, false);
-                if (Time.unscaledTime - input.LostSince > 0.3f)
+                // Pegada a la mano tolera más pérdida de seguimiento (la mano se tapa al dibujar o escribir).
+                if (Time.unscaledTime - input.LostSince > (_sticky[i] ? 1f : 0.3f))
                     Return(tool); // Nunca dejar caer por oclusión/suspensión.
                 return;
             }

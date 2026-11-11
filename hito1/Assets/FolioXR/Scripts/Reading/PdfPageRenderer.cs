@@ -22,6 +22,14 @@ namespace FolioXR.Reading
     public sealed class PdfPageRenderer : IDisposable
     {
         private const string JavaClass = "com.loklj.folioxr.FolioPdfRenderer";
+        // Cómics CBZ (ZIP de imágenes): mismo protocolo, otra clase Java (11 nov 2026).
+        private const string ComicJavaClass = "com.loklj.folioxr.FolioComicRenderer";
+
+        public static bool IsComic(string path)
+        {
+            string extension = string.IsNullOrEmpty(path) ? string.Empty : Path.GetExtension(path).ToLowerInvariant();
+            return extension == ".cbz" || extension == ".zip";
+        }
         private const float TimeoutSeconds = 30f;
 
         private readonly string _pdfPath;
@@ -38,7 +46,7 @@ namespace FolioXR.Reading
             _cacheDir = Path.Combine(Application.temporaryCachePath, "folio-paginas");
             Directory.CreateDirectory(_cacheDir);
 #if UNITY_ANDROID && !UNITY_EDITOR
-            _java = new AndroidJavaClass(JavaClass);
+            _java = new AndroidJavaClass(IsComic(pdfPath) ? ComicJavaClass : JavaClass);
 #endif
         }
 

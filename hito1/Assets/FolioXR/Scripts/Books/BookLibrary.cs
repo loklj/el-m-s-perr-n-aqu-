@@ -15,6 +15,8 @@ namespace FolioXR.Books
         public int pages, position;
 
         public bool IsPdf => format == "pdf";
+        /// <summary>Formatos que el libro 3D ya abre: PDF y cómics CBZ (o ZIP de imágenes).</summary>
+        public bool CanOpen => format == "pdf" || format == "cbz" || format == "zip";
 
         /// <summary>Progreso para el menú: porcentaje, o si aún no se abrió.</summary>
         public string ProgressText => pages <= 0
@@ -127,7 +129,7 @@ namespace FolioXR.Books
             foreach (BookEntry entry in _books)
             {
                 if (entry.lastRead <= 0) break; // Vienen ordenados por última lectura.
-                if (!entry.IsPdf || !File.Exists(entry.path)) continue;
+                if (!entry.CanOpen || !File.Exists(entry.path)) continue;
                 _book.RequestDocument(entry.path, entry.id, entry.position);
                 Debug.Log("[FolioXR] Biblioteca: se retoma «" + entry.title + "» en la página " + (entry.position + 1));
                 return;
@@ -231,7 +233,7 @@ namespace FolioXR.Books
         public void Open(BookEntry entry)
         {
             if (entry == null || _book == null) return;
-            if (!entry.IsPdf)
+            if (!entry.CanOpen)
             {
                 Notify("Formato aún no compatible: «" + entry.title + "» (" + entry.format.ToUpperInvariant() +
                     ").\nSe podrá abrir en una próxima versión.");

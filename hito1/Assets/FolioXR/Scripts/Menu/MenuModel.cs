@@ -232,7 +232,7 @@ namespace FolioXR.Menu
                         BookEntry entry = library.Books[i];
                         string text = _removeId == entry.id ? "¿Quitar? Toca\notra vez"
                             : Shorten(entry.title, 30) + "\n" +
-                              (entry.IsPdf ? entry.ProgressText : entry.format.ToUpperInvariant() + " · pronto");
+                              (entry.CanOpen ? entry.ProgressText : entry.format.ToUpperInvariant() + " · pronto");
                         options.Add(new MenuOption(text, () => TapBook(entry),
                             marked: () => library.Current != null && library.Current.id == entry.id));
                     }

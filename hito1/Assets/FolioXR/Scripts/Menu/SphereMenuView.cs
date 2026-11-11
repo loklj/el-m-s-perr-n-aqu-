@@ -13,6 +13,7 @@ namespace FolioXR.Menu
         internal Transform Head, Space;
         internal bool AnchorValid;
         internal Vector3 Anchor;   // Mando izquierdo o centro de la palma izquierda.
+        internal bool FollowAnchor; // Mando: la sigue. Mano: queda fija donde se abrió (más fácil de tocar).
         internal bool TipValid;
         internal Vector3 Tip;      // Punta del índice derecho.
         internal float StickX;     // Stick de cualquier mando libre.
@@ -744,7 +745,7 @@ namespace FolioXR.Menu
         private void Place(SphereInput input, float dt)
         {
             Vector3 position = _root.position;
-            if (input.AnchorValid)
+            if (input.AnchorValid && (input.FollowAnchor || !_placed))
             {
                 Vector3 target = input.Anchor + Vector3.up * AnchorHeight;
                 // Sigue a la mano en tiempo real; un salto del rig no la arrastra por el aire.
@@ -791,6 +792,7 @@ namespace FolioXR.Menu
                 if (!ready || !_touchArmed || distance > Radius + 0.008f || distance < Radius - 0.035f) return;
                 _touching = true;
                 _touchArmed = _dragging = _controllerDriven = false;
+                Debug.Log("[FolioXR] Esfera: dedo sobre la esfera");
                 _touchStart = Time.unscaledTime;
                 _touchLocal = local;
                 _touchAzimuth = _lastAzimuth = Azimuth(local);
@@ -798,17 +800,20 @@ namespace FolioXR.Menu
                 ring.Snapping = false;
                 return;
             }
-            if (distance > Radius + 0.02f || distance < Radius - 0.055f)
+            // Revisión del 11 nov 2026: el toque termina solo al salir hacia fuera; un dedo que se hunde
+            // en la esfera ya no anula la elección.
+            if (distance > Radius + 0.015f)
             {
                 _touching = false;
-                if (!_dragging && distance > Radius && Time.unscaledTime - _touchStart < 1f) Tap(_touchLocal);
+                if (!_dragging && Time.unscaledTime - _touchStart < 1.5f) Tap(_touchLocal);
                 return;
             }
+            if (distance < Radius - 0.05f) return; // Muy adentro: no se cuenta como deslizar.
             if (Mathf.Abs(local.y) > Radius * 0.85f) return; // Cerca de los polos el ángulo no es fiable.
             float azimuth = Azimuth(local);
             float delta = Mathf.DeltaAngle(_lastAzimuth, azimuth);
             _lastAzimuth = azimuth;
-            if (!_dragging && Mathf.Abs(Mathf.DeltaAngle(_touchAzimuth, azimuth)) > 7f)
+            if (!_dragging && Mathf.Abs(Mathf.DeltaAngle(_touchAzimuth, azimuth)) > 12f)
             {
                 _dragging = true;
                 delta = 0f;
@@ -820,20 +825,22 @@ namespace FolioXR.Menu
 
         private void Tap(Vector3 local)
         {
+            Debug.Log("[FolioXR] Esfera: toque con el índice (nivel " + _level + ")");
             Vector3 world = _root.TransformPoint(local);
             if (_level == 1)
             {
                 if (TryHit(_options, world, out int option))
                 {
-                    if (option == _options.Front) Activate(_options, _options.SlotTile[option]);
-                    else SnapTo(_options, option);
+                    // Con la mano, tocar cualquier casilla visible la elige (antes solo la del frente).
+                    if (option != _options.Front) SnapTo(_options, option);
+                    Activate(_options, _options.SlotTile[option]);
                 }
                 else if (TryHit(_categories, world, out _) && Back()) Feedback?.Invoke(false);
             }
             else if (TryHit(_categories, world, out int category))
             {
-                if (category == _categories.Front) Activate(_categories, _categories.SlotTile[category]);
-                else SnapTo(_categories, category);
+                if (category != _categories.Front) SnapTo(_categories, category);
+                Activate(_categories, _categories.SlotTile[category]);
             }
         }
 
