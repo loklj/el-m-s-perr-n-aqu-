@@ -57,7 +57,7 @@ public final class FolioLibrary {
     private static final int SCHEMA = 1;
     private static final int REQUEST_PICK = 0x4F58;
     private static final int BUFFER = 1 << 20;
-    private static final long SPACE_MARGIN = 64L * 1024 * 1024;
+    static final long SPACE_MARGIN = 64L * 1024 * 1024;
     private static final int MAX_BACKUPS = 5;
     private static final long BACKUP_INTERVAL_MS = 20L * 60 * 60 * 1000;
     private static final String[] KNOWN = {"pdf", "epub", "cbz", "zip", "cbr", "cb7", "mobi", "azw", "azw3",
@@ -504,7 +504,7 @@ public final class FolioLibrary {
         }
     }
 
-    private static final class ImportException extends Exception {
+    static final class ImportException extends Exception {
         ImportException(String text) {
             super(text);
         }
@@ -635,46 +635,70 @@ public final class FolioLibrary {
                 throw new ImportException("La copia de \u00ab" + name + "\u00bb qued\u00f3 incompleta. Vuelve a intentarlo.");
             }
 
-            String format = detectFormat(part, name);
-            if ("acsm".equals(format)) {
-                throw new ImportException("\u00ab" + name + "\u00bb es un comprobante de compra (ACSM), no el libro."
-                        + " Esta app solo abre libros sin DRM.");
-            }
-            if (!Arrays.asList(KNOWN).contains(format)) {
-                throw new ImportException("Formato a\u00fan no compatible: \u00ab" + name + "\u00bb.");
-            }
-            String id = stableId(part, written);
-            if (hasBook(id)) {
-                return false;
-            }
-            String title = name;
-            int dot = title.lastIndexOf('.');
-            if (dot > 0) {
-                title = title.substring(0, dot);
-            }
-            File dest = new File(booksDir, id + "." + format);
-            File journal = new File(tempDir, id + ".json");
-            writeSmallText(journal, new JSONObject().put("id", id).put("title", title).put("format", format)
-                    .put("size", written).put("path", dest.getAbsolutePath()).toString());
-            if (dest.exists()) {
-                dest.delete(); // Copia huerfana de un intento anterior sin ficha.
-            }
-            if (!part.renameTo(dest)) {
-                journal.delete();
-                throw new ImportException("No se pudo guardar \u00ab" + name + "\u00bb en la biblioteca.");
-            }
-            insertBook(id, title, format, dest, written);
-            journal.delete();
-            if ("pdf".equals(format)) {
-                makeCover(id, dest);
-            }
-            Log.i(TAG, "[FolioXR] Importar: \u00ab" + title + "\u00bb (" + format + ", " + megabytes(written) + ") id=" + id);
-            return true;
+            return ingest(part, name, written);
         } finally {
             if (part.exists()) {
                 part.delete();
             }
         }
+    }
+
+    /**
+     * Ultimo tramo de toda importacion (selector o Wi-Fi): formato, id estable, diario, renombrado,
+     * ficha y portada. Devuelve false si el libro ya estaba. El llamador borra "part" si sigue existiendo.
+     */
+    static boolean ingest(File part, String name, long written) throws Exception {
+        String format = detectFormat(part, name);
+        if ("acsm".equals(format)) {
+            throw new ImportException("\u00ab" + name + "\u00bb es un comprobante de compra (ACSM), no el libro."
+                    + " Esta app solo abre libros sin DRM.");
+        }
+        if (!Arrays.asList(KNOWN).contains(format)) {
+            throw new ImportException("Formato a\u00fan no compatible: \u00ab" + name + "\u00bb.");
+        }
+        String id = stableId(part, written);
+        if (hasBook(id)) {
+            return false;
+        }
+        String title = name;
+        int dot = title.lastIndexOf('.');
+        if (dot > 0) {
+            title = title.substring(0, dot);
+        }
+        File dest = new File(booksDir, id + "." + format);
+        File journal = new File(tempDir, id + ".json");
+        writeSmallText(journal, new JSONObject().put("id", id).put("title", title).put("format", format)
+                .put("size", written).put("path", dest.getAbsolutePath()).toString());
+        if (dest.exists()) {
+            dest.delete(); // Copia huerfana de un intento anterior sin ficha.
+        }
+        if (!part.renameTo(dest)) {
+            journal.delete();
+            throw new ImportException("No se pudo guardar \u00ab" + name + "\u00bb en la biblioteca.");
+        }
+        insertBook(id, title, format, dest, written);
+        journal.delete();
+        if ("pdf".equals(format)) {
+            makeCover(id, dest);
+        }
+        Log.i(TAG, "[FolioXR] Importar: \u00ab" + title + "\u00bb (" + format + ", " + megabytes(written) + ") id=" + id);
+        return true;
+    }
+
+    static File newPartFile() {
+        return new File(tempDir, UUID.randomUUID().toString() + ".part");
+    }
+
+    static long freeSpace() {
+        return tempDir.getUsableSpace();
+    }
+
+    static boolean ready() {
+        return helper != null;
+    }
+
+    static String megabytesText(long bytes) {
+        return megabytes(bytes);
     }
 
     /** Hash de 1 MB inicial + 1 MB final + tamano: estable aunque cambien el nombre o la fecha. */

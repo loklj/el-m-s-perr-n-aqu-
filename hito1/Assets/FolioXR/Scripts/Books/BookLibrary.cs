@@ -37,6 +37,14 @@ namespace FolioXR.Books
     }
 
     [Serializable]
+    internal sealed class WifiStatus
+    {
+        public bool running;
+        public string url, code, message, error;
+        public int received, serial;
+    }
+
+    [Serializable]
     internal sealed class ImportStatus
     {
         public string state, file, message;
@@ -53,6 +61,7 @@ namespace FolioXR.Books
     public sealed class BookLibrary : MonoBehaviour
     {
         private const string JavaClass = "com.loklj.folioxr.FolioLibrary";
+        private const string WifiJavaClass = "com.loklj.folioxr.FolioWifiServer";
         private const float SaveDelay = 2f, PollInterval = 0.3f;
 
         public static BookLibrary Instance { get; private set; }
@@ -67,6 +76,13 @@ namespace FolioXR.Books
         public BookEntry Current { get; private set; }
         public bool Importing => _importState == "picking" || _importState == "copying";
         public string ImportLine { get; private set; } = string.Empty;
+        // Carga desde el PC por Wi-Fi (encargo 12).
+        public bool WifiRunning { get; private set; }
+        public string WifiUrl { get; private set; } = string.Empty;
+        public string WifiCode { get; private set; } = string.Empty;
+        public int WifiReceived { get; private set; }
+        private int _wifiSerial = -1;
+        private float _nextWifiPoll;
         public bool IsBookmarked => Current != null && _bookmarks.Contains(Current.position);
 
         private List<BookEntry> _books = new List<BookEntry>();
@@ -347,6 +363,90 @@ namespace FolioXR.Books
 #endif
         }
 
+        /// <summary>Abre el servidor local: el PC sube libros desde su navegador con un código de 6 dígitos.</summary>
+        public void StartWifi()
+        {
+            if (!Available) return;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var server = new AndroidJavaClass(WifiJavaClass))
+                {
+                    WifiStatus status = JsonUtility.FromJson<WifiStatus>(server.CallStatic<string>("start"));
+                    if (status == null || !string.IsNullOrEmpty(status.error) || string.IsNullOrEmpty(status.url))
+                    {
+                        Notify(status != null && !string.IsNullOrEmpty(status.error) ? status.error
+                            : "No se pudo abrir la carga por Wi-Fi.");
+                        return;
+                    }
+                    WifiRunning = true;
+                    WifiUrl = status.url;
+                    WifiCode = status.code;
+                    WifiReceived = 0;
+                    _wifiSerial = -1;
+                    Debug.Log("[FolioXR] Wi-Fi: abierto en " + WifiUrl);
+                    Notify("En el navegador de tu PC abre\n" + WifiUrl + "\nCódigo: " + WifiCode);
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[FolioXR] Wi-Fi: no se pudo abrir: " + e.Message);
+                Notify("No se pudo abrir la carga por Wi-Fi.");
+            }
+#endif
+            StateChanged?.Invoke();
+        }
+
+        public void StopWifi()
+        {
+            if (!WifiRunning) return;
+            WifiRunning = false;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var server = new AndroidJavaClass(WifiJavaClass)) server.CallStatic("stop");
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[FolioXR] Wi-Fi: no se pudo cerrar: " + e.Message);
+            }
+#endif
+            Debug.Log("[FolioXR] Wi-Fi: cerrado");
+            StateChanged?.Invoke();
+        }
+
+        private void PollWifi()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                using (var server = new AndroidJavaClass(WifiJavaClass))
+                {
+                    WifiStatus status = JsonUtility.FromJson<WifiStatus>(server.CallStatic<string>("statusJson"));
+                    if (status == null || status.serial == _wifiSerial) return;
+                    bool first = _wifiSerial < 0;
+                    _wifiSerial = status.serial;
+                    bool arrived = status.received != WifiReceived;
+                    WifiReceived = status.received;
+                    if (arrived) Reload();
+                    if (!status.running)
+                    {
+                        WifiRunning = false;
+                        if (!string.IsNullOrEmpty(status.message)) Notify(status.message);
+                    }
+                    else if (arrived && !first && !string.IsNullOrEmpty(status.message)) Notify(status.message);
+                    StateChanged?.Invoke();
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[FolioXR] Wi-Fi: no se pudo leer el estado: " + e.Message);
+                WifiRunning = false;
+                StateChanged?.Invoke();
+            }
+#endif
+        }
+
         private static void Notify(string message)
         {
             Debug.Log("[FolioXR] Aviso: " + message.Replace("\n", " "));
@@ -363,6 +463,11 @@ namespace FolioXR.Books
                 Hook();
             }
             if (_dirty && Time.unscaledTime >= _saveAt) Save(false);
+            if (WifiRunning && Time.unscaledTime >= _nextWifiPoll)
+            {
+                _nextWifiPoll = Time.unscaledTime + 1f;
+                PollWifi();
+            }
             if (_polling && Time.unscaledTime >= _nextPoll)
             {
                 _nextPoll = Time.unscaledTime + PollInterval;
@@ -422,11 +527,13 @@ namespace FolioXR.Books
         private void OnApplicationPause(bool paused)
         {
             if (paused && _dirty) Save(true); // Escritura inmediata: el sistema puede cerrar la app en pausa.
+            if (paused) StopWifi();           // El servidor no queda abierto con el visor suspendido.
             if (!paused) _nextPoll = 0f;      // Al volver del selector, leer el estado enseguida.
         }
 
         private void OnApplicationQuit()
         {
+            StopWifi();
             if (_dirty) Save(true);
         }
 

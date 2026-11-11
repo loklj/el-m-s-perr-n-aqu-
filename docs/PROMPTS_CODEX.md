@@ -36,7 +36,7 @@ Responde siempre en español. Repositorio: https://github.com/loklj/el-m-s-perr-
 | | 🧪 Prueba en el visor: MVP de la Fase 1 | | |
 | 10 | Formatos 2: TXT, CBR, MOBI/AZW/AZW3 | `fase2/formatos` | Pendiente |
 | 11 | Formatos 3: DOCX, ODT, RTF y diagnóstico de no compatibles | `fase2/documentos` | Pendiente |
-| 12 | Carga desde el PC por Wi-Fi | `fase3/wifi-pc` | Pendiente |
+| 12 | Carga desde el PC por Wi-Fi | `fase-1/preparacion` | Escrito por Claude el 11 de noviembre de 2026 (sin reanudación de subidas; queda abierto hasta cerrarlo o suspender el visor) |
 | 13 | Nubes: Google Drive, Dropbox y MEGA | `fase3/nubes` | Pendiente; Drive con `drive.file` y Picker (decidido) |
 | 14 | OPDS (Calibre-Web, Kavita, Komga) | `fase3/opds` | Pendiente |
 | | 🧪 Prueba en el visor: formatos e importación | | |

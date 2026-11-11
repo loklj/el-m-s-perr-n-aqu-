@@ -241,6 +241,7 @@ En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
 | Encargo 9 · Recentrar | Mantener el botón Meta para recentrar: el libro vuelve frente a la vista (si no está en la mano) |
 | Encargo 9 · Suspender | Quitarse el visor con el libro o una herramienta apoyados y volver: nada sale lanzado ni atraviesa el suelo; el progreso quedó guardado |
 | Encargo 9 · Interrupciones | Cerrar la app a mitad de una importación y volver a abrir: no queda un libro a medias (el registro dice «parciales borrados»). Importar sin espacio: aviso «No hay espacio suficiente…» |
+| Encargo 12 · Wi-Fi desde el PC | Menú → Importar y nubes → «Desde el PC por Wi-Fi»: aparece una dirección (http://192.168.x.x:8080) y un código de 6 dígitos. En el navegador del PC (misma red Wi-Fi) abrir esa dirección, escribir el código, elegir archivos y «Enviar al visor»: barra de progreso por archivo y el libro aparece en la Biblioteca. Con un código errado responde «Código incorrecto». «Cerrar la carga por Wi-Fi» o quitarse el visor cierra el servidor |
 
 El entorno de prueba ya está en `fase-1/preparacion`; consulta [instalación, presupuesto y comprobaciones pendientes](ENTORNOS.md). El eje vertical del stick izquierdo conserva el ajuste de nitidez del Hito 1.2 también dentro de la casa.
 

@@ -81,7 +81,8 @@ namespace FolioXR.Menu
 
         private void OnLibraryChanged()
         {
-            if (SelectedCategory == MenuCategory.Biblioteca) RebuildOptions();
+            if (SelectedCategory == MenuCategory.Biblioteca || SelectedCategory == MenuCategory.ImportarYNubes)
+                RebuildOptions();
             Changed?.Invoke();
         }
 
@@ -287,7 +288,22 @@ namespace FolioXR.Menu
                     options.Add(new MenuOption("Traer libro", () => _book.PlaceInFrontOfView(), () => _book != null));
                     break;
                 case MenuCategory.ImportarYNubes:
-                    options.Add(new MenuOption("Próximamente"));
+                    BookLibrary source = BookLibrary.Instance;
+                    if (source == null || !source.Available)
+                    {
+                        options.Add(new MenuOption("Importar solo funciona en el visor"));
+                        break;
+                    }
+                    options.Add(new MenuOption("Desde el visor: elegir archivos", source.Import, () => !source.Importing));
+                    if (!source.WifiRunning)
+                        options.Add(new MenuOption("Desde el PC por Wi-Fi", source.StartWifi));
+                    else
+                    {
+                        options.Add(new MenuOption("En el navegador del PC abre " + source.WifiUrl));
+                        options.Add(new MenuOption("Código: " + source.WifiCode + " · recibidos: " + source.WifiReceived));
+                        options.Add(new MenuOption("Cerrar la carga por Wi-Fi", source.StopWifi));
+                    }
+                    options.Add(new MenuOption("Nubes (Drive, Dropbox, MEGA): próximamente"));
                     break;
                 case MenuCategory.Hora:
                     foreach (int minutes in new[] { 15, 30, 45, 60 })
