@@ -140,18 +140,25 @@ namespace FolioXR.Reading
             Texture2D texture = null;
             try
             {
-                texture = LoadRaw(pngPath);
+                bool night = PageTheme.NeedsRemap(_pdfPath);
+                texture = LoadRaw(pngPath, night);
                 if (texture == null)
                 {
                     // PNG (EPUB) o JPEG (cómics).
                     byte[] png = File.ReadAllBytes(pngPath);
                     texture = new Texture2D(2, 2, TextureFormat.RGBA32, true);
-                    // Las páginas solo se muestrean en GPU; evitar la copia CPU a 4096 px.
-                    if (!texture.LoadImage(png, true))
+                    // Las páginas solo se muestrean en GPU; evitar la copia CPU a 4096 px
+                    // salvo en modo noche, que necesita leer los píxeles una vez.
+                    if (!texture.LoadImage(png, !night))
                     {
                         UnityEngine.Object.Destroy(texture);
                         texture = null;
                         result = Fail("IO", "no se pudo leer la imagen de la pagina");
+                    }
+                    else if (night)
+                    {
+                        PageTheme.RemapNight(texture.GetPixelData<byte>(0).AsSpan(), texture.format);
+                        texture.Apply(true, true);
                     }
                 }
             }
@@ -244,7 +251,7 @@ namespace FolioXR.Reading
         /// Se leen directo a la memoria de la textura, sin PNG y sin un arreglo intermedio de 24 MB.
         /// Devuelve null si el archivo no tiene esa cabecera.
         /// </summary>
-        private static Texture2D LoadRaw(string path)
+        private static Texture2D LoadRaw(string path, bool night)
         {
             using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16))
             {
@@ -268,6 +275,7 @@ namespace FolioXR.Reading
                         if (n <= 0) throw new IOException("pagina cruda truncada");
                         read += n;
                     }
+                    if (night) PageTheme.RemapNight(target, TextureFormat.RGBA32);
                     texture.Apply(true, true); // Mipmaps y fuera de la RAM de CPU.
                     return texture;
                 }

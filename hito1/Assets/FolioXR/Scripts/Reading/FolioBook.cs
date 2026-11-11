@@ -265,6 +265,7 @@ namespace FolioXR.Reading
 
         private void Awake()
         {
+            PageTheme.Changed += OnPageThemeChanged;
             _baseScale = transform.localScale;
             RealisticPhysics = PlayerPrefs.GetInt(PhysicsPrefsKey, 1) != 0;
             _body = GetComponent<Rigidbody>();
@@ -408,6 +409,7 @@ namespace FolioXR.Reading
             _recenterWasDown = recenter;
 
             if (pinchToTurnPages) UpdatePinchPageTurn();
+            if (_pageThemeDirty && GoToPage(_leftIndex)) _pageThemeDirty = false;
             if (!InputPaused) UpdateRenderScaleInput();
             else _renderScaleStickLatched = true;
             UpdateRenderScaleStatus();
@@ -850,15 +852,19 @@ namespace FolioXR.Reading
             }
         }
 
-        private static void ShowPage(Renderer page, Texture2D texture)
+        private void ShowPage(Renderer page, Texture2D texture)
         {
             if (page == null) return;
             page.enabled = texture != null;
             // .material crea una copia propia del material para este libro.
-            if (texture != null) page.material.mainTexture = texture;
+            if (texture != null)
+            {
+                page.material.mainTexture = texture;
+                page.material.color = PageTheme.Tint(_renderer != null ? _renderer.PdfPath : null);
+            }
         }
 
-        private static void ReplaceTexture(ref Texture2D slot, Texture2D incoming, Renderer target)
+        private void ReplaceTexture(ref Texture2D slot, Texture2D incoming, Renderer target)
         {
             if (slot != null && slot != incoming) Destroy(slot);
             slot = incoming;
@@ -866,8 +872,17 @@ namespace FolioXR.Reading
             {
                 // .material crea una copia propia del material para este libro.
                 target.material.mainTexture = incoming;
+                target.material.color = PageTheme.Tint(_renderer != null ? _renderer.PdfPath : null);
             }
         }
+
+        // Modo de página (día/sepia/noche): se vuelve a dibujar la doble página actual.
+        private void OnPageThemeChanged()
+        {
+            if (!GoToPage(_leftIndex)) _pageThemeDirty = true;
+        }
+
+        private bool _pageThemeDirty;
 
         /// <summary>Ajusta tamaños y posiciones de páginas, tapa y colisionador.</summary>
         public void ApplyLayout()
@@ -1052,6 +1067,7 @@ namespace FolioXR.Reading
 
         private void OnDestroy()
         {
+            PageTheme.Changed -= OnPageThemeChanged;
             if (_renderer != null)
             {
                 _renderer.Dispose();

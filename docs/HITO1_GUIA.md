@@ -142,6 +142,7 @@ En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
 | Entornos · once estilos | Menú → Entornos: elegir cada estilo. Se construye en ~1 s, mismo plano de casa con otros colores, paisaje, cielo y sol. Revisar que no haya huecos en el horizonte ni árboles dentro de la casa o el camino. Anotar las líneas `[FolioXR] Entorno: triángulos=` y el FPS medio |
 | Entornos · lago y ciudad | Casa del lago: el muelle es caminable y el agua refleja el sol. Loft nocturno: ventanas y farolas encendidas, cielo con pocas estrellas |
 | Entornos · salir y recordar | Passthrough restaura la luz de la escena (color, fuerza y dirección). Al reiniciar la app se recuerda el último estilo |
+| Ajustes → Página: día / sepia / noche | Cada toque pasa al modo siguiente y redibuja la doble página. Sepia: papel crema. Noche en PDF, EPUB, TXT y MOBI: fondo casi negro y letra crema. Noche en cómics: solo más oscuro, sin invertir. Se recuerda al reiniciar |
 
 | Abrir la app | Ves tu habitación (passthrough) y un libro frente a ti |
 | Portada | La página izquierda muestra la portada azul «Folio XR» |

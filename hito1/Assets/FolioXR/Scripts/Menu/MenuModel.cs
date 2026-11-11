@@ -496,6 +496,9 @@ namespace FolioXR.Menu
                         (encodings[encodingIndex] == "auto" ? "automática" : encodings[encodingIndex]),
                         () => { BookLibrary.Instance.SetTxtEncoding(nextEncoding); RebuildOptions(); },
                         () => BookLibrary.Instance != null && !BookLibrary.Instance.Repaginating));
+                    PageThemeMode pageMode = PageTheme.Current;
+                    options.Add(new MenuOption("Página:\n" + PageTheme.Name(pageMode),
+                        () => { PageTheme.Set((PageThemeMode)(((int)pageMode + 1) % 3)); RebuildOptions(); }));
                     string[] fontNames = { "pequeña", "normal", "grande" };
                     float[] fontScales = { 0.8f, 1f, 1.25f };
                     int font = 1;
