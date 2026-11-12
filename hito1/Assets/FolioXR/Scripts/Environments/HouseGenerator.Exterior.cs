@@ -44,10 +44,16 @@ namespace FolioXR.Environments
 
                 // Suelo físico invisible (el mismo de antes); el terreno visible no tiene colisión.
                 AddCollider(Matrix4x4.TRS(new Vector3(0f, -0.34f, 0f), Quaternion.identity, new Vector3(120f, 0.12f, 120f)), true);
-                AddWorld(TerrainMesh(), Terrain, Matrix4x4.identity);
-                if (HasWater) AddWorld(WaterMesh(), Sky, Matrix4x4.identity);
                 for (int i = 0; i < 8; i++)
                     B(Cream, new Vector3(1.7f, -0.22f, -6f - i * 0.78f), new Vector3(1.25f, 0.13f, 0.55f), true);
+                if (_baked)
+                {
+                    // Entorno horneado: el paisaje llega dibujado; aquí solo quedan los suelos caminables.
+                    if (_theme.Exterior == ExteriorKind.Lake) Dock();
+                    return;
+                }
+                AddWorld(TerrainMesh(), Terrain, Matrix4x4.identity);
+                if (HasWater) AddWorld(WaterMesh(), Sky, Matrix4x4.identity);
 
                 switch (_theme.Exterior)
                 {

@@ -75,12 +75,16 @@ namespace FolioXR.Environments
             private Transform _colliders;
             private int _colliderCount;
             private readonly Mesh[] _bookBoxes = new Mesh[8];
+            // Con archivos horneados (BakedEnvironment) solo se crean colisionadores y puntos de lectura.
+            private readonly bool _baked;
+            private Material _unlit;
 
             internal Builder(EnvironmentTheme theme, HouseBuildResult result)
             {
                 _theme = theme;
                 _result = result;
                 _random = new System.Random(theme.Seed);
+                _baked = BakedEnvironment.Exists(theme);
                 _planScale = Matrix4x4.Scale(new Vector3(theme.HouseWidth / 12f, 1f, theme.HouseDepth / 10f));
                 for (int i = 0; i < _batches.Length; i++) _batches[i] = new List<CombineInstance>();
             }
@@ -109,10 +113,17 @@ namespace FolioXR.Environments
                 BuildStairs();
                 BuildRooms();
                 BuildExterior();
-                Mesh sky = Template(ProceduralMeshes.Sphere(64, 32, true));
-                AddWorld(sky, Sky, Matrix4x4.Scale(Vector3.one * SkyRadius));
                 SetReadingPoints();
-                Combine();
+                if (_baked)
+                {
+                    BakedEnvironment.Attach(_theme, _result, _unlit);
+                }
+                else
+                {
+                    Mesh sky = Template(ProceduralMeshes.Sphere(64, 32, true));
+                    AddWorld(sky, Sky, Matrix4x4.Scale(Vector3.one * SkyRadius));
+                    Combine();
+                }
                 Debug.Log("[FolioXR] Casa: " + _colliderCount + " BoxCollider independientes.");
             }
 
@@ -396,6 +407,8 @@ namespace FolioXR.Environments
                     cover.shader.name != "Universal Render Pipeline/Lit" || page.shader.name != "Universal Render Pipeline/Unlit")
                     throw new InvalidOperationException("El entorno necesita la tapa URP Lit y las páginas URP Unlit del FolioBook de la escena.");
 
+                _unlit = page;
+                if (_baked) return; // Lo que se ve viene horneado; no hacen falta materiales ni texturas.
                 _materials[Wood] = Clone(cover, "Madera clara", _theme.Wood);
                 _materials[Cream] = Clone(cover, "Crema", _theme.Wall);
                 _materials[Fabric] = Clone(cover, "Tapizado", _theme.Fabric);
@@ -490,7 +503,7 @@ namespace FolioXR.Environments
             }
             private void AddWorld(Mesh mesh, int material, Matrix4x4 transform, bool floor = false)
             {
-                _batches[material].Add(new CombineInstance { mesh = mesh, subMeshIndex = 0, transform = transform });
+                if (!_baked) _batches[material].Add(new CombineInstance { mesh = mesh, subMeshIndex = 0, transform = transform });
                 // Solo sólidos estructurales/muebles; el cielo, follaje y los lomos son decorativos.
                 // No se toca ninguna malla ni se añaden renderers a la física.
                 if (mesh == _box || mesh == _cylinder) AddCollider(transform, floor);

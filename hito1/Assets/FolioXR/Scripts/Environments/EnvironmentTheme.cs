@@ -52,6 +52,11 @@ namespace FolioXR.Environments
         public float MountainHeight = 10f;
         /// <summary>Tonos de las copas de los árboles (hasta 8); vacío = variaciones de Foliage.</summary>
         public Color[] Leaves;
+        /// <summary>
+        /// Carpeta de Resources/Entornos con la versión horneada en Blender (herramientas/entornos).
+        /// Si los archivos no están, se dibuja la versión procedural.
+        /// </summary>
+        public string Baked;
     }
 
     public static class EnvironmentThemes
@@ -85,7 +90,7 @@ namespace FolioXR.Environments
         {
             new EnvironmentTheme
             {
-                Name = "Moderna cálida", Seed = 58241,
+                Name = "Moderna cálida", Baked = "moderna-calida", Seed = 58241,
                 Wall = new Color(0.94f, 0.89f, 0.80f), Wood = new Color(0.80f, 0.64f, 0.43f),
                 Fabric = new Color(0.68f, 0.42f, 0.29f), Metal = new Color(0.20f, 0.23f, 0.22f),
                 Foliage = new Color(0.38f, 0.56f, 0.32f), BookPalette = WarmBooks,
@@ -97,7 +102,7 @@ namespace FolioXR.Environments
             },
             new EnvironmentTheme
             {
-                Name = "Refugio alpino", Seed = 7713, HouseWidth = 12.5f, StoreyHeight = 3.3f,
+                Name = "Refugio alpino", Baked = "refugio-alpino", Seed = 7713, HouseWidth = 12.5f, StoreyHeight = 3.3f,
                 Wall = C(0xE8DCC8), Wood = C(0x9A6B43), Fabric = C(0x8E3B2E), Metal = C(0x2B2B2D),
                 Foliage = C(0x2F5A35), BookPalette = DarkBooks,
                 SkyHorizon = C(0xDCE8F0), SkyZenith = C(0x2A62B8),
@@ -110,7 +115,7 @@ namespace FolioXR.Environments
             },
             new EnvironmentTheme
             {
-                Name = "Casa del lago", Seed = 4402,
+                Name = "Casa del lago", Baked = "casa-del-lago", Seed = 4402,
                 Wall = C(0xEFE6D6), Wood = C(0xB9895A), Fabric = C(0x3F5E6E), Metal = C(0x272A2C),
                 Foliage = C(0x4C6B34), BookPalette = WarmBooks,
                 SkyHorizon = C(0xF7B47A), SkyZenith = C(0x4A5C92),
@@ -123,7 +128,7 @@ namespace FolioXR.Environments
             },
             new EnvironmentTheme
             {
-                Name = "Casa de playa", Seed = 9120, HouseWidth = 13f,
+                Name = "Casa de playa", Baked = "casa-de-playa", Seed = 9120, HouseWidth = 13f,
                 Wall = C(0xF6F2EA), Wood = C(0xD8C3A0), Fabric = C(0x5C8FA8), Metal = C(0x7E8488),
                 Foliage = C(0x4F8A3E), BookPalette = WarmBooks,
                 SkyHorizon = C(0xD6EEF6), SkyZenith = C(0x2F86D6),
@@ -136,7 +141,7 @@ namespace FolioXR.Environments
             },
             new EnvironmentTheme
             {
-                Name = "Cabaña nevada", Seed = 3317, StoreyHeight = 3f,
+                Name = "Cabaña nevada", Baked = "cabana-nevada", Seed = 3317, StoreyHeight = 3f,
                 Wall = C(0xD9C7A8), Wood = C(0x7A4E2E), Fabric = C(0x7E2A26), Metal = C(0x1F1F21),
                 Foliage = C(0x2E4F37), BookPalette = DarkBooks,
                 SkyHorizon = C(0xD8DEE6), SkyZenith = C(0x9AA8BC),
@@ -149,7 +154,7 @@ namespace FolioXR.Environments
             },
             new EnvironmentTheme
             {
-                Name = "Casa del desierto", Seed = 6608, HouseWidth = 14f, HouseDepth = 11f,
+                Name = "Casa del desierto", Baked = "casa-del-desierto", Seed = 6608, HouseWidth = 14f, HouseDepth = 11f,
                 Wall = C(0xE9D5B8), Wood = C(0xA9774A), Fabric = C(0xB45A35), Metal = C(0x3A302A),
                 Foliage = C(0x6E8A4A), BookPalette = WarmBooks,
                 SkyHorizon = C(0xF4D2A2), SkyZenith = C(0x5C8CC4),
@@ -162,7 +167,7 @@ namespace FolioXR.Environments
             },
             new EnvironmentTheme
             {
-                Name = "Casa del bosque", Seed = 1189, FurnitureDensity = 1.2f,
+                Name = "Casa del bosque", Baked = "casa-del-bosque", Seed = 1189, FurnitureDensity = 1.2f,
                 Wall = C(0xE3D7C2), Wood = C(0x8C6239), Fabric = C(0x5B6B3A), Metal = C(0x232521),
                 Foliage = C(0x3C6B30), BookPalette = DarkBooks,
                 SkyHorizon = C(0xCFE2E4), SkyZenith = C(0x3E78B4),
@@ -174,7 +179,7 @@ namespace FolioXR.Environments
             },
             new EnvironmentTheme
             {
-                Name = "Otoño en el valle", Seed = 2471,
+                Name = "Otoño en el valle", Baked = "otono-en-el-valle", Seed = 2471,
                 Wall = C(0xF0E4D0), Wood = C(0xA06A3C), Fabric = C(0x9C4A28), Metal = C(0x2E2A26),
                 Foliage = C(0xB0602A), BookPalette = WarmBooks,
                 SkyHorizon = C(0xE8E6DC), SkyZenith = C(0x5A8CC0),
@@ -186,7 +191,7 @@ namespace FolioXR.Environments
             },
             new EnvironmentTheme
             {
-                Name = "Loft nocturno", Seed = 8034, HouseWidth = 13f,
+                Name = "Loft nocturno", Baked = "loft-nocturno", Seed = 8034, HouseWidth = 13f,
                 Wall = C(0xCFC8BE), Wood = C(0x5C4030), Fabric = C(0x34405A), Metal = C(0x18191C),
                 Foliage = C(0x3A5A34), BookPalette = DarkBooks,
                 SkyHorizon = C(0x2C3254), SkyZenith = C(0x070A18),
@@ -198,7 +203,7 @@ namespace FolioXR.Environments
             },
             new EnvironmentTheme
             {
-                Name = "Isla tropical", Seed = 5150, HouseWidth = 12f,
+                Name = "Isla tropical", Baked = "isla-tropical", Seed = 5150, HouseWidth = 12f,
                 Wall = C(0xF4EEE2), Wood = C(0xC49A66), Fabric = C(0x2E8C80), Metal = C(0x585C5E),
                 Foliage = C(0x3E8A3A), BookPalette = WarmBooks,
                 SkyHorizon = C(0xDFF3F7), SkyZenith = C(0x1F7ED8),
@@ -211,7 +216,7 @@ namespace FolioXR.Environments
             },
             new EnvironmentTheme
             {
-                Name = "Noche estrellada", Seed = 9931,
+                Name = "Noche estrellada", Baked = "noche-estrellada", Seed = 9931,
                 Wall = C(0xE6DCCB), Wood = C(0x8E6844), Fabric = C(0x4A3A5C), Metal = C(0x202024),
                 Foliage = C(0x2E4A2A), BookPalette = DarkBooks,
                 SkyHorizon = C(0x1C2A48), SkyZenith = C(0x03050E),
