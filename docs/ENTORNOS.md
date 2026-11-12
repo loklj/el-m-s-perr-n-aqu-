@@ -14,6 +14,8 @@ En la prueba del 11 de noviembre las ideas de los once estilos gustaron, pero la
 - La luz direccional de la escena sigue tomando la dirección y el color del sol de cada estilo, para que el libro y las manos combinen con el entorno.
 - `FolioXREnvironmentImport.cs` (Editor) importa las texturas a tamaño completo y en ASTC. Sin él, Unity las reduciría a 2048 px.
 
+**Estado (12 nov 2026):** los once estilos están horneados y en `Resources/Entornos` (Moderna cálida, Refugio alpino y Casa de playa aquí; los otros ocho en el notebook del usuario con una GTX 1650 Ti, unos 8 minutos cada uno). Entre 56 y 235 mil triángulos (Casa del bosque es el más pesado) y unos 120 MB en total.
+
 **Límites conocidos:**
 
 - El paisaje lejano es una imagen: se ve correcto desde la casa, pero no cambia de perspectiva al caminar lejos.
