@@ -123,6 +123,12 @@ En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
 
 | Prueba | Resultado esperado |
 | --- | --- |
+| Formatos 3 · DOCX | Abrir `tests/fixtures/documentos/propio.docx`: título, texto acentuado, negrita, cursiva, lista, tabla e imagen PNG. Leer «Vista simplificada» y comparar con el original; sin prometer distribución idéntica a Word |
+| Formatos 3 · ODT | Abrir `propio.odt`: estilos, lista numerada, tabla e imagen. Comprobar estilos heredados y listas anidadas con documentos propios; objetos/formatos de imagen no admitidos deben avisar |
+| Formatos 3 · RTF | Abrir `propio.rtf`: acentos, euro, emoji, grupos de negrita/cursiva, lista, celdas e imagen. No aparece el destino oculto; se ve el resultado del campo sin ejecutar el enlace |
+| Formatos 3 · Letra y progreso | En DOCX/ODT/RTF cambiar Letra pequeña/normal/grande: repagina y reubica proporcionalmente. Pasar doble página, cerrar y reabrir; comprobar persistencia y precarga. Cancelar durante apertura y cambiar a PDF/EPUB sin páginas mezcladas |
+| Formatos 3 · Archivos dañados y límites | Los tres `danado.*`, entidades XML y bloques que superen las cuotas fallan sin cerrar la app. `externo.docx` omite la imagen externa con aviso; `objeto.rtf` omite el objeto. No se resuelven entidades, red, macros ni OLE |
+| Formatos 3 · No compatibles/protección | Importar DOC binario/OLE, KFX y desconocido: «Formato aún no compatible» y razón, sin prometer soporte futuro ni atribuir DRM por extensión. ODT con indicador de cifrado se rechaza sin intentar descifrar. Las firmas sintéticas del corpus solo prueban diagnóstico |
 | Formatos 2 · TXT y codificaciones | Abrir los TXT UTF-8, con BOM, UTF-16 LE/BE con/sin BOM, Windows-1252 y Latin-1. Ver tildes, eñes, signos y saltos; «<» y «&» son texto, nunca HTML ejecutable |
 | Formatos 2 · Codificación TXT | Ajustes → Codificación TXT recorre automática/UTF-8/Windows-1252 en una casilla. Persiste `folioxr.txtEncoding`, repagina y conserva progreso proporcional. Una opción incorrecta da error controlado o texto incorrecto reversible; regresar a automática |
 | Formatos 2 · TXT grande | Abrir un TXT de cientos de MB, observar indexado por tramos y memoria; no se lee completo a RAM. Medir tiempo hasta primera página (se pagina todo antes) y cancelación/cierre, incluido timeout. El archivo JVM de 240 MB no se distribuye |

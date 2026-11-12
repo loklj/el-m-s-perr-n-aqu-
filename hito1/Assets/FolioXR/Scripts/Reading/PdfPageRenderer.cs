@@ -34,7 +34,7 @@ namespace FolioXR.Reading
         public static bool IsReflow(string path)
         {
             string ext = Path.GetExtension(path)?.ToLowerInvariant();
-            return ext == ".epub" || ext == ".txt" || ext == ".mobi" || ext == ".azw" || ext == ".azw3";
+            return ext == ".epub" || ext == ".txt" || ext == ".mobi" || ext == ".azw" || ext == ".azw3" || ext == ".docx" || ext == ".odt" || ext == ".rtf";
         }
         public const string TxtEncodingPrefsKey = "folioxr.txtEncoding";
         public static string TxtEncoding => PlayerPrefs.GetString(TxtEncodingPrefsKey, "auto");

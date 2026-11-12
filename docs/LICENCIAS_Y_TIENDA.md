@@ -67,10 +67,10 @@ El Meta XR All-in-One SDK está en la Asset Store como «activo restringido»: s
 | libarchive | BSD-2-Clause (y algunos archivos BSD-3, dominio público o CC0) | CBZ, CBR | Aviso | Candidato |
 | UnRAR | Licencia UnRAR (freeware) | CBR, si libarchive falla | Se permite usarlo gratis en cualquier programa para **extraer** RAR. Se prohíbe usarlo para crear un compresor compatible con RAR. Si se modifica, incluir el párrafo de la licencia. [R1] | Alternativa |
 | libmobi | **LGPL-3.0+** | MOBI/AZW/AZW3 | Exige permitir al usuario reemplazar la biblioteca, algo dudoso en un APK firmado y vendido en tienda. Choca con la cláusula de Meta sobre licencias abiertas. [L1] | **Descartado** → parser propio |
-| java-mammoth | BSD-2-Clause [D1] | DOCX → HTML | Aviso | Candidato |
+| java-mammoth 1.13.0 | BSD-2-Clause [D1] | DOCX → HTML | Aviso si se incorpora | No incluido: API StAX ausente de Android 34; se elige conversor propio autorizado (ver sección 9 del inventario de formatos) |
 | Apache POI | Apache-2.0 | DOC binario | LICENSE y NOTICE | A evaluar (pesado en Android) |
-| Lectores TXT, RTF, ODT | Código propio | — | — | Plan |
-| KFX | — | — | No hay biblioteca permisiva y casi siempre trae DRM: solo diagnóstico | Plan |
+| FolioDocumentSource, FolioOfficeXml, FolioRtfReader, FolioDocumentDiagnostics | Código propio + APIs ZIP/SAX del sistema | DOCX/ODT/RTF → HTML y diagnóstico | Sin dependencias, código ni assets de terceros nuevos | Encargo 11, experimental; corpus propio y validación JVM |
+| KFX | — | — | No hay motor incluido; la extensión no demuestra DRM | Diagnóstico explícito, encargo 11 |
 | AppAuth-Android | Apache-2.0 | Inicio de sesión de Google | LICENSE y NOTICE | Candidato |
 | Dropbox Java SDK | MIT (confirmar versión al integrar) | Dropbox | Aviso | Candidato |
 | MEGA SDK (C++) | BSD-2-Clause [G1] | MEGA | Aviso. **Compilar sin FreeImage ni FFmpeg** (GPL/LGPL). La app Android de MEGA tiene otra licencia, de solo revisión: no copiar nada de ella. [G2] | Candidato |
@@ -124,3 +124,7 @@ Origen: Maven Central (`com.github.junrar:junrar:7.5.5`, `org.slf4j:slf4j-api:1.
 | slf4j-api-1.7.36.jar | `d3ef575e3e4979678dc01bf1dcce51021493b4d11fb7f1be8ad982877c16a1c0` |
 
 Junrar no permite usar sus fuentes para crear un archivador compatible con RAR/WinRAR. Este proyecto solo extrae RAR4 y crea temporales ZIP/CBZ; RAR5 se rechaza con instrucción de conversión. Ver la decisión y fuentes en [FORMATOS_Y_LICENCIAS.md](FORMATOS_Y_LICENCIAS.md#8-estado--encargo-10-formatos-2).
+
+### Documentos del encargo 11
+
+No se añade ninguna biblioteca al APK. java-mammoth 1.13.0 (BSD-2) se examinó sin incorporarlo: no tiene dependencias de producción, pero contiene referencias StAX (`javax.xml.stream`) no disponibles en Android 34. Su adaptación no se ha validado; se usa el conversor propio autorizado. Decisión, revisión exacta y fuentes en [Formatos, sección 9](FORMATOS_Y_LICENCIAS.md#9-estado--encargo-11-documentos). Las herramientas de comprobación del corpus (LibreOffice, Pandoc, python-docx y Pillow) solo se ejecutan en desarrollo: no se copian ni distribuyen con la app, ni sus componentes/licencias copyleft se incorporan al proyecto.

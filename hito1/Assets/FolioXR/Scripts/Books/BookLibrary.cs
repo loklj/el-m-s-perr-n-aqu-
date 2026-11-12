@@ -16,7 +16,7 @@ namespace FolioXR.Books
 
         public bool IsPdf => format == "pdf";
         /// <summary>Formatos que el libro 3D ya abre: PDF, fuentes HTML y cómics CBZ/CBR (o ZIP de imágenes).</summary>
-        public bool CanOpen => format == "pdf" || format == "cbz" || format == "zip" || format == "epub" || format == "txt" || format == "mobi" || format == "azw" || format == "azw3" || format == "cbr";
+        public bool CanOpen => format == "pdf" || format == "cbz" || format == "zip" || format == "epub" || format == "txt" || format == "mobi" || format == "azw" || format == "azw3" || format == "cbr" || format == "docx" || format == "odt" || format == "rtf";
 
         /// <summary>Progreso para el menú: porcentaje, o si aún no se abrió.</summary>
         public string ProgressText => pages <= 0
@@ -254,7 +254,8 @@ namespace FolioXR.Books
             if (entry != null && entry.path == PdfPageRenderer.DrmFailurePath)
                 message = "Este libro tiene DRM y no se puede abrir";
             if (entry != null && entry.path == PdfPageRenderer.FormatFailurePath &&
-                (PdfPageRenderer.FormatFailureDetail ?? string.Empty).StartsWith("CBR"))
+                ((PdfPageRenderer.FormatFailureDetail ?? string.Empty).StartsWith("CBR") ||
+                 (PdfPageRenderer.FormatFailureDetail ?? string.Empty).StartsWith("Formato")))
                 message = PdfPageRenderer.FormatFailureDetail;
             Notify(entry != null ? "«" + entry.title + "»\n" + message : message);
         }
@@ -284,8 +285,10 @@ namespace FolioXR.Books
             if (entry == null || _book == null || Repaginating) return;
             if (!entry.CanOpen)
             {
-                Notify("Formato aún no compatible: «" + entry.title + "» (" + entry.format.ToUpperInvariant() +
-                    ").\nSe podrá abrir en una próxima versión.");
+                string reason = entry.format == "doc" ? "DOC binario requiere un conversor no incluido. Exporta a DOCX o PDF desde el PC." :
+                    entry.format == "kfx" ? "No hay lector KFX incluido. Usa una edición EPUB/PDF sin DRM." :
+                    "No hay lector para este formato; no se puede garantizar su estructura. Usa PDF o EPUB sin DRM.";
+                Notify("Formato aún no compatible: «" + entry.title + "».\n" + reason);
                 return;
             }
             if (!File.Exists(entry.path))

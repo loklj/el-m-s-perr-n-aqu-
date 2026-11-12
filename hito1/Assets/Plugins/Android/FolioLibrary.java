@@ -669,7 +669,7 @@ public final class FolioLibrary {
                     + " Esta app solo abre libros sin DRM.");
         }
         if (!Arrays.asList(KNOWN).contains(format)) {
-            throw new ImportException("Formato a\u00fan no compatible: \u00ab" + name + "\u00bb.");
+            throw new ImportException(FolioDocumentDiagnostics.unsupported(format));
         }
         String id = stableId(part, written);
         if (hasBook(id)) {
@@ -773,19 +773,37 @@ public final class FolioLibrary {
             return "pdf";
         }
         if (text.startsWith("PK\u0003\u0004")) {
-            boolean epubContainer;
+            boolean epubContainer, docx, odt;
             try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(source)) {
                 epubContainer = zip.getEntry("META-INF/container.xml") != null;
+                docx = zip.getEntry("[Content_Types].xml") != null && zip.getEntry("word/document.xml") != null;
+                odt = false;
+                java.util.zip.ZipEntry mime = zip.getEntry("mimetype");
+                if (mime != null && mime.getSize() <= 128 && zip.getEntry("content.xml") != null) {
+                    try (InputStream in = zip.getInputStream(mime)) {
+                        byte[] bytes = new byte[129]; int used = 0, got;
+                        while (used < bytes.length && (got = in.read(bytes, used, bytes.length - used)) > 0) used += got;
+                        odt = used <= 128 && "application/vnd.oasis.opendocument.text".equals(new String(bytes, 0, used, "UTF-8").trim());
+                    }
+                }
             }
             if (epubContainer) {
                 return "epub";
             }
+            if (docx) return "docx";
+            if (odt) return "odt";
+            if ("docx".equals(extension) || "odt".equals(extension)) return "desconocido";
             if ("cbr".equals(extension)) return "cbr";
-            if ("cbz".equals(extension) || "docx".equals(extension) || "odt".equals(extension)) {
+            if ("cbz".equals(extension)) {
                 return extension;
             }
             return "zip";
         }
+        if (n >= 8 && (head[0] & 255) == 0xd0 && (head[1] & 255) == 0xcf &&
+                (head[2] & 255) == 0x11 && (head[3] & 255) == 0xe0 &&
+                (head[4] & 255) == 0xa1 && (head[5] & 255) == 0xb1 &&
+                (head[6] & 255) == 0x1a && (head[7] & 255) == 0xe1) return "ole";
+        if (text.startsWith("CONT") && "kfx".equals(extension)) return "kfx";
         if (text.startsWith("Rar!")) {
             return "cbr";
         }

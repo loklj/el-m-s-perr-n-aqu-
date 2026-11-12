@@ -8,7 +8,7 @@ with tempfile.TemporaryDirectory(prefix='folio-bridge-') as directory:
     target = pathlib.Path(directory) / 'Bridge.dll'
     command = [str(dotnet / 'dotnet'), str(sdk / 'Roslyn/bincore/csc.dll'), '-nologo', '-langversion:9.0', '-define:UNITY_ANDROID', '-target:exe', '-out:' + str(target)]
     command += ['-r:' + str(p) for p in refs.glob('*.dll')]
-    command += [str(repo / p) for p in ['tests/formatos/bridge/Stubs.cs', 'tests/formatos/bridge/Test.cs', 'hito1/Assets/FolioXR/Scripts/Reading/PdfPageRenderer.cs']]
+    command += [str(repo / p) for p in ['tests/formatos/bridge/Stubs.cs', 'tests/formatos/bridge/Test.cs', 'hito1/Assets/FolioXR/Scripts/Reading/PdfPageRenderer.cs', 'hito1/Assets/FolioXR/Scripts/Reading/PageTheme.cs']]
     subprocess.run(command, check=True)
     target.with_suffix('.runtimeconfig.json').write_text(json.dumps({'runtimeOptions': {'tfm': 'net8.0', 'framework': {'name': 'Microsoft.NETCore.App', 'version': '8.0.0'}}}))
     subprocess.run([str(dotnet / 'dotnet'), str(target)], check=True)

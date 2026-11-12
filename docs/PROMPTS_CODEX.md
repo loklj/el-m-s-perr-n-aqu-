@@ -35,7 +35,7 @@ Responde siempre en español. Repositorio: https://github.com/loklj/el-m-s-perr-
 | 9 | Estabilidad: recentrar, reanudar y seguimiento | `fase-1/preparacion` | Escrito por Claude el 11 de noviembre de 2026 (el menú aún no se orienta en modo acostado) |
 | | 🧪 Prueba en el visor: MVP de la Fase 1 | | |
 | 10 | Formatos 2: TXT, CBR, MOBI/AZW/AZW3 | `fase-1/preparacion` | Hecho por Codex (Astra Alto) e integrado por Claude el 11 de noviembre de 2026: 97 pruebas JVM pasan; MOBI/KF8 y RAR4 experimentales, RAR5 pide convertir a CBZ |
-| 11 | Formatos 3: DOCX, ODT, RTF y diagnóstico de no compatibles | `fase2/documentos` | Pendiente |
+| 11 | Formatos 3: DOCX, ODT, RTF y diagnóstico de no compatibles | `fase2/documentos` | Implementado por Codex el 11 nov 2026: conversores propios experimentales, sin Mammoth/StAX. Pruebas JVM y regresión; pendientes revisión de Claude y visor |
 | 12 | Carga desde el PC por Wi-Fi | `fase-1/preparacion` | Escrito por Claude el 11 de noviembre de 2026 (sin reanudación de subidas; queda abierto hasta cerrarlo o suspender el visor) |
 | 13 | Nubes: Google Drive, Dropbox y MEGA | `fase3/nubes` | Pendiente; Drive con `drive.file` y Picker (decidido) |
 | 14 | OPDS (Calibre-Web, Kavita, Komga) | `fase-1/preparacion` | Escrito por Claude el 11 de noviembre de 2026 (sin búsqueda: no hay teclado en el visor; los catálogos se agregan desde la página del PC) |
