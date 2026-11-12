@@ -257,3 +257,7 @@ Corpus original reproducible en `tests/fixtures/documentos/`, generador y prueba
 Los tres documentos válidos fueron abiertos y exportados a PDF por LibreOfficeDev 26.8.0.0.alpha0; DOCX/ODT también se leyeron con Pandoc, DOCX con python-docx y sus PNG con Pillow. Es una comprobación independiente de apertura, no una certificación de conformidad completa ni de fidelidad en Quest. Ver comandos y resultados JVM/C# en `tests/documentos/LEEME.md`. Quedan pendientes APK, WebView en Horizon OS, nitidez, rendimiento y corpus real más amplio; el Paso 10 recoge las pruebas del visor.
 
 La publicación rebasada conserva Scripts/Menu íntegramente según la instrucción del 12 de noviembre; no incluye los cambios previos de etiquetas ni el botón de diagnóstico del menú. Los diagnósticos de importación/apertura permanecen en FolioLibrary y BookLibrary.
+
+## 10. Estado — preferencias e índices del encargo 17
+
+12 de noviembre de 2026: fuentes libres incluidas (Gentium Book Plus y Atkinson Hyperlegible, OFL 1.1), interlineado/márgenes, índice EPUB/MOBI/KF8/PDF y marcadores con nombre. Los detalles vigentes, procedencia y límites están en [LECTURA.md](LECTURA.md). No se añade un motor PDF de terceros; FolioPdfOutline solo lee metadatos. El nivel de soporte general de los formatos de las secciones 8 y 9 no cambia.

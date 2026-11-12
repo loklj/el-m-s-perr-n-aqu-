@@ -13,6 +13,7 @@ public final class FolioEpubContainer implements FolioHtmlSource {
     final ZipFile zip;
     final List<String> spine = new ArrayList<>();
     final Map<String, String> navigation = new LinkedHashMap<>();
+    private final List<FolioContents.Entry> contents=new ArrayList<>();
     final Set<String> fonts = new HashSet<>();
     static final int MAX_RESOURCE = 8 * 1024 * 1024;
     static final class DrmException extends IOException {
@@ -35,7 +36,7 @@ public final class FolioEpubContainer implements FolioHtmlSource {
                     if (!algorithm.equals("http://www.idpf.org/2008/embedding") &&
                         !algorithm.equals("http://ns.adobe.com/pdf/enc#RC")) throw new DrmException();
                 }
-                // No se desofuscan fuentes: siempre se usan las del sistema.
+                // No se desofuscan fuentes del libro: se usan las fuentes libres incluidas.
             }
             NodeList roots = xml("META-INF/container.xml").getElementsByTagNameNS("*", "rootfile");
             if (roots.getLength() == 0) throw new IOException("Falta OPF");
@@ -64,17 +65,37 @@ public final class FolioEpubContainer implements FolioHtmlSource {
             }
             if (spine.isEmpty()) throw new IOException("EPUB sin capitulos");
             if (nav != null) readNavigation(nav, "a", "href");
-            else if (ncx != null) readNavigation(ncx, "content", "src");
+            if (contents.isEmpty() && ncx != null) readNavigation(ncx, "content", "src");
         } catch (Exception e) { zip.close(); throw e; }
     }
     private void readNavigation(String file, String tag, String attribute) throws Exception {
-        NodeList nodes = xml(file).getElementsByTagNameNS("*", tag);
-        for (int i = 0; i < nodes.getLength(); i++) {
-            Element node = (Element)nodes.item(i);
-            String target = resolve(file, node.getAttribute(attribute));
-            navigation.put(target, (tag.equals("content") ? node.getParentNode() : node).getTextContent().trim());
+        Document doc=xml(file);Node scope=doc;
+        if(tag.equals("a")){
+            NodeList navs=doc.getElementsByTagNameNS("*","nav");scope=null;
+            for(int i=0;i<navs.getLength();i++){
+                Element nav=(Element)navs.item(i);
+                if(Arrays.asList(nav.getAttributeNS("http://www.idpf.org/2007/ops","type").split("\\s+")).contains("toc")||nav.getAttribute("role").equals("doc-toc")){scope=nav;break;}
+            }
+            if(scope==null)return; // Landmarks/page-list no son el indice de capitulos.
+        }
+        NodeList nodes=scope instanceof Document?((Document)scope).getElementsByTagNameNS("*",tag):((Element)scope).getElementsByTagNameNS("*",tag);
+        for(int i=0;i<nodes.getLength()&&contents.size()<FolioContents.LIMIT;i++){
+            Element node=(Element)nodes.item(i);String href=node.getAttribute(attribute),target;
+            try{target=resolve(file,href);}catch(IOException external){continue;}
+            int chapter=spine.indexOf(target);if(chapter<0)continue;
+            String fragment=new URI(href).getFragment();String title=node.getTextContent();
+            int depth=0;
+            if(tag.equals("content")){
+                Element point=(Element)node.getParentNode();NodeList labels=point.getElementsByTagNameNS("*","navLabel");
+                title=labels.getLength()==0?"":labels.item(0).getTextContent();
+                for(Node n=point.getParentNode();n!=null;n=n.getParentNode())if("navPoint".equals(n.getLocalName()))depth++;
+            }else for(Node n=node.getParentNode();n!=null&&n!=scope;n=n.getParentNode())if("ol".equals(n.getLocalName()))depth++;
+            title=FolioReadingSettings.label(title);if(title.isEmpty())title="Capitulo "+(chapter+1);
+            navigation.put(target,title);
+            contents.add(new FolioContents.Entry(title,chapter,fragment,tag.equals("a")?Math.max(0,depth-1):depth));
         }
     }
+    public List<FolioContents.Entry> contents(){return new ArrayList<>(contents);}
     static String resolve(String base, String relative) throws IOException {
         try {
             URI root = new URI("https", "folio.invalid", "/" + base, null);

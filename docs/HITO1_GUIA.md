@@ -123,6 +123,12 @@ En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
 
 | Prueba | Resultado esperado |
 | --- | --- |
+| Lectura · Fuente | En EPUB/TXT/MOBI/DOCX/ODT/RTF, Ajustes → Fuente alterna Gentium/Atkinson. Comprobar regular/negrita/cursiva, tildes y texto nítido; reiniciar y confirmar preferencia. Revisar en log si falta FolioFonts.aar |
+| Lectura · Interlineado y márgenes | Alternar 1,2/1,4/1,8 y márgenes estrechos/normales/amplios. Recontar páginas, conservar progreso proporcional, sin recortes ni páginas mezcladas; el tamaño existente sigue funcionando. PDF/cómics no cambian su tipografía |
+| Lectura · Índice EPUB/MOBI | Biblioteca → Índice: nav y NCX muestran jerarquía y dos destinos del mismo capítulo; MOBI INDX/guía y KF8 saltan a su texto. Tras repaginar, actualizar índice y verificar página. Volver cancela; cambiar de libro no muestra el índice anterior |
+| Lectura · Índice PDF | Abrir los PDF propios `indice.pdf`, `indice-stream.pdf` e `indice-incremental.pdf`: tres marcadores, segundo en página 2. Probar PDF reales con marcadores/destinos nombrados. Ausencia, cifrado, variante no compatible o índice dañado da aviso sin impedir leer las páginas |
+| Lectura · Marcadores con nombre | Mantener marcadores antiguos, crear varios y abrir Lista de marcadores. Nombrar con teclado del sistema, cancelar otro nombre, recorrer páginas de la lista, saltar y quitar. Cerrar/reabrir/reiniciar y comprobar etiquetas persistidas. Si se borró mientras estaba el teclado abierto, no debe recrearse |
+| Lectura · Límites y regresión | Marcadores siguen basados en página: al cambiar tipografía el texto puede desplazarse. Comprobar Día/Sepia/Noche, FXR1, precarga, pausa del menú, controles, agarre y entornos nuevos. Medir tiempo de apertura/índice, RAM y FPS en Quest |
 | Formatos 3 · DOCX | Abrir `tests/fixtures/documentos/propio.docx`: título, texto acentuado, negrita, cursiva, lista, tabla e imagen PNG. Leer «Vista simplificada» y comparar con el original; sin prometer distribución idéntica a Word |
 | Formatos 3 · ODT | Abrir `propio.odt`: estilos, lista numerada, tabla e imagen. Comprobar estilos heredados y listas anidadas con documentos propios; objetos/formatos de imagen no admitidos deben avisar |
 | Formatos 3 · RTF | Abrir `propio.rtf`: acentos, euro, emoji, grupos de negrita/cursiva, lista, celdas e imagen. No aparece el destino oculto; se ve el resultado del campo sin ejecutar el enlace |

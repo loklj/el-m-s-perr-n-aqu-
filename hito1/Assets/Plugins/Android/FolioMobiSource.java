@@ -15,6 +15,9 @@ public final class FolioMobiSource implements FolioHtmlSource {
     private List<FolioMobiIndex.Entry> skeletons,fragments;
     private int[] fragmentStart;
     private int imageStart;
+    private final List<FolioContents.Entry> toc=new ArrayList<>();
+    private final List<Long> tocOffsets=new ArrayList<>();
+    private String tocError;
     private Charset charset;
     private static final int CHAPTER_LIMIT=4*1024*1024;
     private final java.util.function.BooleanSupplier cancelled;
@@ -83,6 +86,8 @@ public final class FolioMobiSource implements FolioHtmlSource {
                 }
             }
             if(skeletons==null) indexHtml(flows.isEmpty()?text.length():flows.get(0)[1]);
+            try { readContents(header,base); } catch(InterruptedIOException stopped){throw stopped;} catch(IOException invalid){toc.clear();tocOffsets.clear();tocError="Indice MOBI no compatible o danado";}
+
         } catch(Exception e) { close(); throw e; }
     }
     private void checkHeader(byte[] h) throws IOException {
@@ -155,13 +160,87 @@ public final class FolioMobiSource implements FolioHtmlSource {
                 System.arraycopy(data,(int)position,next,(int)position+insert.length,data.length-(int)position); data=next;
             }
         }
-        String html=new String(data,charset);
+        String html=new String(withAnchors(index,data),charset);
         html=rewrite(html,Pattern.compile("(?i)recindex\\s*=\\s*['\"]?(\\d+)['\"]?"),false);
         html=rewrite(html,Pattern.compile("(?i)kindle:embed:([0-9a-v]+)(?:\\?[^'\" >]*)?"),true);
         Matcher flow=Pattern.compile("(?i)kindle:flow:([0-9a-v]+)\\?mime=([^'\" >]+)").matcher(html); StringBuffer out=new StringBuffer();
         while(flow.find()) { String extension=flow.group(2).contains("css")?"css":"svg"; flow.appendReplacement(out,"https://folio.invalid/flow/"+Integer.parseInt(flow.group(1),32)+"."+extension); } flow.appendTail(out);
         return out.toString().getBytes(StandardCharsets.UTF_8);
     }
+    private long mappedOffset(int chapter,long offset)throws IOException {
+        if(skeletons==null){long[] c=chapters.get(chapter);return offset>=c[0]&&offset<c[1]?offset-c[0]:-1;}
+        FolioMobiIndex.Entry skel=skeletons.get(chapter);long start=skel.value(6,0),length=skel.value(6,1),pointer=start+length;
+        long mapped=offset>=start&&offset<pointer?offset-start:-1;
+        int first=fragmentStart[chapter],count=(int)skel.value(1,0);
+        for(int i=first;i<first+count;i++){
+            FolioMobiIndex.Entry frag=fragments.get(i);long at;
+            try{at=Long.parseLong(frag.label)-start;}catch(NumberFormatException e){throw new IOException(e);}
+            long n=frag.value(6,1);
+            if(mapped>=at)mapped+=n;
+            if(offset>=pointer&&offset<pointer+n)mapped=at+offset-pointer;
+            pointer+=n;
+        }
+        return mapped;
+    }
+    private void addContents(String title,long offset,int depth)throws IOException {
+        if(toc.size()>=FolioContents.LIMIT)return;
+        for(int i=0;i<chapterCount();i++){
+            if(cancelled.getAsBoolean())throw new InterruptedIOException("Cancelado");
+            if(mappedOffset(i,offset)>=0){
+            toc.add(new FolioContents.Entry(title,i,"folio-pos-"+toc.size(),depth));tocOffsets.add(offset);return;
+        }}
+    }
+    private static long vli(byte[] data,int[] at)throws IOException {
+        long n=0;for(int i=0;i<5;i++){range(data,at[0],1);int b=data[at[0]++]&255;n=(n<<7)|(b&127);if((b&128)!=0)return n;}throw new IOException("CNCX invalido");
+    }
+    private void readContents(byte[] header,int base)throws IOException {
+        long ncx=u32(header,20)>=232?u32(header,244):0xffffffffL;
+        if(ncx!=0&&ncx!=0xffffffffL){
+            int index=base+(int)ncx;byte[] meta=record(index);int sections=(int)u32(meta,24), strings=(int)u32(meta,52);
+            int lastString=-1;byte[] stringData=null;
+            for(FolioMobiIndex.Entry item:FolioMobiIndex.read(this::record,index)){
+                if(toc.size()>=FolioContents.LIMIT)break;
+                long label=item.value(3,0);int recordNumber=(int)(label>>>16);if(recordNumber>=strings)throw new IOException("CNCX ausente");
+                if(recordNumber!=lastString){stringData=record(index+sections+1+recordNumber);lastString=recordNumber;}
+                byte[] data=stringData;int[] at={(int)(label&65535)};int length=(int)vli(data,at);range(data,at[0],length);
+                String title=new String(data,at[0],length,StandardCharsets.UTF_8);
+                addContents(title,item.value(1,0),item.values.containsKey(4)?(int)item.value(4,0):0);
+            }
+            return;
+        }
+        // MOBI antiguo: guia type=toc y enlaces filepos de su indice HTML.
+        String start=new String(span(0,Math.min(text.length(),262144),262144),charset);
+        Matcher refs=Pattern.compile("(?is)<reference\\b([^>]*)>").matcher(start);long begin=-1;
+        while(refs.find())if("toc".equalsIgnoreCase(attribute(refs.group(1),"type"))){try{begin=Long.parseLong(attribute(refs.group(1),"filepos"));}catch(NumberFormatException ignored){}break;}
+        if(begin<0||begin>=text.length())return;
+        String html=new String(span(begin,Math.min(text.length()-begin,524288),524288),charset);
+        Matcher links=Pattern.compile("(?is)<a\\b([^>]*)>(.*?)</a>").matcher(html);
+        while(links.find()&&toc.size()<FolioContents.LIMIT){
+            String target=attribute(links.group(1),"filepos");if(target.isEmpty())continue;
+            String title=links.group(2).replaceAll("<[^>]*>","").replace("&amp;","&").replace("&lt;","<").replace("&gt;",">");
+            try{addContents(title,Long.parseLong(target),0);}catch(NumberFormatException ignored){}
+        }
+    }
+    private static String attribute(String text,String name){
+        Matcher m=Pattern.compile("(?i)\\b"+name+"\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))").matcher(text);
+        return m.find()?(m.group(1)!=null?m.group(1):m.group(2)!=null?m.group(2):m.group(3)):"";
+    }
+    private byte[] withAnchors(int chapter,byte[] data)throws IOException {
+        TreeMap<Integer,List<String>> anchors=new TreeMap<>();
+        for(int i=0;i<toc.size();i++)if(toc.get(i).chapter==chapter){
+            int pos=(int)mappedOffset(chapter,tocOffsets.get(i));if(pos<0||pos>=data.length)continue;
+            while(pos<data.length&&(data[pos]&192)==128)pos++; // No cortar UTF-8.
+            int before=pos-1;while(before>=0&&data[before]!='<'&&data[before]!='>')before--;
+            if(pos<data.length&&data[pos]=='<' || before>=0&&data[before]=='<')while(pos<data.length&&data[pos++]!='>'){}
+            anchors.computeIfAbsent(pos,k->new ArrayList<>()).add(toc.get(i).fragment);
+        }
+        ByteArrayOutputStream result=new ByteArrayOutputStream();int last=0;
+        for(Map.Entry<Integer,List<String>> a:anchors.entrySet()){
+            result.write(data,last,a.getKey()-last);for(String id:a.getValue())result.write(("<span id=\""+id+"\"></span>").getBytes(StandardCharsets.US_ASCII));last=a.getKey();
+        }
+        result.write(data,last,data.length-last);return result.toByteArray();
+    }
+    public List<FolioContents.Entry> contents()throws IOException {if(tocError!=null)throw new IOException(tocError);return new ArrayList<>(toc);}
     private String rewrite(String html,Pattern pattern,boolean base32) throws IOException {
         Matcher m=pattern.matcher(html); StringBuffer out=new StringBuffer();
         while(m.find()) {

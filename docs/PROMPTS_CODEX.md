@@ -42,7 +42,7 @@ Responde siempre en español. Repositorio: https://github.com/loklj/el-m-s-perr-
 | | 🧪 Prueba en el visor: formatos e importación | | |
 | 15 | Archivos gigantes y rendimiento | `fase4/rendimiento` | Pendiente |
 | 16 | Los otros 19 entornos | `entornos/19-temas` | Pendiente |
-| 17 | Pulido de lectura: modo noche, sepia, fuentes, búsqueda e índice | `fase-1/preparacion` | Parte 1 (modos día, sepia y noche) hecha por Claude el 11 de noviembre de 2026. Pendientes: fuentes y márgenes, búsqueda, índice, marcadores con nombre y panel plano |
+| 17 | Pulido de lectura: modo noche, sepia, fuentes, búsqueda e índice | `fase5/lectura` | Parte 1 integrada por Claude. Partes 2/4/5 implementadas por Codex el 12 nov 2026: fuentes OFL, interlineado/márgenes, TOC y marcadores con nombre; rebase sobre `c29434d`, pendientes revisión y visor. Partes 3 y 6 pendientes |
 | 18 | Estantería 3D, carpetas y accesibilidad | `fase5/estanteria` | Pendiente |
 | | 🧪 Prueba en el visor: versión candidata | | |
 | 19 | Preparación para la tienda: licencias, privacidad, VRC y build de lanzamiento | `tienda/lanzamiento` | Pendiente |

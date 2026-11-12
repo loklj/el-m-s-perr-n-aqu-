@@ -12,7 +12,7 @@ public final class ContainerTest {
             add(zip,"META-INF/container.xml","<container><rootfiles><rootfile full-path='OPS/book.opf'/></rootfiles></container>");
             add(zip,"OPS/book.opf","<package><manifest><item id='a' href='a.xhtml'/><item id='n' href='nav.xhtml' properties='nav'/></manifest><spine><itemref idref='a'/></spine></package>");
             add(zip,"OPS/a.xhtml","<html><body>Hola</body></html>");
-            add(zip,"OPS/nav.xhtml","<html><a href='a.xhtml#inicio'>Inicio</a></html>");
+            add(zip,"OPS/nav.xhtml","<html xmlns:epub='http://www.idpf.org/2007/ops'><nav epub:type='toc'><ol><li><a href='a.xhtml#inicio'>Inicio</a></li></ol></nav></html>");
             if ("RIGHTS".equals(protection)) add(zip,"META-INF/rights.xml","<rights/>");
             else if (protection != null) add(zip,"META-INF/encryption.xml",protection);
         } return file;

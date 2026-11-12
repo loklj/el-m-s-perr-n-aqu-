@@ -1,0 +1,53 @@
+{
+  "revision": "c30b221beb0c1da59d563feb91ec8656a1fa972a",
+  "files": [
+    {
+      "file": "assets/folio-fonts/serif-Regular.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/c30b221beb0c1da59d563feb91ec8656a1fa972a/ofl/gentiumbookplus/GentiumBookPlus-Regular.ttf",
+      "sha256": "fe7b64eeacc430fcf46836a6f0dfe00d2c5a15483ed36692a2a185cb23ec2a5c",
+      "bytes": 818952
+    },
+    {
+      "file": "assets/folio-fonts/serif-Italic.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/c30b221beb0c1da59d563feb91ec8656a1fa972a/ofl/gentiumbookplus/GentiumBookPlus-Italic.ttf",
+      "sha256": "7a0ab4bd78701fa46d325e362654c41a47e2a0a5cb4a3eebc94dce89c2ee7df1",
+      "bytes": 882904
+    },
+    {
+      "file": "assets/folio-fonts/serif-Bold.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/c30b221beb0c1da59d563feb91ec8656a1fa972a/ofl/gentiumbookplus/GentiumBookPlus-Bold.ttf",
+      "sha256": "b39c3fb12e2e15e2336f2ec6d051c778618ec25f7360bc4765bfe755b408c011",
+      "bytes": 834852
+    },
+    {
+      "file": "assets/folio-fonts/serif-BoldItalic.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/c30b221beb0c1da59d563feb91ec8656a1fa972a/ofl/gentiumbookplus/GentiumBookPlus-BoldItalic.ttf",
+      "sha256": "e557dd7a7f818fa482c3e63c7576c6d455f6f2e3bf9d84e0a11d1617e2bc1383",
+      "bytes": 891412
+    },
+    {
+      "file": "assets/folio-fonts/sans-Regular.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/c30b221beb0c1da59d563feb91ec8656a1fa972a/ofl/atkinsonhyperlegible/AtkinsonHyperlegible-Regular.ttf",
+      "sha256": "7fb917c89019896d0b52ee84b7cbb3304c18cb90b19a62f5e32712bd23e97669",
+      "bytes": 54348
+    },
+    {
+      "file": "assets/folio-fonts/sans-Italic.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/c30b221beb0c1da59d563feb91ec8656a1fa972a/ofl/atkinsonhyperlegible/AtkinsonHyperlegible-Italic.ttf",
+      "sha256": "021beda4d3c6edfc78872e436d74009f9a1bcb294331908fe5747c61d3dcc514",
+      "bytes": 54892
+    },
+    {
+      "file": "assets/folio-fonts/sans-Bold.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/c30b221beb0c1da59d563feb91ec8656a1fa972a/ofl/atkinsonhyperlegible/AtkinsonHyperlegible-Bold.ttf",
+      "sha256": "5a3b0c8cc8ca545155150b4512a1fa248298df121c50d6557e651e61fbdab92f",
+      "bytes": 55256
+    },
+    {
+      "file": "assets/folio-fonts/sans-BoldItalic.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/c30b221beb0c1da59d563feb91ec8656a1fa972a/ofl/atkinsonhyperlegible/AtkinsonHyperlegible-BoldItalic.ttf",
+      "sha256": "7a46f1b0ef2f64b61065c1a6b5a11fcb9b019b44062d88ba121a083cc39e86bf",
+      "bytes": 55288
+    }
+  ]
+}

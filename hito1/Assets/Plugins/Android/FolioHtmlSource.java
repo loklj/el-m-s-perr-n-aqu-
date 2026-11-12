@@ -8,6 +8,7 @@ public interface FolioHtmlSource extends Closeable {
     byte[] chapter(int index) throws IOException;
     byte[] resource(String name, int limit) throws IOException;
     boolean isFont(String name);
+    default java.util.List<FolioContents.Entry> contents() throws IOException { return java.util.Collections.emptyList(); }
     void checkDrm() throws IOException;
     static FolioHtmlSource open(String path, String encoding) throws Exception {
         return open(path, encoding, () -> false);

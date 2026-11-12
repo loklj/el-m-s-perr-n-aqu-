@@ -73,6 +73,16 @@ public final class FolioPdfRenderer {
         });
     }
 
+    /** Lectura opcional de marcadores: independiente de las paginas y del estado de PdfRenderer. */
+    public static void requestContents(final String path,final String key) {
+        STATUS.put(key,"PENDING");
+        WORKER.execute(() -> {
+            try(FolioPdfOutline reader=new FolioPdfOutline(path,()->!STATUS.containsKey(key))){
+                STATUS.replace(key,"OK:"+FolioContents.json(reader.read()));
+            }catch(Throwable e){STATUS.replace(key,"ERROR:TOC:"+e.getMessage());}
+        });
+    }
+
     /**
      * Pide dibujar una pagina (indice desde 0) con un ancho en pixeles.
      * Escribe pixeles crudos en outPath. Resultado: "OK:<ancho>x<alto>".

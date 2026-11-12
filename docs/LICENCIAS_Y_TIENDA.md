@@ -74,6 +74,9 @@ El Meta XR All-in-One SDK está en la Asset Store como «activo restringido»: s
 | AppAuth-Android | Apache-2.0 | Inicio de sesión de Google | LICENSE y NOTICE | Candidato |
 | Dropbox Java SDK | MIT (confirmar versión al integrar) | Dropbox | Aviso | Candidato |
 | MEGA SDK (C++) | BSD-2-Clause [G1] | MEGA | Aviso. **Compilar sin FreeImage ni FFmpeg** (GPL/LGPL). La app Android de MEGA tiene otra licencia, de solo revisión: no copiar nada de ella. [G2] | Candidato |
+| Gentium Book Plus 6.101 | SIL OFL 1.1, autorizada en encargo 17 | Fuente serif del libro HTML; cuatro variantes originales | Conservar copyright SIL y nombres reservados; no se modifican TTF. Avisos en docs/licencias, StreamingAssets y AAR | Incluida en FolioFonts.aar |
+| Atkinson Hyperlegible 1.006 | SIL OFL 1.1, autorizada en encargo 17 | Fuente sans del libro HTML; cuatro variantes originales | Conservar copyright Braille Institute y licencia, incluidos también en APK | Incluida en FolioFonts.aar |
+| FolioPdfOutline / FolioContents / FolioReadingSettings | Código propio y APIs del sistema | Índice PDF/HTML, geometría y nombres de marcadores | Sin bibliotecas PDF ni dependencias Gradle nuevas | Encargo 17, partes 2/4/5 |
 | Fuentes Noto | SIL OFL 1.1 | Texto de la app y de los libros | Incluir la licencia. No vender la fuente por separado | Plan |
 | `LegacyRuntime.ttf` de Unity | Fuente interna de Unity | Texto del Hito 1 | Reemplazar por TextMeshPro + Noto antes de publicar | Temporal |
 
@@ -128,3 +131,7 @@ Junrar no permite usar sus fuentes para crear un archivador compatible con RAR/W
 ### Documentos del encargo 11
 
 No se añade ninguna biblioteca al APK. java-mammoth 1.13.0 (BSD-2) se examinó sin incorporarlo: no tiene dependencias de producción, pero contiene referencias StAX (`javax.xml.stream`) no disponibles en Android 34. Su adaptación no se ha validado; se usa el conversor propio autorizado. Decisión, revisión exacta y fuentes en [Formatos, sección 9](FORMATOS_Y_LICENCIAS.md#9-estado--encargo-11-documentos). Las herramientas de comprobación del corpus (LibreOffice, Pandoc, python-docx y Pillow) solo se ejecutan en desarrollo: no se copian ni distribuyen con la app, ni sus componentes/licencias copyleft se incorporan al proyecto.
+
+### Fuentes del encargo 17
+
+Fuentes originales fijadas a Google Fonts `c30b221beb0c1da59d563feb91ec8656a1fa972a`, sin modificaciones. Fuentes primarias, SHA-256 del AAR, obligaciones y empaquetado reproducible en [LECTURA.md](LECTURA.md#fuentes-y-licencias); hashes de los ocho TTF en `tests/lectura/fuentes.json`. La excepción OFL viene del encargo explícito del usuario. No se añade GPL/LGPL/AGPL al APK. PyMuPDF se usó solo en desarrollo para contrastar fixtures PDF: no se incluye su biblioteca ni código en la app.

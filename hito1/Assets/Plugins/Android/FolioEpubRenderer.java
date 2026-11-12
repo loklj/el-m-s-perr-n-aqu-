@@ -23,6 +23,7 @@ public final class FolioEpubRenderer {
     private static FolioHtmlSource book;
     private static String txtEncoding = "auto";
     private static String path;
+    private static FolioReadingSettings layout=new FolioReadingSettings(0,1.4f,48);
     private static float fontScale = 1f;
     private static int[] counts;
     private static int loaded = -1;
@@ -37,6 +38,10 @@ public final class FolioEpubRenderer {
     }
     public static void setTxtEncoding(String encoding) {
         WORK.execute(() -> { if (!txtEncoding.equals(encoding)) { txtEncoding = encoding; reset(); } });
+    }
+    public static void setLayout(int font,float line,int margin) {
+        FolioReadingSettings next=new FolioReadingSettings(font,line,margin);
+        WORK.execute(() -> { if(!layout.equals(next)){layout=next;reset();} });
     }
     public static String getStatus(String key) { return STATUS.get(key); }
     public static void clearStatus(String key) {
@@ -81,6 +86,7 @@ public final class FolioEpubRenderer {
         if (file.equals(path) && counts != null) return;
         reset();
         if (context == null) throw new IOException("EPUB sin contexto Android");
+        try(InputStream font=context.getAssets().open("folio-fonts/"+layout.family()+"-Regular.ttf")) { if(font.read()<0)throw new IOException("Fuente incluida ausente"); }
         book = FolioHtmlSource.open(file, txtEncoding, () -> generation != GENERATION.get());
         book.checkDrm();
         ui(() -> {
@@ -105,7 +111,7 @@ public final class FolioEpubRenderer {
         int[] result = new int[book.chapterCount()];
         for (int i = 0; i < result.length; i++) {
             check(generation, null); load(i);
-            String number = js("Math.max(1,Math.ceil((document.body.scrollWidth+48)/596))");
+            String number = js("Math.max(1,Math.ceil((document.body.scrollWidth+"+layout.margin+")/596))");
             result[i] = Integer.parseInt(number);
             if (result[i] > 100000) throw new IOException("Capitulo demasiado extenso");
         }
@@ -121,14 +127,9 @@ public final class FolioEpubRenderer {
         final FolioHtmlSource source = book;
         String resource = source.chapterName(chapter);
         String content = new String(source.chapter(chapter), StandardCharsets.UTF_8);
-        String policy = "default-src 'none'; img-src https://folio.invalid data:; style-src 'unsafe-inline' https://folio.invalid; font-src 'none'; script-src 'none';";
+        String policy = "default-src 'none'; img-src https://folio.invalid data:; style-src 'unsafe-inline' https://folio.invalid; font-src https://folio.invalid/folio-fonts/; script-src 'none';";
         String prefix = "<meta http-equiv='Content-Security-Policy' content=\"" + policy + "\"><meta name='viewport' content='width=596'>";
-        String css = "<style>html{width:596px!important;height:842px!important;overflow:hidden!important;}" +
-            "body{box-sizing:content-box!important;margin:48px!important;padding:0!important;width:500px!important;" +
-            "height:746px!important;column-width:500px!important;column-gap:96px!important;column-fill:auto!important;" +
-            "font-size:" + (16 * fontScale) + "px!important;line-height:1.4!important;color:#111!important;background:white!important;}" +
-            "*{font-family:serif!important;max-width:100%!important;}img,svg{max-height:700px!important;object-fit:contain;}" +
-            "script,iframe,object,embed,form{display:none!important;}</style>";
+        String css = layout.css(fontScale);
         // CSP precede al contenido del editor; evaluateJavascript solo ejecuta codigo propio.
         String html = "<!doctype html><html><head>" + prefix + "</head><body>" + content + css + "</body></html>";
         CompletableFuture<Void> ready = new CompletableFuture<>();
@@ -138,7 +139,8 @@ public final class FolioEpubRenderer {
                 @Override public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest request) {
                     try {
                         String name = FolioEpubContainer.resolve("", request.getUrl().toString());
-                        if (source.isFont(name)) throw new IOException("Fuente del sistema");
+                        if(FolioReadingSettings.fontAsset(name))return new WebResourceResponse("font/ttf",null,context.getAssets().open(name));
+                        if (source.isFont(name)) throw new IOException("Fuente del libro no habilitada");
                         String mime = name.endsWith(".css") ? "text/css" : name.endsWith(".svg") ? "image/svg+xml" :
                             name.endsWith(".png") ? "image/png" : "image/jpeg";
                         byte[] data = source.resource(name, FolioEpubContainer.MAX_RESOURCE);
@@ -161,10 +163,37 @@ public final class FolioEpubRenderer {
             web.loadDataWithBaseURL(url, html, "text/html", "UTF-8", null);
             return null;
         });
-        ready.get(20, TimeUnit.SECONDS); loaded = chapter;
+        ready.get(20, TimeUnit.SECONDS);
+        js("window.folioFontsReady=false;document.fonts.ready.then(function(){window.folioFontsReady=true;});true");
+        long until=SystemClock.elapsedRealtime()+20000;
+        while(!"true".equals(js("window.folioFontsReady===true"))){
+            if(SystemClock.elapsedRealtime()>until)throw new TimeoutException("Carga de fuentes");Thread.sleep(25);
+        }
+        loaded = chapter;
     }
     public static void requestPageCount(String file, String key) {
         submit(key, generation -> { open(file, generation); int total = 0; for (int n : counts) total += n; return "OK:" + total; });
+    }
+    public static void requestContents(String file,String key){
+        submit(key,generation->{
+            open(file,generation);List<FolioContents.Entry> entries=book.contents();int first=0;
+            for(int chapter=0;chapter<counts.length;chapter++){
+                check(generation,key);boolean needed=false;
+                for(FolioContents.Entry e:entries)if(e.chapter==chapter&&!e.fragment.isEmpty())needed=true;
+                if(needed){load(chapter);js("document.body.style.transform='none';true");}
+                for(FolioContents.Entry e:entries)if(e.chapter==chapter){
+                    check(generation,key);int local=0;
+                    if(!e.fragment.isEmpty()){
+                        String name=FolioContents.quote(e.fragment);
+                        String result=js("(function(){var e=document.getElementById("+name+")||document.getElementsByName("+name+")[0];if(!e)return -1;var r=e.getClientRects();return r.length?Math.max(0,Math.floor(r[0].left/596)):-1;})()");
+                        local=Integer.parseInt(result);
+                    }
+                    e.page=local<0?-1:first+Math.min(local,counts[chapter]-1);
+                }
+                first+=counts[chapter];
+            }
+            return "OK:"+FolioContents.json(entries);
+        });
     }
     private static byte[] page(int index, int width, int generation) throws Exception {
         check(generation, null);

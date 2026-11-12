@@ -50,6 +50,7 @@ namespace FolioXR.Reading
         private readonly string _pdfPath;
         private readonly string _cacheDir;
         private int _requestCounter;
+        private string _contentsKey;
 
 #if UNITY_ANDROID && !UNITY_EDITOR
         private AndroidJavaClass _java;
@@ -71,6 +72,7 @@ namespace FolioXR.Reading
                 {
                     _java.CallStatic("init", activity, EpubFontScale);
                     _java.CallStatic("setTxtEncoding", TxtEncoding);
+                    _java.CallStatic("setLayout", ReadingLayout.Font, ReadingLayout.LineSpacing, ReadingLayout.Margin);
                 }
 #endif
         }
@@ -183,8 +185,40 @@ namespace FolioXR.Reading
 #endif
         }
 
+        public IEnumerator GetContents(Action<ContentsList, string> done)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            CancelContents();
+            if (IsComic(_pdfPath)) { done(new ContentsList(), null); yield break; }
+            string key = _contentsKey = NextKey("contents");
+            _java.CallStatic("requestContents", _pdfPath, key);
+            PdfResult result = null;
+            yield return WaitFor(key, r => result = r);
+            if (_contentsKey != key) yield break;
+            _contentsKey = null;
+            if (result == null || !result.Ok) { done(null, result?.ErrorDetail ?? "No se pudo leer el índice."); yield break; }
+            ContentsList entries = null;
+            string error = null;
+            try { entries = JsonUtility.FromJson<ContentsList>(result.Data); }
+            catch (Exception) { error = "Respuesta de índice no válida."; }
+            done(entries ?? new ContentsList(), error);
+#else
+            done(new ContentsList(), "Índice disponible en el visor.");
+            yield break;
+#endif
+        }
+
+        public void CancelContents()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (_java != null && _contentsKey != null) _java.CallStatic("clearStatus", _contentsKey);
+#endif
+            _contentsKey = null;
+        }
+
         public void Dispose()
         {
+            CancelContents();
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (_java != null)
             {
@@ -209,6 +243,7 @@ namespace FolioXR.Reading
             float start = Time.realtimeSinceStartup;
             while (true)
             {
+                if (key.Contains("-contents-") && _contentsKey != key) yield break;
                 string status = _java.CallStatic<string>("getStatus", key);
                 if (status != null && status != "PENDING")
                 {

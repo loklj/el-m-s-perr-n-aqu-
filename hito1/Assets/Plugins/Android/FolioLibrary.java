@@ -275,20 +275,33 @@ public final class FolioLibrary {
         }
     }
 
+    /** Renombrar nunca recrea un marcador borrado mientras el teclado estaba abierto. */
+    public static boolean renameBookmark(String id,int position,String label) {
+        try {
+            ContentValues values=new ContentValues();values.put("label",FolioReadingSettings.label(label));
+            return helper.getWritableDatabase().update("bookmarks",values,"book_id = ? AND position = ?",new String[]{id,String.valueOf(position)})==1;
+        }catch(Throwable t){Log.w(TAG,"[FolioXR] No se pudo renombrar el marcador",t);return false;}
+    }
+    public static boolean removeBookmark(String id,int position) {
+        try{return helper.getWritableDatabase().delete("bookmarks","book_id = ? AND position = ?",new String[]{id,String.valueOf(position)})==1;}
+        catch(Throwable t){Log.w(TAG,"[FolioXR] No se pudo quitar el marcador",t);return false;}
+    }
+
     /** {"positions":[...]} en orden de pagina. */
     public static String bookmarksJson(String id) {
-        JSONArray positions = new JSONArray();
+        JSONArray positions = new JSONArray(), entries = new JSONArray();
         try {
             Cursor c = helper.getReadableDatabase().rawQuery(
-                    "SELECT position FROM bookmarks WHERE book_id = ? ORDER BY position", new String[]{id});
+                    "SELECT position, label FROM bookmarks WHERE book_id = ? ORDER BY position", new String[]{id});
             try {
                 while (c.moveToNext()) {
                     positions.put(c.getInt(0));
+                    entries.put(new JSONObject().put("position",c.getInt(0)).put("label",c.isNull(1)?"":c.getString(1)));
                 }
             } finally {
                 c.close();
             }
-            return new JSONObject().put("positions", positions).toString();
+            return new JSONObject().put("positions", positions).put("entries",entries).toString();
         } catch (Throwable t) {
             Log.w(TAG, "[FolioXR] Biblioteca: no se pudieron leer los marcadores", t);
             return "{\"positions\":[]}";

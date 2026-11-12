@@ -93,7 +93,7 @@ namespace FolioXR.Menu
 
         private void OnLibraryChanged()
         {
-            if (SelectedCategory == MenuCategory.Biblioteca || SelectedCategory == MenuCategory.ImportarYNubes)
+            if (SelectedCategory == MenuCategory.Biblioteca || SelectedCategory == MenuCategory.ImportarYNubes || SelectedCategory == MenuCategory.Ajustes)
                 RebuildOptions();
             Changed?.Invoke();
         }
@@ -182,6 +182,9 @@ namespace FolioXR.Menu
         private string _setupId;
         private TouchScreenKeyboard _keyboard;
         private string _keyboardFor;
+        private int _keyboardBookmark = -1;
+        private int _readingList, _readingPage;
+        private string _readingFor;
 
         private void AddBookSources(List<MenuOption> options, BookLibrary library)
         {
@@ -258,6 +261,7 @@ namespace FolioXR.Menu
                 BookLibrary.NotifyUser("El teclado del sistema no está disponible en este visor.");
                 return;
             }
+            _keyboardBookmark = -1;
             _keyboardFor = entry.id;
             _keyboard = TouchScreenKeyboard.Open(entry.title, TouchScreenKeyboardType.Default, false, false, false, false,
                 "Nombre del libro");
@@ -270,16 +274,84 @@ namespace FolioXR.Menu
             TouchScreenKeyboard.Status status = _keyboard.status;
             if (status == TouchScreenKeyboard.Status.Visible) return;
             if (status == TouchScreenKeyboard.Status.Done && BookLibrary.Instance != null)
-                foreach (BookEntry entry in BookLibrary.Instance.Books)
-                    if (entry.id == _keyboardFor)
-                    {
-                        BookLibrary.Instance.Rename(entry, _keyboard.text);
-                        break;
-                    }
+            {
+                if (_keyboardBookmark >= 0)
+                    BookLibrary.Instance.RenameBookmark(_keyboardFor, _keyboardBookmark, _keyboard.text);
+                else foreach (BookEntry entry in BookLibrary.Instance.Books)
+                    if (entry.id == _keyboardFor) { BookLibrary.Instance.Rename(entry, _keyboard.text); break; }
+            }
+            _keyboardBookmark = -1;
             _keyboard = null;
             _keyboardFor = null;
             if (SelectedCategory == MenuCategory.Biblioteca) RebuildOptions();
             Changed?.Invoke();
+        }
+
+        private void OpenBookmarkKeyboard(int page)
+        {
+            BookLibrary library = BookLibrary.Instance;
+            if (library?.Current == null) return;
+            if (!TouchScreenKeyboard.isSupported)
+            { BookLibrary.NotifyUser("El teclado del sistema no está disponible en este visor."); return; }
+            _keyboardFor = library.Current.id;
+            _keyboardBookmark = page;
+            _keyboard = TouchScreenKeyboard.Open(library.BookmarkTitle(page), TouchScreenKeyboardType.Default,
+                false, false, false, false, "Nombre del marcador", 120);
+        }
+
+        private void OpenReadingList(int mode)
+        {
+            BookLibrary library = BookLibrary.Instance;
+            if (library?.Current == null) return;
+            _readingList = mode; _readingPage = 0; _readingFor = library.Current.id;
+            if (mode == 1) library.LoadContents();
+            RebuildOptions();
+        }
+
+        private bool AddReadingOptions(List<MenuOption> options, BookLibrary library)
+        {
+            if (_readingList == 0) return false;
+            if (library.Current == null || library.Current.id != _readingFor) { _readingList = 0; return false; }
+            options.Add(new MenuOption("Volver", () => { library.CancelContents(); _readingList = 0; RebuildOptions(); }));
+            if (_readingList == 1)
+            {
+                if (library.ContentsLoading) { options.Add(new MenuOption("Leyendo índice…")); return true; }
+                if (!string.IsNullOrEmpty(library.ContentsMessage)) options.Add(new MenuOption(Shorten(library.ContentsMessage, 90)));
+                int pages = Mathf.Max(1, (library.Contents.Count + 5) / 6);
+                _readingPage = Mathf.Clamp(_readingPage, 0, pages - 1);
+                for (int i = _readingPage * 6; i < Mathf.Min(library.Contents.Count, (_readingPage + 1) * 6); i++)
+                {
+                    ContentsEntry entry = library.Contents[i];
+                    options.Add(new MenuOption(new string(' ', Mathf.Min(entry.depth, 4)) + Shorten(entry.title, 30) + "\n" +
+                        (entry.page < 0 ? "Destino no disponible" : "Pág. " + (entry.page + 1)),
+                        () => library.GoToBookmark(entry.page), () => entry.page >= 0 && !library.Repaginating));
+                }
+                AddReadingPages(options, pages);
+                options.Add(new MenuOption("Actualizar índice", library.LoadContents, () => !library.Repaginating));
+            }
+            else
+            {
+                int pages = Mathf.Max(1, (library.NamedBookmarks.Count + 2) / 3);
+                _readingPage = Mathf.Clamp(_readingPage, 0, pages - 1);
+                if (library.NamedBookmarks.Count == 0) options.Add(new MenuOption("Aún no hay marcadores"));
+                for (int i = _readingPage * 3; i < Mathf.Min(library.NamedBookmarks.Count, (_readingPage + 1) * 3); i++)
+                {
+                    NamedBookmark marker = library.NamedBookmarks[i];
+                    options.Add(new MenuOption(Shorten(marker.Title, 30) + "\nIr a pág. " + (marker.position + 1),
+                        () => library.GoToBookmark(marker.position), () => !library.Repaginating));
+                    options.Add(new MenuOption("Nombrar marcador\npág. " + (marker.position + 1), () => OpenBookmarkKeyboard(marker.position)));
+                    options.Add(new MenuOption("Quitar marcador\npág. " + (marker.position + 1), () => library.RemoveBookmark(marker.position), () => !library.Repaginating));
+                }
+                AddReadingPages(options, pages);
+            }
+            return true;
+        }
+
+        private void AddReadingPages(List<MenuOption> options, int pages)
+        {
+            if (_readingPage > 0) options.Add(new MenuOption("Lista anterior", () => { _readingPage--; RebuildOptions(); }));
+            if (_readingPage + 1 < pages) options.Add(new MenuOption("Más entradas\n" + (_readingPage + 1) + " de " + pages,
+                () => { _readingPage++; RebuildOptions(); }));
         }
 
         // ── Catálogos OPDS (encargo 14) ──
@@ -400,6 +472,7 @@ namespace FolioXR.Menu
                         options.Add(new MenuOption("La biblioteca solo\nfunciona en el visor"));
                         break;
                     }
+                    if (AddReadingOptions(options, library)) break;
                     BookEntry pending = library.PendingSetup;
                     if (_setupId == null && pending != null) _setupId = pending.id; // Libro recién agregado.
                     if (_setupId != null && AddSetupOptions(options, library)) break;
@@ -434,7 +507,7 @@ namespace FolioXR.Menu
                     for (int i = 0; i < library.Bookmarks.Count && i < 4; i++)
                     {
                         int position = library.Bookmarks[i];
-                        options.Add(new MenuOption("Ir al marcador\npág. " + (position + 1),
+                        options.Add(new MenuOption(Shorten(library.BookmarkTitle(position), 24) + "\npág. " + (position + 1),
                             () => library.GoToBookmark(position)));
                     }
                     int bookPages = Mathf.Max(1, (library.Books.Count + BooksPerPage - 1) / BooksPerPage);
@@ -453,6 +526,8 @@ namespace FolioXR.Menu
                         options.Add(new MenuOption("Más libros\n" + (_libraryPage + 1) + " de " + bookPages,
                             () => { _libraryPage = (_libraryPage + 1) % bookPages; RebuildOptions(); }));
                     if (library.Books.Count == 0) options.Add(new MenuOption("Aún no hay libros:\nimporta el primero"));
+                    options.Add(new MenuOption("Índice del libro", () => OpenReadingList(1), () => library.CanReadContents && !library.Repaginating));
+                    options.Add(new MenuOption("Lista de marcadores", () => OpenReadingList(2), () => library.Current != null));
                     break;
                 case MenuCategory.Entornos:
                 {
@@ -536,6 +611,15 @@ namespace FolioXR.Menu
                     options.Add(new MenuOption(_pendingClear == 2 ? "¿Borrar? Toca\notra vez" : "Borrar trazos\nde la casa",
                         () => ConfirmClear(2), () => InkManager.HasHouse));
                     options.Add(new MenuOption("Traer libro", () => _book.PlaceInFrontOfView(), () => _book != null));
+                    options.Add(new MenuOption("Fuente: " + ReadingLayout.FontName,
+                        () => BookLibrary.Instance.SetReadingLayout((ReadingLayout.Font + 1) % 2, ReadingLayout.LineSpacing, ReadingLayout.Margin),
+                        () => BookLibrary.Instance != null && !BookLibrary.Instance.Repaginating));
+                    options.Add(new MenuOption("Interlineado: " + ReadingLayout.LineSpacing.ToString("F1", CultureInfo.InvariantCulture).Replace('.', ','),
+                        () => BookLibrary.Instance.SetReadingLayout(ReadingLayout.Font, ReadingLayout.LineSpacing == 1.2f ? 1.4f : ReadingLayout.LineSpacing == 1.4f ? 1.8f : 1.2f, ReadingLayout.Margin),
+                        () => BookLibrary.Instance != null && !BookLibrary.Instance.Repaginating));
+                    options.Add(new MenuOption("Márgenes: " + (ReadingLayout.Margin == 24 ? "estrechos" : ReadingLayout.Margin == 48 ? "normales" : "amplios"),
+                        () => BookLibrary.Instance.SetReadingLayout(ReadingLayout.Font, ReadingLayout.LineSpacing, ReadingLayout.Margin == 24 ? 48 : ReadingLayout.Margin == 48 ? 72 : 24),
+                        () => BookLibrary.Instance != null && !BookLibrary.Instance.Repaginating));
                     break;
                 case MenuCategory.ImportarYNubes:
                     BookLibrary source = BookLibrary.Instance;

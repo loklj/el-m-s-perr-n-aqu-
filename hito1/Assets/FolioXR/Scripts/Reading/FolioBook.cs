@@ -188,6 +188,17 @@ namespace FolioXR.Reading
         }
 
         /// <summary>Salta a una página (marcadores). Devuelve false si el libro está ocupado.</summary>
+        /// <summary>Índice del renderizador abierto; no crea otra instancia que cierre el libro.</summary>
+        public IEnumerator ReadContents(System.Action<ContentsList, string> done)
+        {
+            string id = DocumentId;
+            while (_busy && DocumentId == id) yield return null;
+            if (_renderer == null || DocumentId != id) { done(null, "El libro cambió."); yield break; }
+            yield return _renderer.GetContents(done);
+        }
+
+        public void CancelContents() { _renderer?.CancelContents(); }
+
         public bool GoToPage(int leftIndex)
         {
             if (_busy || _renderer == null || _pageCount <= 0) return false;

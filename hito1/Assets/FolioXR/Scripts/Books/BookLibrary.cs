@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections;
 using System.IO;
 using FolioXR.Reading;
 using UnityEngine;
@@ -31,9 +32,18 @@ namespace FolioXR.Books
     }
 
     [Serializable]
+    public sealed class NamedBookmark
+    {
+        public int position;
+        public string label;
+        public string Title => string.IsNullOrWhiteSpace(label) ? "Página " + (position + 1) : label;
+    }
+
+    [Serializable]
     internal sealed class BookmarkList
     {
         public List<int> positions = new List<int>();
+        public List<NamedBookmark> entries = new List<NamedBookmark>();
     }
 
     [Serializable]
@@ -73,6 +83,16 @@ namespace FolioXR.Books
         public bool Available { get; private set; }
         public IReadOnlyList<BookEntry> Books => _books;
         public IReadOnlyList<int> Bookmarks => _bookmarks;
+        public IReadOnlyList<NamedBookmark> NamedBookmarks => _namedBookmarks;
+        public IReadOnlyList<ContentsEntry> Contents => _contents;
+        public bool ContentsLoading { get; private set; }
+        public string ContentsMessage { get; private set; } = string.Empty;
+        public bool CanReadContents => Current != null && (Current.format == "pdf" || Current.format == "epub" ||
+            Current.format == "mobi" || Current.format == "azw" || Current.format == "azw3");
+        private List<NamedBookmark> _namedBookmarks = new List<NamedBookmark>();
+        private List<ContentsEntry> _contents = new List<ContentsEntry>();
+        private int _contentsGeneration;
+        private Coroutine _contentsRoutine;
         public BookEntry Current { get; private set; }
         public bool Importing => _importState == "picking" || _importState == "copying";
         public string ImportLine { get; private set; } = string.Empty;
@@ -186,12 +206,15 @@ namespace FolioXR.Books
         private void LoadBookmarks()
         {
             _bookmarks = new List<int>();
+            _namedBookmarks = new List<NamedBookmark>();
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (!Available || Current == null) return;
             try
             {
                 BookmarkList list = JsonUtility.FromJson<BookmarkList>(_java.CallStatic<string>("bookmarksJson", Current.id));
                 if (list != null && list.positions != null) _bookmarks = list.positions;
+                if (list != null && list.entries != null) _namedBookmarks = list.entries;
+                if (_namedBookmarks.Count == 0) foreach (int p in _bookmarks) _namedBookmarks.Add(new NamedBookmark { position = p });
             }
             catch (Exception e)
             {
@@ -230,6 +253,7 @@ namespace FolioXR.Books
             if (entry != Current)
             {
                 if (_dirty) Save(false); // La página del libro anterior no se pierde al cambiar.
+                ClearContents();
                 Current = entry;
                 if (entry != null) ApplyStyle(entry);
                 else if (_book.Cover != null) _book.Cover.Apply(false, 0, "Libro de muestra", _book.RightToLeft);
@@ -297,6 +321,7 @@ namespace FolioXR.Books
                 return;
             }
             if (Current != null && Current.id == entry.id) return;
+            ClearContents();
             _book.RequestDocument(entry.path, entry.id, entry.position);
             Debug.Log("[FolioXR] Biblioteca: abrir «" + entry.title + "» en la página " + (entry.position + 1));
         }
@@ -331,6 +356,16 @@ namespace FolioXR.Books
             ReloadReflowCurrent();
         }
 
+        public void SetReadingLayout(int font, float line, int margin)
+        {
+            if (Repaginating) return;
+            PlayerPrefs.SetInt(ReadingLayout.FontKey, Mathf.Clamp(font, 0, 1));
+            PlayerPrefs.SetFloat(ReadingLayout.LineKey, line == 1.2f || line == 1.8f ? line : 1.4f);
+            PlayerPrefs.SetInt(ReadingLayout.MarginKey, margin == 24 || margin == 72 ? margin : 48);
+            PlayerPrefs.Save();
+            ReloadReflowCurrent();
+        }
+
         public void SetTxtEncoding(string encoding)
         {
             if (Repaginating || (encoding != "auto" && encoding != "UTF-8" && encoding != "Windows-1252")) return;
@@ -343,6 +378,7 @@ namespace FolioXR.Books
 
         private void ReloadReflowCurrent()
         {
+            ClearContents();
             if (Current != null && PdfPageRenderer.IsReflow(Current.path))
             {
                 _repaginateId = Current.id;
@@ -376,6 +412,8 @@ namespace FolioXR.Books
             }
             if (Current != null && Current.id == entry.id)
             {
+                ClearContents();
+                _namedBookmarks.Clear();
                 Current = null;
                 _dirty = false;
                 _bookmarks = new List<int>();
@@ -390,6 +428,7 @@ namespace FolioXR.Books
         public void CloseCurrent()
         {
             if (Current == null || _book == null) return;
+            ClearContents();
             Repaginating = _awaitingPagination = false;
             _relocatePage = -1;
             Save(false);
@@ -399,7 +438,7 @@ namespace FolioXR.Books
 
         public void ToggleBookmark()
         {
-            if (Current == null || !Available) return;
+            if (Current == null || !Available || Repaginating) return;
 #if UNITY_ANDROID && !UNITY_EDITOR
             try
             {
@@ -418,7 +457,67 @@ namespace FolioXR.Books
 
         public void GoToBookmark(int position)
         {
-            if (_book != null) _book.GoToPage(position);
+            if (_book != null && Current != null && !Repaginating && _book.DocumentId == Current.id) _book.GoToPage(position);
+        }
+
+        public string BookmarkTitle(int page)
+        {
+            foreach (NamedBookmark bookmark in _namedBookmarks) if (bookmark.position == page) return bookmark.Title;
+            return "Página " + (page + 1);
+        }
+
+        public void RenameBookmark(string bookId, int page, string label)
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (!Available || Find(bookId) == null || page < 0) return;
+            if (!_java.CallStatic<bool>("renameBookmark", bookId, page, label ?? string.Empty))
+            { Notify("No se pudo guardar el nombre del marcador."); return; }
+#endif
+            if (Current != null && Current.id == bookId) LoadBookmarks();
+            StateChanged?.Invoke();
+        }
+
+        public void RemoveBookmark(int page)
+        {
+            if (Current == null || Repaginating) return;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (!Available || !_java.CallStatic<bool>("removeBookmark", Current.id, page)) return;
+#endif
+            LoadBookmarks(); StateChanged?.Invoke();
+        }
+
+        public void CancelContents()
+        {
+            _contentsGeneration++;
+            _book?.CancelContents();
+            if (_contentsRoutine != null) StopCoroutine(_contentsRoutine);
+            _contentsRoutine = null; ContentsLoading = false;
+        }
+
+        private void ClearContents()
+        {
+            CancelContents(); _contents.Clear(); ContentsMessage = string.Empty;
+        }
+
+        public void LoadContents()
+        {
+            if (!CanReadContents || Repaginating || _book == null) return;
+            ClearContents(); ContentsLoading = true;
+            _contentsRoutine = StartCoroutine(ReadContents(Current.id, _contentsGeneration));
+            StateChanged?.Invoke();
+        }
+
+        private IEnumerator ReadContents(string id, int generation)
+        {
+            yield return _book.ReadContents((list, error) =>
+            {
+                if (generation != _contentsGeneration || Current == null || Current.id != id) return;
+                _contents = list?.entries ?? new List<ContentsEntry>();
+                ContentsMessage = error ?? (_contents.Count == 0 ? "Este libro no tiene índice navegable." : list?.message ?? string.Empty);
+                ContentsLoading = false;
+                StateChanged?.Invoke();
+            });
+            if (generation == _contentsGeneration) _contentsRoutine = null;
         }
 
         public void Import()
@@ -734,6 +833,7 @@ namespace FolioXR.Books
 
         private void OnDestroy()
         {
+            CancelContents();
             PdfPageRenderer.PageCounted -= OnPageCounted;
             PdfPageRenderer.RenderFailed -= OnRenderFailed;
             if (_hooked && _book != null)
