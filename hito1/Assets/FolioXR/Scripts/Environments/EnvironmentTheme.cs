@@ -120,9 +120,9 @@ namespace FolioXR.Environments
                 Foliage = C(0x4C6B34), BookPalette = WarmBooks,
                 SkyHorizon = C(0xF7B47A), SkyZenith = C(0x4A5C92),
                 AmbientSky = C(0xB49AA0), AmbientEquator = C(0xC08A64), AmbientGround = C(0x4A3A30),
-                Exterior = ExteriorKind.Lake, Sky = SkyKind.Sunset, SunAzimuth = 262f, SunElevation = 5f,
+                Exterior = ExteriorKind.Lake, Sky = SkyKind.Sunset, SunAzimuth = 262f, SunElevation = 9f,
                 SunColor = C(0xFFB070), SunIntensity = 0.9f, CloudCover = 0.4f, CloudColor = C(0xFFC9A0),
-                Ground = C(0x4D6630), GroundAlt = C(0x6B7238), Rock = C(0x5A5866), Water = C(0x23455A),
+                Ground = C(0x4D6630), GroundAlt = C(0x6B7238), Rock = C(0x6E675E), Water = C(0x23455A),
                 MountainHeight = 20f,
                 Leaves = new[] { C(0x2E4A24), C(0x3A5A2A), C(0x23402A), C(0x445E2C) }
             },

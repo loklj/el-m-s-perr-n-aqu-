@@ -89,7 +89,7 @@ def mundo(ctx):
         sky.sun_rotation = math.radians(90 - t['acimut'])
         sky.sun_disc = True
         sky.sun_size = math.radians(2.4)      # Sol algo más grande: sombras con borde suave.
-        if tipo == 'atardecer': sky.aerosol_density = 2.2
+        if tipo == 'atardecer': sky.aerosol_density = 1.4
         if tipo == 'nublado':
             sky.sun_intensity = 0.04
             hs = nt.nodes.new('ShaderNodeHueSaturation'); hs.inputs['Saturation'].default_value = 0.2
@@ -200,6 +200,23 @@ def exposicion(ctx):
         lums.append((a @ np.array([0.2126, 0.7152, 0.0722])).ravel())
     objetivo = dict(dia=0.27, atardecer=0.22, nublado=0.27, noche=0.075)[t['cielo']] * t.get('exp', 1.0)
     E = objetivo / max(1e-6, float(np.percentile(np.concatenate(lums), 55)))
+    if 'sky' in ctx:
+        # Tope por el cielo: si la casa queda oscura (sol bajo), subir la exposición quemaba el cielo
+        # entero a blanco. El horizonte (mediana, lejos del sol) no debe pasar de ~1,35 tras exponer.
+        sc = bpy.context.scene
+        mallas = [o for o in sc.objects if o.type == 'MESH']
+        antes = {o: o.hide_render for o in mallas}
+        for o in mallas: o.hide_render = True
+        ctx['sky'].sun_disc = False
+        pano = camara(pano=True)
+        a = render(f'{CACHE}/medir_cielo', 512, 256, 1)[..., :3]
+        ctx['sky'].sun_disc = True
+        for o, h in antes.items(): o.hide_render = h
+        camara()
+        banda = (a @ np.array([0.2126, 0.7152, 0.0722]))[int(256 * 0.51):int(256 * 0.58)]
+        tope = 1.35 / max(1e-6, float(np.median(banda)))
+        if tope < E: log(f'exposición limitada por el cielo: {E:.4f} → {tope:.4f}')
+        E = min(E, tope)
     log(f'exposición E={E:.4f}')
     return E
 
