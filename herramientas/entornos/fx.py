@@ -69,11 +69,13 @@ _CUBE_B = np.array([(-.5, -.5, -.5), (.5, -.5, -.5), (.5, .5, -.5), (-.5, .5, -.
 _CUBE_F = [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
 
 
-def _cyl(n=20, r0=0.5, r1=0.5, caps=True):
-    """Cilindro o tronco de cono, eje Z de Blender (= Y de Unity), altura 1 centrada."""
+def _cyl(n=20, r0=0.5, r1=0.5, caps=True, estrias=0.0):
+    """Cilindro o tronco de cono, eje Z de Blender (= Y de Unity), altura 1 centrada.
+    estrias > 0 alterna el radio de los vértices (costillas de cactus)."""
     a = np.linspace(0, 2 * math.pi, n, endpoint=False)
-    bottom = np.stack([np.cos(a) * r0, np.sin(a) * r0, np.full(n, -0.5)], 1)
-    top = np.stack([np.cos(a) * r1, np.sin(a) * r1, np.full(n, 0.5)], 1)
+    k = 1.0 - estrias * (np.arange(n) % 2)
+    bottom = np.stack([np.cos(a) * r0 * k, np.sin(a) * r0 * k, np.full(n, -0.5)], 1)
+    top = np.stack([np.cos(a) * r1 * k, np.sin(a) * r1 * k, np.full(n, 0.5)], 1)
     v = np.concatenate([bottom, top])
     f = [(i, (i + 1) % n, n + (i + 1) % n, n + i) for i in range(n)]
     if caps:
@@ -131,8 +133,8 @@ class Geo:
         kw.pop('tapa', None)
         self.mesh(mat, m, _CUBE_B, _CUBE_F, **kw)
 
-    def cyl(self, mat, pos, size, e=(0, 0, 0), group=None, n=20, r1=0.5, caps=True, m=None, **kw):
-        v, f = _cyl(n, 0.5, r1, caps)
+    def cyl(self, mat, pos, size, e=(0, 0, 0), group=None, n=20, r1=0.5, caps=True, m=None, estrias=0.0, **kw):
+        v, f = _cyl(n, 0.5, r1, caps, estrias)
         mm = TRS(pos, e, size) if m is None else m
         if group is not None: mm = group @ mm
         kw.setdefault('suave', True)

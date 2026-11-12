@@ -503,6 +503,7 @@ if __name__ == '__main__':
     ap.add_argument('--pano', type=int, default=6144)
     ap.add_argument('--spp-pano', type=int, default=16, dest='spp_pano')
     ap.add_argument('--ancho', type=int, default=960)
+    ap.add_argument('--medir', action='store_true', help='vistas con la exposición fija del tema (como en el horneado)')
     a = ap.parse_args()
     os.makedirs(CACHE, exist_ok=True)
     tema = temas.POR_SLUG[a.tema]
@@ -511,4 +512,5 @@ if __name__ == '__main__':
         ctx = escena(tema)
         for o in ctx['lejos']:
             if o.name.startswith('terreno_dentro'): o.hide_render = True
+        if a.medir: ctx['E'] = exposicion(ctx)
         vistas(ctx, a.vista.split(','), a.spp, a.ancho)

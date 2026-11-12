@@ -141,10 +141,10 @@ class Paisaje:
             self.lejos.raw('agua', v, faces, atlas='agua', suave=True, color=np.array(cols))
 
     # ───────────── Vegetación ─────────────
-    def _tronco(self, g, atlas, a, b, r0, r1, mat='tronco', n=7, peso=0.6):
+    def _tronco(self, g, atlas, a, b, r0, r1, mat='tronco', n=7, peso=0.6, estrias=0.0, tapa=False):
         d = b - a
         m = T((a + b) * 0.5) @ FromUp(d) @ Sc((2 * r0, np.linalg.norm(d), 2 * r0))
-        g.cyl(mat, None, None, m=m, n=n, r1=0.5 * r1 / r0, caps=False, plan=False, atlas=atlas, peso=peso)
+        g.cyl(mat, None, None, m=m, n=n, r1=0.5 * r1 / r0, caps=tapa, plan=False, atlas=atlas, peso=peso, estrias=estrias)
 
     def _hojas(self, g, atlas, centros, normales, medio, pal=None, mat='follaje', forma=0.58, sombra=None, colores=None):
         """Hojas (dos caras al exportar): rombos alargados, girados al azar, con color variado."""
@@ -230,19 +230,28 @@ class Paisaje:
                 side = np.array([-d[2], 0, d[0]])
                 largo = rr * rng.uniform(0.8, 1.1)
                 cae = rng.uniform(0.25, 0.5) * largo * (1 - 0.6 * f)
-                w = largo * rng.uniform(0.3, 0.42)
                 o = p + [0, yb, 0]
-                tip = o + d * largo - [0, cae, 0]
-                midp = o + d * largo * 0.55 - [0, cae * 0.3, 0] + [0, largo * 0.07, 0]
-                l = o + d * largo * 0.5 + side * w - [0, cae * 0.45, 0]
-                r_ = o + d * largo * 0.5 - side * w - [0, cae * 0.45, 0]
-                base = len(verts)
-                verts += [o, l, tip, r_, midp]
-                faces += [(base, base + 4, base + 1), (base + 1, base + 4, base + 2),
-                          (base + 2, base + 4, base + 3), (base + 3, base + 4, base)]
                 c = pal[rng.integers(0, len(pal))] * rng.uniform(0.7, 1.2)
                 if nevado > 0 and rng.random() < nevado: c = np.array([0.8, 0.83, 0.88]) * rng.uniform(0.85, 1.0)
-                cols += [c] * 4
+                # Rama = varias ramillas en abanico a lo largo del eje, cada una un rombo con pliegue.
+                partes = 3 if largo > 0.6 else 2
+                for k in range(partes):
+                    t0 = k / partes
+                    base_k = o + d * largo * t0 - [0, cae * t0 * t0, 0]
+                    for lado in ((-1, 1) if k > 0 else (0,)):
+                        dk = _norm(d + side * lado * rng.uniform(0.35, 0.65) - [0, 0.25 + 0.3 * t0, 0])
+                        lk = largo * (1 - t0) * rng.uniform(0.55, 0.75) if k > 0 else largo
+                        wk = lk * rng.uniform(0.26, 0.34)
+                        sk = _norm(np.cross([0, 1, 0], dk)) if abs(dk[1]) < 0.95 else side
+                        tip = base_k + dk * lk
+                        midp = base_k + dk * lk * 0.5 + [0, lk * 0.06, 0]
+                        l = base_k + dk * lk * 0.45 + sk * wk - [0, lk * 0.08, 0]
+                        r_ = base_k + dk * lk * 0.45 - sk * wk - [0, lk * 0.08, 0]
+                        b0 = len(verts)
+                        verts += [base_k, l, tip, r_, midp]
+                        faces += [(b0, b0 + 4, b0 + 1), (b0 + 1, b0 + 4, b0 + 2),
+                                  (b0 + 2, b0 + 4, b0 + 3), (b0 + 3, b0 + 4, b0)]
+                        cols += [c * rng.uniform(0.85, 1.12)] * 4
         g.raw('follaje', np.array(verts)[:, [0, 2, 1]], faces, atlas=atlas, doble=True, color=np.array(cols))
 
     def palmera(self, g, atlas, p, alto):
@@ -306,16 +315,16 @@ class Paisaje:
     def cactus(self, g, atlas, p, alto):
         rng = self.rng
         p = np.asarray(p, float)
-        self._tronco(g, atlas, p - [0, 0.1, 0], p + [0, alto, 0], 0.19, 0.15, 'cactus', 10, 0.7)
+        self._tronco(g, atlas, p - [0, 0.1, 0], p + [0, alto, 0], 0.19, 0.15, 'cactus', 22, 0.7, estrias=0.14, tapa=True)
         for sgn in (-1, 1):
-            if rng.random() < 0.3: continue
+            if rng.random() < 0.15: continue
             yb = alto * rng.uniform(0.3, 0.55)
             yaw = rng.uniform(0, 2 * math.pi)
             o = np.array([math.cos(yaw), 0, math.sin(yaw)]) * sgn
             a = p + [0, yb, 0] + o * 0.12
             b = a + o * 0.5 + [0, 0.12, 0]
-            self._tronco(g, atlas, a, b, 0.11, 0.11, 'cactus', 8, 0.7)
-            self._tronco(g, atlas, b - [0, 0.08, 0], b + [0, alto * rng.uniform(0.25, 0.45), 0], 0.11, 0.09, 'cactus', 8, 0.7)
+            self._tronco(g, atlas, a, b, 0.11, 0.11, 'cactus', 14, 0.7, estrias=0.14)
+            self._tronco(g, atlas, b - [0, 0.08, 0], b + [0, alto * rng.uniform(0.25, 0.45), 0], 0.11, 0.09, 'cactus', 14, 0.7, estrias=0.14, tapa=True)
 
     def matas(self, g, atlas, puntos):
         """Matas de pasto: hojas triangulares finas que rompen el borde plano del suelo."""
@@ -412,7 +421,7 @@ class Paisaje:
                    plan=False, atlas='cerca', peso=0.8, e=(0, rng.uniform(-6, 6), 0))
         cerca = dict(arbol=0, conifera=0, palmera=0, arbusto=10, roca=6, cactus=0, matas=2600)
         if k in ('jardin', 'otono'): cerca.update(arbol=7, conifera=1, arbusto=16)
-        elif k == 'bosque': cerca.update(arbol=10, conifera=5, arbusto=18)
+        elif k == 'bosque': cerca.update(arbol=13, conifera=7, arbusto=22)
         elif k == 'montanas': cerca.update(conifera=10, roca=12, arbusto=6)
         elif k == 'nieve': cerca.update(conifera=11, roca=8, arbusto=0, matas=0)
         elif k == 'lago': cerca.update(arbol=5, conifera=5, arbusto=12, roca=9)
@@ -451,11 +460,11 @@ class Paisaje:
         for _ in range(900):
             if n >= 260: break
             a = rng.uniform(0, 2 * math.pi)
-            r = rng.uniform(75, 950)
+            r = rng.uniform(110, 1100)
             x, z = math.cos(a) * r, math.sin(a) * r
             # Parque abierto frente a la casa; el centro de la ciudad queda al frente, más lejos.
             centro = math.exp(-((x + 120) ** 2 + (z + 620) ** 2) / (2 * 260.0 ** 2))
-            if r < 140 and rng.random() < 0.6: continue
+            if r < 200 and rng.random() < 0.6: continue
             w, d = rng.uniform(16, 42), rng.uniform(16, 42)
             alto = rng.uniform(14, 45) + 190 * centro * rng.uniform(0.3, 1.0) ** 1.5
             tono = rng.uniform(0.5, 1.0)
@@ -471,7 +480,7 @@ class Paisaje:
     def _variantes_lejos(self, nev):
         """Árboles lejanos: pocas variantes repetidas miles de veces sobre el terreno."""
         k, rng = self.k, self.rng
-        mezcla = dict(jardin=('arbol', 0.014, 700), otono=('arbol', 0.012, 700), bosque=('mixto', 0.03, 800),
+        mezcla = dict(jardin=('arbol', 0.014, 700), otono=('arbol', 0.02, 800), bosque=('mixto', 0.05, 900),
                       montanas=('conifera', 0.02, 1100), nieve=('conifera', 0.02, 1000), lago=('mixto', 0.02, 1100),
                       playa=('palmera', 0.004, 400), isla=('palmera', 0.01, 3200), desierto=('cactus', 0.0015, 300),
                       ciudad=('arbol', 0.004, 250)).get(k)
@@ -504,10 +513,11 @@ class Paisaje:
         if tipo != 'cactus' and k != 'isla':
             # Bosquecillos y claros: casi nada fuera de las manchas, y más juntos dentro de ellas.
             mancha = fbm(x / 140, z / 140, 4, self.seed + 21)
-            ok &= (mancha > 0.5) | ((mancha > 0.4) & (rng.random(len(x)) < 0.12))
+            if k == 'bosque': ok &= mancha > 0.3
+            else: ok &= (mancha > 0.5) | ((mancha > 0.4) & (rng.random(len(x)) < 0.12))
         # Vista abierta desde la terraza: hacia el frente (−Z) los árboles empiezan más lejos.
         frente = (z < 0) & (np.abs(x) < -z * 0.7)
-        ok &= ~frente | (r > 160)
+        ok &= ~frente | (r > (70 if k == 'bosque' else 160))
         idx = np.nonzero(ok)[0][:n]
         self.far_points = (x[idx], z[idx], hgt[idx], rng.uniform(0.6, 1.4, len(idx)), rng.uniform(0, 2 * math.pi, len(idx)))
         self.far_variants = variantes
@@ -639,17 +649,17 @@ def materiales(t, lejos=True):
         cr, cg, cb = sep(nt, nt.attr('col'))
         azar = nt.white(nt.comb(nt.m('FLOOR', fu), nt.m('FLOOR', fv), nt.m('MULTIPLY', cg, 97.0)))
         tibio = nt.white(nt.comb(nt.m('FLOOR', fv), nt.m('FLOOR', fu), nt.m('MULTIPLY', cb, 53.0)))
-        encendida = nt.m('MULTIPLY', dentro, nt.m('LESS_THAN', azar, 0.34))
+        encendida = nt.m('MULTIPLY', dentro, nt.m('LESS_THAN', azar, 0.2))
         luz = nt.mix(tibio, (1.0, 0.62, 0.3), (0.75, 0.85, 1.0))
         muro = nt.mix(cr, (0.012, 0.013, 0.016), (0.05, 0.05, 0.055))
         base = nt.mix(dentro, muro, (0.004, 0.005, 0.008))
         pb = nt.finish(base, 0.6)
         em = nt.mix(encendida, (0, 0, 0), luz)
         nt.t.links.new(em, pb.inputs['Emission Color'])
-        pb.inputs['Emission Strength'].default_value = t.get('ventanas', 0.9)
+        pb.inputs['Emission Strength'].default_value = t.get('ventanas', 0.16)
         m['edificio'] = mat
         mat = bpy.data.materials.new('farol'); nt = NT(mat)
-        nt.finish((0.8, 0.75, 0.6), 0.8, None, (1.0, 0.8, 0.55), 14.0)
+        nt.finish((0.8, 0.75, 0.6), 0.8, None, (1.0, 0.8, 0.55), 2.5)
         m['farol'] = mat
     if t['exterior'] in ('lago', 'playa', 'isla'):
         agua = lin(t['agua'])

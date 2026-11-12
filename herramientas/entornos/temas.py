@@ -43,7 +43,7 @@ TEMAS = [
          hojas=[h(0x2C5A26), h(0x3A6A2E), h(0x24482A), h(0x4A7434), h(0x1E3F25), h(0x355F2A)]),
     tema('otono-en-el-valle', 'Otoño en el valle', 2471, h(0xF0E4D0), h(0xA06A3C), h(0x9C4A28), h(0x2E2A26), h(0xB0602A),
          'otono', 'dia', 240, 28, sol=h(0xFFE6C0), fuerza=1.05, nubes=0.4, montes=18,
-         suelo=h(0x6E6A34), suelo2=h(0x9A6A30), roca=h(0x6A6460),
+         suelo=h(0x5E7034), suelo2=h(0x8E6A34), roca=h(0x6A6460),
          hojas=[h(0xC4501E), h(0xD9822A), h(0xE0B03A), h(0x9C3A1C), h(0xB8662A), h(0x6E7A30)]),
     tema('loft-nocturno', 'Loft nocturno', 8034, h(0xCFC8BE), h(0x5C4030), h(0x34405A), h(0x18191C), h(0x3A5A34),
          'ciudad', 'noche', 300, 35, sol=h(0x9AAAD0), fuerza=0.35, nubes=0.15, ancho=13.0, libros='oscuros', montes=0,
