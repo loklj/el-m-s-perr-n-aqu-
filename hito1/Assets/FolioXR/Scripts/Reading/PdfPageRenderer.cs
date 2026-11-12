@@ -51,6 +51,8 @@ namespace FolioXR.Reading
         private readonly string _cacheDir;
         private int _requestCounter;
         private string _contentsKey;
+        private string _searchKey;
+        public static bool IsSearchable(string path) => IsReflow(path);
 
 #if UNITY_ANDROID && !UNITY_EDITOR
         private AndroidJavaClass _java;
@@ -216,9 +218,46 @@ namespace FolioXR.Reading
             _contentsKey = null;
         }
 
+        /// <summary>Busca texto en el libro abierto desde el cursor dado ("" = principio).</summary>
+        public IEnumerator Search(string query, string cursor, int limit, Action<SearchList, string> done)
+        {
+            CancelSearch();
+            if (!IsSearchable(_pdfPath))
+            {
+                done(null, "Los PDF y cómics se muestran como imagen: no tienen texto que buscar aquí.");
+                yield break;
+            }
+#if UNITY_ANDROID && !UNITY_EDITOR
+            string key = _searchKey = NextKey("search");
+            _java.CallStatic("requestSearch", _pdfPath, query ?? string.Empty, cursor ?? string.Empty, limit, key);
+            PdfResult result = null;
+            yield return WaitFor(key, r => result = r);
+            if (_searchKey != key) yield break;
+            _searchKey = null;
+            if (result == null || !result.Ok) { done(null, result?.ErrorDetail ?? "No se pudo buscar en el libro."); yield break; }
+            SearchList list = null;
+            string error = null;
+            try { list = JsonUtility.FromJson<SearchList>(result.Data); }
+            catch (Exception) { error = "Respuesta de búsqueda no válida."; }
+            done(list ?? new SearchList(), error);
+#else
+            done(new SearchList(), "La búsqueda funciona en el visor.");
+            yield break;
+#endif
+        }
+
+        public void CancelSearch()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (_java != null && _searchKey != null) _java.CallStatic("clearStatus", _searchKey);
+#endif
+            _searchKey = null;
+        }
+
         public void Dispose()
         {
             CancelContents();
+            CancelSearch();
 #if UNITY_ANDROID && !UNITY_EDITOR
             if (_java != null)
             {
@@ -244,6 +283,7 @@ namespace FolioXR.Reading
             while (true)
             {
                 if (key.Contains("-contents-") && _contentsKey != key) yield break;
+                if (key.Contains("-search-") && _searchKey != key) yield break;
                 string status = _java.CallStatic<string>("getStatus", key);
                 if (status != null && status != "PENDING")
                 {

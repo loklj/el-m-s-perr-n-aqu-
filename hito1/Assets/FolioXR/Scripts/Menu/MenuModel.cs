@@ -191,7 +191,8 @@ namespace FolioXR.Menu
         private TouchScreenKeyboard _keyboard;
         private string _keyboardFor;
         private int _keyboardBookmark = -1;
-        private int _readingList, _readingPage;
+        private int _readingList, _readingPage; // 1 índice, 2 marcadores, 3 búsqueda.
+        private bool _keyboardSearch;
         private string _readingFor;
 
         private void AddBookSources(List<MenuOption> options, BookLibrary library)
@@ -285,7 +286,16 @@ namespace FolioXR.Menu
             if (_keyboard == null) return;
             TouchScreenKeyboard.Status status = _keyboard.status;
             if (status == TouchScreenKeyboard.Status.Visible) return;
-            if (status == TouchScreenKeyboard.Status.Done && _keyboardCollection != null)
+            if (_keyboardSearch)
+            {
+                BookLibrary library = BookLibrary.Instance;
+                if (status == TouchScreenKeyboard.Status.Done && library?.Current != null && library.Current.id == _keyboardFor)
+                {
+                    library.Search(_keyboard.text);
+                    _readingList = 3; _readingPage = 0; _readingFor = library.Current.id;
+                }
+            }
+            else if (status == TouchScreenKeyboard.Status.Done && _keyboardCollection != null)
             {
                 string name = (_keyboard.text ?? string.Empty).Trim();
                 if (_keyboardCollection.Length == 0)
@@ -306,6 +316,7 @@ namespace FolioXR.Menu
             _keyboard = null;
             _keyboardFor = null;
             _keyboardCollection = null;
+            _keyboardSearch = false;
             if (SelectedCategory == MenuCategory.Biblioteca) RebuildOptions();
             Changed?.Invoke();
         }
@@ -415,11 +426,51 @@ namespace FolioXR.Menu
             RebuildOptions();
         }
 
+        /// <summary>Resultados de «Buscar en el libro»: cinco por página, cada uno lleva a su página.</summary>
+        private void AddSearchResults(List<MenuOption> options, BookLibrary library)
+        {
+            options.Add(new MenuOption("Buscar: «" + Shorten(library.SearchQuery, 24) + "»"));
+            IReadOnlyList<SearchHit> hits = library.SearchResults;
+            if (library.SearchLoading && hits.Count == 0) options.Add(new MenuOption("Buscando…"));
+            else if (!string.IsNullOrEmpty(library.SearchMessage)) options.Add(new MenuOption(Shorten(library.SearchMessage, 90)));
+            int pages = Mathf.Max(1, (hits.Count + 4) / 5);
+            _readingPage = Mathf.Clamp(_readingPage, 0, pages - 1);
+            for (int i = _readingPage * 5; i < Mathf.Min(hits.Count, (_readingPage + 1) * 5); i++)
+            {
+                SearchHit hit = hits[i];
+                options.Add(new MenuOption("Pág. " + (hit.page + 1) + "\n" + Shorten(hit.text, 60),
+                    () => library.GoToBookmark(hit.page), () => !library.Repaginating));
+            }
+            AddReadingPages(options, pages);
+            if (library.SearchLoading && hits.Count > 0) options.Add(new MenuOption("Buscando más…"));
+            else if (library.SearchHasMore)
+                options.Add(new MenuOption("Más resultados", () => { library.SearchMore(); _readingPage = hits.Count / 5; RebuildOptions(); },
+                    () => !library.Repaginating));
+            options.Add(new MenuOption("Nueva búsqueda", OpenSearchKeyboard, () => !library.Repaginating));
+        }
+
+        /// <summary>Teclado del sistema para escribir qué buscar en el libro abierto.</summary>
+        private void OpenSearchKeyboard()
+        {
+            BookLibrary library = BookLibrary.Instance;
+            if (library?.Current == null) return;
+            if (!TouchScreenKeyboard.isSupported)
+            { BookLibrary.NotifyUser("El teclado del sistema no está disponible en este visor."); return; }
+            _keyboardSearch = true;
+            _keyboardFor = library.Current.id;
+            _keyboard = TouchScreenKeyboard.Open(library.SearchQuery, TouchScreenKeyboardType.Default,
+                false, false, false, false, "Buscar en el libro", 120);
+        }
+
         private bool AddReadingOptions(List<MenuOption> options, BookLibrary library)
         {
             if (_readingList == 0) return false;
             if (library.Current == null || library.Current.id != _readingFor) { _readingList = 0; return false; }
-            options.Add(new MenuOption("Volver", () => { library.CancelContents(); _readingList = 0; RebuildOptions(); }));
+            options.Add(new MenuOption("Volver", () =>
+            {
+                if (_readingList == 3) library.CancelSearch(); else library.CancelContents();
+                _readingList = 0; RebuildOptions();
+            }));
             if (_readingList == 1)
             {
                 if (library.ContentsLoading) { options.Add(new MenuOption("Leyendo índice…")); return true; }
@@ -436,6 +487,7 @@ namespace FolioXR.Menu
                 AddReadingPages(options, pages);
                 options.Add(new MenuOption("Actualizar índice", library.LoadContents, () => !library.Repaginating));
             }
+            else if (_readingList == 3) AddSearchResults(options, library);
             else
             {
                 int pages = Mathf.Max(1, (library.NamedBookmarks.Count + 2) / 3);
@@ -642,6 +694,8 @@ namespace FolioXR.Menu
                     if (library.Books.Count == 0) options.Add(new MenuOption("Aún no hay libros:\nimporta el primero"));
                     else if (visible.Count == 0) options.Add(new MenuOption("Ningún libro con\neste filtro"));
                     options.Add(new MenuOption("Índice del libro", () => OpenReadingList(1), () => library.CanReadContents && !library.Repaginating));
+                    options.Add(new MenuOption(library.Current == null || library.CanSearch ? "Buscar en el libro" : "Buscar en el libro\n(no en PDF ni cómics)",
+                        OpenSearchKeyboard, () => library.CanSearch && !library.Repaginating));
                     options.Add(new MenuOption("Lista de marcadores", () => OpenReadingList(2), () => library.Current != null));
                     break;
                 case MenuCategory.Entornos:

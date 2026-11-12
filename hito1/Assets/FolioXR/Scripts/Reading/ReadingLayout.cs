@@ -26,4 +26,16 @@ namespace FolioXR.Reading
         public string message;
         public List<ContentsEntry> entries = new List<ContentsEntry>();
     }
+    [Serializable]
+    public sealed class SearchHit
+    {
+        public int page;
+        public string text;
+    }
+    [Serializable]
+    public sealed class SearchList
+    {
+        public string next, message;
+        public List<SearchHit> hits = new List<SearchHit>();
+    }
 }

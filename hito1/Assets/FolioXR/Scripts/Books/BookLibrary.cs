@@ -91,6 +91,18 @@ namespace FolioXR.Books
             Current.format == "mobi" || Current.format == "azw" || Current.format == "azw3");
         private List<NamedBookmark> _namedBookmarks = new List<NamedBookmark>();
         private List<ContentsEntry> _contents = new List<ContentsEntry>();
+        // Búsqueda en el libro abierto: resultados acumulados y cursor para «Más resultados».
+        public const int SearchBatch = 20;
+        public IReadOnlyList<SearchHit> SearchResults => _searchHits;
+        public string SearchQuery { get; private set; } = string.Empty;
+        public string SearchMessage { get; private set; } = string.Empty;
+        public bool SearchLoading { get; private set; }
+        public bool SearchHasMore => !string.IsNullOrEmpty(_searchNext);
+        public bool CanSearch => Current != null && PdfPageRenderer.IsSearchable(Current.path);
+        private readonly List<SearchHit> _searchHits = new List<SearchHit>();
+        private string _searchNext;
+        private int _searchGeneration;
+        private Coroutine _searchRoutine;
         private int _contentsGeneration;
         private Coroutine _contentsRoutine;
         public BookEntry Current { get; private set; }
@@ -497,12 +509,62 @@ namespace FolioXR.Books
         private void ClearContents()
         {
             CancelContents(); _contents.Clear(); ContentsMessage = string.Empty;
+            ClearSearch();
+        }
+
+        public void CancelSearch()
+        {
+            _searchGeneration++;
+            _book?.CancelSearch();
+            if (_searchRoutine != null) StopCoroutine(_searchRoutine);
+            _searchRoutine = null; SearchLoading = false;
+        }
+
+        private void ClearSearch()
+        {
+            CancelSearch(); _searchHits.Clear(); _searchNext = null; SearchMessage = string.Empty; SearchQuery = string.Empty;
+        }
+
+        /// <summary>Nueva búsqueda desde el principio del libro abierto.</summary>
+        public void Search(string query)
+        {
+            query = (query ?? string.Empty).Trim();
+            if (Current == null || _book == null || Repaginating) return;
+            ClearSearch(); SearchQuery = query;
+            if (query.Length == 0) { SearchMessage = "Escribe qué buscar."; StateChanged?.Invoke(); return; }
+            if (!CanSearch) { SearchMessage = "Los PDF y cómics se muestran como imagen: no tienen texto que buscar aquí."; StateChanged?.Invoke(); return; }
+            SearchLoading = true;
+            _searchRoutine = StartCoroutine(RunSearch(Current.id, string.Empty, _searchGeneration));
+            StateChanged?.Invoke();
+        }
+
+        /// <summary>Siguiente lote de coincidencias de la misma búsqueda.</summary>
+        public void SearchMore()
+        {
+            if (!SearchHasMore || SearchLoading || Current == null || _book == null || Repaginating) return;
+            SearchLoading = true;
+            _searchRoutine = StartCoroutine(RunSearch(Current.id, _searchNext, _searchGeneration));
+            StateChanged?.Invoke();
+        }
+
+        private IEnumerator RunSearch(string id, string cursor, int generation)
+        {
+            yield return _book.Search(SearchQuery, cursor, SearchBatch, (list, error) =>
+            {
+                if (generation != _searchGeneration || Current == null || Current.id != id) return;
+                if (list != null && list.hits != null) _searchHits.AddRange(list.hits);
+                _searchNext = error == null ? list?.next : null;
+                SearchMessage = error ?? (_searchHits.Count == 0 ? "Sin coincidencias para «" + SearchQuery + "»." : list?.message ?? string.Empty);
+                SearchLoading = false;
+                StateChanged?.Invoke();
+            });
+            if (generation == _searchGeneration) _searchRoutine = null;
         }
 
         public void LoadContents()
         {
             if (!CanReadContents || Repaginating || _book == null) return;
-            ClearContents(); ContentsLoading = true;
+            CancelContents(); _contents.Clear(); ContentsMessage = string.Empty; ContentsLoading = true;
             _contentsRoutine = StartCoroutine(ReadContents(Current.id, _contentsGeneration));
             StateChanged?.Invoke();
         }

@@ -1,0 +1,24 @@
+// Prueba del nucleo de busqueda (el mismo texto que corre en el WebView).
+const { folioFind } = require(process.argv[2]);
+let fails = 0;
+const ok = (c, what) => { if (!c) { fails++; console.log('FALLA: ' + what); } };
+let r = folioFind(['El Niño comió ', 'ÁRBOLES y arboles.'], 'arboles', 0, 10);
+ok(r.hits.length === 2 && !r.more, 'tildes y mayusculas');
+ok(r.hits[0].t0 === 1 && r.hits[0].i0 === 0 && r.hits[0].i1 === 7, 'posicion en el nodo');
+r = folioFind(['el ni', 'ño grande'], 'NINO', 0, 10);
+ok(r.hits.length === 1 && r.hits[0].t0 === 0 && r.hits[0].i0 === 3 && r.hits[0].t1 === 1 && r.hits[0].i1 === 2, 'cruza nodos');
+r = folioFind(['uno   dos\n\ntres'], 'dos tres', 0, 10);
+ok(r.hits.length === 1, 'espacios colapsados');
+const many = ['x '.repeat(30)];
+r = folioFind(many, 'x', 0, 10); ok(r.hits.length === 10 && r.more, 'limite y mas');
+r = folioFind(many, 'x', 25, 10); ok(r.hits.length === 5 && !r.more, 'saltar');
+r = folioFind(['nada aqui'], 'zzz', 0, 10); ok(r.hits.length === 0 && !r.more, 'sin coincidencias');
+r = folioFind(['texto'], '   ', 0, 10); ok(r.hits.length === 0, 'consulta vacia');
+r = folioFind(['a'.repeat(100) + ' clave ' + 'b'.repeat(100)], 'clave', 0, 1);
+ok(r.hits[0].text.startsWith('…') && r.hits[0].text.endsWith('…') && r.hits[0].text.includes('clave'), 'fragmento con contexto');
+r = folioFind(['emoji 😀 café'], 'cafe', 0, 5); ok(r.hits.length === 1 && r.hits[0].i0 === 9, 'pares sustitutos');
+const huge = 'palabra '.repeat(200000) + 'aguja';
+const t = Date.now(); r = folioFind([huge], 'aguja', 0, 5);
+ok(r.hits.length === 1, 'capitulo grande'); console.log('1,6 MB en ' + (Date.now() - t) + ' ms');
+console.log(fails ? 'busqueda JS: ' + fails + ' fallas' : 'busqueda JS: OK');
+process.exit(fails ? 1 : 0);

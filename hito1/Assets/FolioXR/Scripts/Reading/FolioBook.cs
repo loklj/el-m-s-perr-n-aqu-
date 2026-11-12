@@ -200,6 +200,17 @@ namespace FolioXR.Reading
 
         public void CancelContents() { _renderer?.CancelContents(); }
 
+        /// <summary>Búsqueda de texto en el renderizador abierto (mismas páginas que se ven).</summary>
+        public IEnumerator Search(string query, string cursor, int limit, System.Action<SearchList, string> done)
+        {
+            string id = DocumentId;
+            while (_busy && DocumentId == id) yield return null;
+            if (_renderer == null || DocumentId != id) { done(null, "El libro cambió."); yield break; }
+            yield return _renderer.Search(query, cursor, limit, done);
+        }
+
+        public void CancelSearch() { _renderer?.CancelSearch(); }
+
         public bool GoToPage(int leftIndex)
         {
             if (_busy || _renderer == null || _pageCount <= 0) return false;

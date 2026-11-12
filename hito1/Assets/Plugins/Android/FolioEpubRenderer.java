@@ -195,6 +195,35 @@ public final class FolioEpubRenderer {
             return "OK:"+FolioContents.json(entries);
         });
     }
+    /** Busqueda en el libro abierto: hasta limit coincidencias desde el cursor "capitulo:saltar". */
+    public static void requestSearch(String file, String query, String from, int limit, String key) {
+        submit(key, generation -> {
+            String q = FolioBookSearch.clip(query);
+            if (q.isEmpty()) return "OK:" + FolioBookSearch.json(new ArrayList<>(), "", "Escribe qué buscar.");
+            open(file, generation);
+            int[] c = FolioBookSearch.cursor(from);
+            int want = FolioBookSearch.clamp(limit), first = 0, chapter = Math.min(c[0], counts.length), skip = c[1];
+            for (int i = 0; i < chapter; i++) first += counts[i];
+            List<FolioBookSearch.Hit> hits = new ArrayList<>();
+            String next = "";
+            for (; chapter < counts.length; chapter++) {
+                check(generation, key); load(chapter);
+                org.json.JSONObject result = new org.json.JSONObject(js(FolioBookSearch.script(q, skip, want - hits.size())));
+                org.json.JSONArray found = result.getJSONArray("hits");
+                int last = 0;
+                for (int i = 0; i < found.length(); i++) {
+                    org.json.JSONObject hit = found.getJSONObject(i);
+                    int local = hit.optInt("page", -1); local = local < 0 ? last : Math.min(local, counts[chapter] - 1); last = local;
+                    hits.add(new FolioBookSearch.Hit(first + local, hit.optString("text", "")));
+                }
+                if (result.optBoolean("more")) { next = chapter + ":" + (skip + found.length()); break; }
+                skip = 0; first += counts[chapter];
+                if (hits.size() >= want) { if (chapter + 1 < counts.length) next = (chapter + 1) + ":0"; break; }
+            }
+            String message = hits.isEmpty() ? (from == null || from.isEmpty() ? "Sin coincidencias." : "No hay más coincidencias.") : "";
+            return "OK:" + FolioBookSearch.json(hits, next, message);
+        });
+    }
     private static byte[] page(int index, int width, int generation) throws Exception {
         check(generation, null);
         String cacheKey = index + ":" + width;
