@@ -1,5 +1,26 @@
 # Entornos
 
+## Entornos horneados en Blender (Claude, 12 de noviembre de 2026, sin probar en el visor)
+
+En la prueba del 11 de noviembre las ideas de los once estilos gustaron, pero la calidad no: luz plana, árboles de pocos polígonos y un cielo de 512 píxeles. Con permiso del usuario se rehicieron con Blender.
+
+**Qué cambia para quien lo usa:** la casa y el paisaje se ven con luz real (sol que entra por los vanos, sombras suaves, rebotes de color), los materiales tienen textura (tablas, telas, alfombras), hay muebles con más detalle (cojines, cortinas, cuadros, plantas con hojas) y el cielo es un panorama de 6144 × 3072 con nubes y todo el paisaje lejano.
+
+**Cómo funciona:**
+
+- `herramientas/entornos/generar.py` construye la escena en Blender, hornea la luz con Cycles y exporta a `hito1/Assets/FolioXR/Resources/Entornos/<tema>/`. El detalle está en [herramientas/entornos/LEEME.md](../herramientas/entornos/LEEME.md).
+- En el visor, `BakedEnvironment.cs` carga tres mallas (casa, terreno cercano y cielo) con el sombreador `FolioXR/Baked`, que muestra la textura horneada sin calcular luz. Son tres draw calls.
+- `HouseGenerator.cs` sigue creando los colisionadores, el suelo caminable y los puntos de lectura, igual que antes. Si un estilo no tiene archivos horneados, se dibuja su versión procedural anterior.
+- La luz direccional de la escena sigue tomando la dirección y el color del sol de cada estilo, para que el libro y las manos combinen con el entorno.
+- `FolioXREnvironmentImport.cs` (Editor) importa las texturas a tamaño completo y en ASTC. Sin él, Unity las reduciría a 2048 px.
+
+**Límites conocidos:**
+
+- El paisaje lejano es una imagen: se ve correcto desde la casa, pero no cambia de perspectiva al caminar lejos.
+- El agua del lago y del mar solo existe en el panorama (con reflejos reales calculados desde la casa).
+- El terreno visible ondula más allá de 15 m, pero el suelo caminable sigue siendo plano.
+- Cada estilo horneado pesa unos 20 MB en el repositorio y unos 27 MB en el APK.
+
 ## Once estilos realistas (Claude, 11 de noviembre de 2026, sin probar en el visor)
 
 Pedido del usuario: entornos realistas tomando como ejemplo los de Meta. Son **originales**: se inspiran en su realismo (paisaje con relieve, cielo con sol, nubes y horizonte, luz coherente), pero no copian nombres, modelos ni texturas de Meta. Todo sigue siendo procedural, sin assets.
