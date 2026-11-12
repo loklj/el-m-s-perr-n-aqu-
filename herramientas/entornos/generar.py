@@ -64,13 +64,10 @@ def escena(t, lejos=True):
     lejos_objs = P.lejos.build()
     mats = materiales.crear(t)
     mats.update(paisaje.materiales(t))
-    var_objs = [gv.build() for gv in P.far_variants]
+    var_objs = [gv.build() for gv in P.far_variants] if lejos else []
     for o in casa_objs + cerca + lejos_objs + [x for grp in var_objs for x in grp]:
         o.data.materials.append(mats[o['mat']])
     inst = paisaje.instanciar(var_objs, P.far_points) if lejos else []
-    if not lejos:
-        for grp in var_objs:
-            for o in grp: o.hide_render = True
     ctx = dict(t=t, casa=c, P=P, casa_objs=casa_objs, cerca=cerca, lejos=lejos_objs, inst=inst, mats=mats)
     log(f"casa: {sum(len(o.data.polygons) for o in casa_objs)} caras ({quitadas} tapadas quitadas); "
         f"cerca: {sum(len(o.data.polygons) for o in cerca)}; árboles lejanos: {len(P.far_points[0])}")
@@ -454,7 +451,9 @@ def memoria():
 
 def todo(t, a):
     t0 = time.time()
-    ctx = escena(t)
+    # Para hornear la casa o el terreno cercano no hacen falta los miles de árboles lejanos (solo
+    # aportan sombra a cientos de metros) y con ellos el proceso puede pasar de 8 GB.
+    ctx = escena(t, lejos=not a.solo)
     sc = bpy.context.scene
     slug = t['slug']
     out = os.path.join(SALIDA, slug)
