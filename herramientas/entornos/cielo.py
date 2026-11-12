@@ -4,10 +4,11 @@ import numpy as np
 from ruido import fbm, suave
 
 
-def direcciones(W, H):
-    """Dirección (Blender) de cada píxel; fila 0 = abajo. u = 0,5 + atan2(x, y)/2π."""
+def direcciones(W, H, y0=0, y1=None):
+    """Dirección (Blender) de cada píxel de las filas y0..y1; fila 0 = abajo. u = 0,5 + atan2(x, y)/2π."""
+    y1 = H if y1 is None else y1
     u = (np.arange(W) + 0.5) / W
-    v = (np.arange(H) + 0.5) / H
+    v = (np.arange(y0, y1) + 0.5) / H
     lon = (u - 0.5) * 2 * math.pi
     lat = (v - 0.5) * math.pi
     LON, LAT = np.meshgrid(lon, lat)
@@ -35,9 +36,10 @@ def _ampliar(img, W, H):
     return cv2.resize(img.astype(np.float32), (W, H), interpolation=cv2.INTER_CUBIC)
 
 
-def cielo(t, base, W, H, E):
-    """base: render del cielo de Blender sin disco solar (float, fila 0 abajo), o None de noche."""
-    d = direcciones(W, H)
+def cielo(t, base, W, H, E, y0=0, y1=None, base_grande=None, estrellas=None):
+    """Filas y0..y1 del cielo. base: render del cielo de Blender sin disco solar (fila 0 abajo), o None de noche."""
+    y1 = H if y1 is None else y1
+    d = direcciones(W, H, y0, y1)
     s = sol(t)
     seed = t['semilla']
     cos = np.clip(d @ s, -1, 1)
@@ -52,7 +54,7 @@ def cielo(t, base, W, H, E):
         sky = (hor + (zen - hor) * up ** 0.5) / E
         L0 = 0.03 / E
     else:
-        sky = np.maximum(_ampliar(base, W, H), 0)
+        sky = np.maximum(base_grande[y0:y1] if base_grande is not None else _ampliar(base, W, H)[y0:y1], 0)
         hb = base[base.shape[0] // 2 + 2: base.shape[0] // 2 + 12]
         L0 = float((hb @ np.array([0.2126, 0.7152, 0.0722])).mean())
     # ── Nubes sobre un plano: se aplanan hacia el horizonte ──
@@ -92,20 +94,7 @@ def cielo(t, base, W, H, E):
         via = banda * (0.35 + 0.65 * fbm(d[..., 0] * 7 + 3, d[..., 1] * 7 + d[..., 2] * 5, 5, seed + 4)) ** 2
         tenue = 0.25 if t['exterior'] == 'ciudad' else 1.0
         out += (np.array([0.05, 0.055, 0.075]) / E) * via[..., None] * libre * tenue * suave(0.0, 0.25, z)[..., None]
-        ns = 9000
-        v3 = rng.normal(size=(ns * 2, 3)); v3 /= np.linalg.norm(v3, axis=1, keepdims=True)
-        v3 = v3[v3[:, 2] > 0.01]
-        dens = 0.35 + 1.5 * np.exp(-((v3 @ mv) / 0.22) ** 2)
-        v3 = v3[rng.random(len(v3)) < dens / 1.85][:ns]
-        mag = rng.pareto(2.2, len(v3)) * 0.12 + 0.05
-        col = np.array([1.0, 0.96, 0.9]) + rng.normal(scale=0.08, size=(len(v3), 3))
-        u = 0.5 + np.arctan2(v3[:, 0], v3[:, 1]) / (2 * math.pi); vv = 0.5 + np.arcsin(v3[:, 2]) / math.pi
-        xi = np.clip((u * W).astype(int), 1, W - 2); yi = np.clip((vv * H).astype(int), 1, H - 2)
-        capa = np.zeros((H, W, 3), np.float32)
-        b = (np.minimum(mag, 2.5)[:, None] * col * tenue * suave(0.01, 0.2, v3[:, 2])[:, None]).astype(np.float32)
-        np.add.at(capa, (yi, xi), b)
-        import cv2
-        capa = cv2.GaussianBlur(capa, (0, 0), max(0.6, W / 8192 * 1.1)) * (2.2 * max(1.0, (W / 4096) ** 2))
+        capa = (estrellas if estrellas is not None else capa_estrellas(t, W, H))[y0:y1]
         out += capa / E * libre
         luna = suave(0.62, 0.52, ang)
         mares = 0.78 + 0.22 * fbm(d[..., 0] * 260, d[..., 1] * 260 + d[..., 2] * 190, 3, seed)
@@ -121,6 +110,54 @@ def cielo(t, base, W, H, E):
     if t['exterior'] == 'ciudad':
         out += (np.array([0.35, 0.2, 0.1]) * 0.12 / E) * (np.exp(-np.maximum(z, 0) / 0.09))[..., None]
     return out.astype(np.float32)
+
+
+def capa_estrellas(t, W, H):
+    """Estrellas sueltas (más densas en la vía láctea), como imagen completa de float32."""
+    import cv2
+    seed = t['semilla']
+    rng = np.random.default_rng(seed)
+    mv = np.array([0.45, 0.82, 0.35]); mv /= np.linalg.norm(mv)
+    tenue = 0.25 if t['exterior'] == 'ciudad' else 1.0
+    ns = 9000
+    v3 = rng.normal(size=(ns * 2, 3)); v3 /= np.linalg.norm(v3, axis=1, keepdims=True)
+    v3 = v3[v3[:, 2] > 0.01]
+    dens = 0.35 + 1.5 * np.exp(-((v3 @ mv) / 0.22) ** 2)
+    v3 = v3[rng.random(len(v3)) < dens / 1.85][:ns]
+    mag = rng.pareto(2.2, len(v3)) * 0.12 + 0.05
+    col = np.array([1.0, 0.96, 0.9]) + rng.normal(scale=0.08, size=(len(v3), 3))
+    u = 0.5 + np.arctan2(v3[:, 0], v3[:, 1]) / (2 * math.pi); vv = 0.5 + np.arcsin(v3[:, 2]) / math.pi
+    xi = np.clip((u * W).astype(int), 1, W - 2); yi = np.clip((vv * H).astype(int), 1, H - 2)
+    capa = np.zeros((H, W, 3), np.float32)
+    b = (np.minimum(mag, 2.5)[:, None] * col * tenue * suave(0.01, 0.2, v3[:, 2])[:, None]).astype(np.float32)
+    np.add.at(capa, (yi, xi), b)
+    return cv2.GaussianBlur(capa, (0, 0), max(0.6, W / 8192 * 1.1)) * np.float32(2.2 * max(1.0, (W / 4096) ** 2))
+
+
+def componer(t, base, tierra, dist, W, H, E, filas=192):
+    """Panorama final: cielo + tierra con bruma, franja por franja, en float32."""
+    import cv2
+    base_grande = None
+    if base is not None:
+        base_grande = np.maximum(cv2.resize(base.astype(np.float32), (W, H), interpolation=cv2.INTER_CUBIC), 0)
+    estrellas = capa_estrellas(t, W, H) if t['cielo'] == 'noche' else None
+    # Color del horizonte por columna (para la bruma), del cielo justo sobre el horizonte.
+    yh = int(H * 0.5 + H * 0.012)
+    fila = cielo(t, base, W, H, E, yh, yh + 1, base_grande, estrellas)[0]
+    k = max(3, W // 16) | 1
+    ancha = np.concatenate([fila[-k:], fila, fila[:k]])
+    fila = cv2.blur(np.tile(ancha[None], (3, 1, 1)), (k, 1))[1][k:-k].astype(np.float32)
+    alcance = dict(dia=9000.0, atardecer=5500.0, nublado=2600.0, noche=4000.0)[t['cielo']]
+    if t['exterior'] in ('playa', 'isla'): alcance *= 1.6
+    out = np.empty((H, W, 3), np.float32)
+    for y0 in range(0, H, filas):
+        y1 = min(H, y0 + filas)
+        sky = cielo(t, base, W, H, E, y0, y1, base_grande, estrellas)
+        alfa = np.clip(tierra[y0:y1, :, 3], 0, 1)[..., None]
+        f = (1 - np.exp(-dist[y0:y1] / alcance))[..., None].astype(np.float32)
+        suelo = tierra[y0:y1, :, :3] * (1 - f) + fila[None] * f * alfa
+        out[y0:y1] = suelo + sky * (1 - alfa)
+    return out
 
 
 def bruma(tierra, alfa, dist, cielo_img, t, E):

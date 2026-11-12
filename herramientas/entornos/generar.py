@@ -49,6 +49,8 @@ def escena(t, lejos=True):
     sc.cycles.diffuse_bounces = 4
     sc.cycles.glossy_bounces = 3
     sc.cycles.caustics_reflective = sc.cycles.caustics_refractive = False
+    sc.cycles.use_auto_tile = True
+    sc.cycles.tile_size = 2048
     sc.view_settings.view_transform = 'Raw'
     sc.render.image_settings.file_format = 'OPEN_EXR'
     sc.render.image_settings.color_depth = '32'
@@ -135,7 +137,11 @@ def guardar_jpg(path, rgb8, calidad=92):
     cv2.imwrite(path, rgb8[::-1, :, ::-1], [cv2.IMWRITE_JPEG_QUALITY, calidad])
 
 
-def render(path, w, h, spp, transparente=False):
+def render(path, w, h, spp, transparente=False, cache=False):
+    """Renderiza a EXR. Con cache=True reutiliza el EXR de una corrida anterior con el mismo nombre."""
+    if cache and os.path.exists(path + '.exr'):
+        log('se reutiliza', os.path.basename(path) + '.exr')
+        return leer_exr(path + '.exr')
     sc = bpy.context.scene
     sc.render.resolution_x, sc.render.resolution_y = w, h
     sc.cycles.samples = spp
@@ -313,7 +319,14 @@ def hornear(ob, tam, spp):
     bpy.ops.object.bake(type='COMBINED', pass_filter={'DIFFUSE', 'EMIT', 'DIRECT', 'INDIRECT'}, use_clear=True)
     log(f'horneado {ob.name} {tam}² {spp} spp: {time.time() - t0:.0f} s')
     a = np.empty(tam * tam * 4, np.float32); img.pixels.foreach_get(a)
-    return a.reshape(tam, tam, 4)[..., :3]
+    luz = a.reshape(tam, tam, 4)[..., :3].copy()
+    del a
+    # La imagen de 32 bits ocupa cientos de MB: se suelta antes del siguiente paso.
+    for slot in ob.material_slots:
+        node = slot.material.node_tree.nodes.get('horno')
+        if node: node.image = None
+    bpy.data.images.remove(img)
+    return luz
 
 
 def horneado_guardado(ob, tam, spp, path):
@@ -371,7 +384,7 @@ def panorama(ctx, ancho, spp, E):
         oculto = {o: o.hide_render for o in todos}
         for o in todos: o.hide_render = True
         ctx['sky'].sun_disc = False
-        base = render(f'{CACHE}/base', 1024, 512, 1)[..., :3]
+        base = render(f'{CACHE}/{t["slug"]}_base', 1024, 512, 1, cache=True)[..., :3]
         ctx['sky'].sun_disc = True
         for o, h in oculto.items(): o.hide_render = h
     # 2) Tierra: la casa y lo cercano no se ven (ya existen en 3D), pero sí dan sombra y reflejo.
@@ -379,7 +392,7 @@ def panorama(ctx, ancho, spp, E):
         o.visible_camera = False
     for o in todos:
         if o.name.startswith('terreno_dentro'): o.hide_render = False
-    tierra = render(f'{CACHE}/tierra', ancho, alto, spp, transparente=True)
+    tierra = render(f'{CACHE}/{t["slug"]}_tierra_{ancho}_{spp}', ancho, alto, spp, transparente=True, cache=True)
     # 3) Distancia, para la bruma.
     vl = bpy.context.view_layer
     dm = bpy.data.materials.new('distancia'); dm.use_nodes = True
@@ -388,14 +401,13 @@ def panorama(ctx, ancho, spp, E):
     nt.links.new(cd.outputs['View Distance'], em.inputs['Strength']); nt.links.new(em.outputs[0], out.inputs[0])
     vl.material_override = dm
     sc.cycles.use_denoising = False
-    dist = render(f'{CACHE}/dist', 2048, 1024, 1, transparente=True)[..., 0]
+    dist = render(f'{CACHE}/{t["slug"]}_dist', 2048, 1024, 1, transparente=True, cache=True)[..., 0]
     sc.cycles.use_denoising = True
     vl.material_override = None
+    # 4) Composición por franjas de filas: a 6144 × 3072 el panorama completo en float64 no cabe en 8 GB.
     dist = cv2.resize(dist, (ancho, alto), interpolation=cv2.INTER_LINEAR)
-    # 4) Composición.
-    sky = cielo.cielo(t, base, ancho, alto, E)
-    alfa = np.clip(tierra[..., 3], 0, 1)
-    rgb = cielo.bruma(tierra[..., :3], alfa, dist, sky, t, E) + sky * (1 - alfa[..., None])
+    rgb = cielo.componer(t, base, tierra, dist, ancho, alto, E)
+    del tierra, dist
     return rgb, ojo
 
 
@@ -435,6 +447,11 @@ def comprobar(ctx, objs_tex, pano_jpg, nombres, ojo):
         log('comprobación', sc.render.filepath)
 
 
+def memoria():
+    import resource
+    log(f'memoria máxima: {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6:.1f} GB')
+
+
 def todo(t, a):
     t0 = time.time()
     ctx = escena(t)
@@ -444,11 +461,21 @@ def todo(t, a):
     # Al hornear, el terreno interior del panorama estorba (coincide con los parches cercanos).
     for o in ctx['lejos']:
         if o.name.startswith('terreno_dentro'): o.hide_render = True
-    E = ctx['E'] = exposicion(ctx)
+    # Cada horneado puede ir en un proceso aparte (--solo): con 8 GB no caben los dos seguidos.
+    fe = f'{CACHE}/{t["slug"]}_E.txt'
+    if os.path.exists(fe): E = float(open(fe).read())
+    else:
+        E = exposicion(ctx)
+        with open(fe, 'w') as f: f.write(repr(E))
+    ctx['E'] = E
     casa_ob = unir_y_empaquetar(ctx['casa_objs'], 'casa', a.tam)
     cerca_ob = unir_y_empaquetar(ctx['cerca'], 'cerca', a.tam)
     ctx['fijos'] = [casa_ob, cerca_ob]
+    if a.solo == 'cerca':
+        horneado_guardado(cerca_ob, a.tam, max(16, a.spp // 2), f'{CACHE}/{slug}_cerca_{a.tam}.npy')
+        return memoria()
     luz_casa = horneado_guardado(casa_ob, a.tam, a.spp, f'{CACHE}/{slug}_casa_{a.tam}.npy')
+    if a.solo == 'casa': return memoria()
     luz_cerca = horneado_guardado(cerca_ob, a.tam, max(16, a.spp // 2), f'{CACHE}/{slug}_cerca_{a.tam}.npy')
     guardar_jpg(f'{out}/casa_luz.jpg', cielo.a_srgb(luz_casa, E), 93)
     guardar_jpg(f'{out}/cerca_luz.jpg', cielo.a_srgb(luz_cerca, E), 93)
@@ -462,6 +489,7 @@ def todo(t, a):
     comprobar(ctx, [(casa_ob, f'{out}/casa_luz.jpg'), (cerca_ob, f'{out}/cerca_luz.jpg')], f'{out}/cielo.jpg',
               a.vista.split(','), ojo)
     log(f'{slug} listo en {(time.time() - t0) / 60:.1f} min')
+    memoria()
 
 
 if __name__ == '__main__':
@@ -469,6 +497,7 @@ if __name__ == '__main__':
     ap.add_argument('tema')
     ap.add_argument('--vista', default='sofa,terraza,cama,jardin')
     ap.add_argument('--todo', action='store_true')
+    ap.add_argument('--solo', choices=['casa', 'cerca'], help='hornea solo ese atlas y termina (se guarda en caché)')
     ap.add_argument('--tam', type=int, default=4096)
     ap.add_argument('--spp', type=int, default=28)
     ap.add_argument('--pano', type=int, default=6144)
@@ -477,7 +506,7 @@ if __name__ == '__main__':
     a = ap.parse_args()
     os.makedirs(CACHE, exist_ok=True)
     tema = temas.POR_SLUG[a.tema]
-    if a.todo: todo(tema, a)
+    if a.todo or a.solo: todo(tema, a)
     else:
         ctx = escena(tema)
         for o in ctx['lejos']:

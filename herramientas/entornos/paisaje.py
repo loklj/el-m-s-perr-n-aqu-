@@ -146,7 +146,7 @@ class Paisaje:
         m = T((a + b) * 0.5) @ FromUp(d) @ Sc((2 * r0, np.linalg.norm(d), 2 * r0))
         g.cyl(mat, None, None, m=m, n=n, r1=0.5 * r1 / r0, caps=False, plan=False, atlas=atlas, peso=peso)
 
-    def _hojas(self, g, atlas, centros, normales, medio, pal=None, mat='follaje', forma=0.58, sombra=None):
+    def _hojas(self, g, atlas, centros, normales, medio, pal=None, mat='follaje', forma=0.58, sombra=None, colores=None):
         """Hojas (dos caras al exportar): rombos alargados, girados al azar, con color variado."""
         n = len(centros)
         nrm = normales / (np.linalg.norm(normales, axis=1, keepdims=True) + 1e-9)
@@ -157,14 +157,17 @@ class Paisaje:
         tg, bt = tg * np.cos(phi) + bt * np.sin(phi), bt * np.cos(phi) - tg * np.sin(phi)
         s = (medio * self.rng.uniform(0.7, 1.35, n))[:, None]
         quad = np.stack([centros - tg * s, centros - bt * s * forma, centros + tg * s, centros + bt * s * forma], 1).reshape(-1, 3)
-        pal = pal or self.pal
-        base = np.array(pal)[self.rng.integers(0, len(pal), n)]
-        col = base * self.rng.uniform(0.7, 1.25, (n, 1))
+        if colores is not None:
+            col = colores
+        else:
+            pal = pal or self.pal
+            base = np.array(pal)[self.rng.integers(0, len(pal), n)]
+            col = base * self.rng.uniform(0.7, 1.25, (n, 1))
         if sombra is not None: col = col * sombra[:, None]
         faces = [(4 * i, 4 * i + 1, 4 * i + 2, 4 * i + 3) for i in range(n)]
         g.raw(mat, quad[:, [0, 2, 1]], faces, atlas=atlas, doble=True, color=col, peso=1.0)
 
-    def arbol(self, g, atlas, p, alto, por_copa=380, hoja=0.12):
+    def arbol(self, g, atlas, p, alto, por_copa=380, hoja=0.12, copa=None, abre=None):
         """Árbol de hoja ancha: ramas y copas hechas de cáscaras de hojas alrededor de cada punta."""
         rng = self.rng
         p = np.asarray(p, float)
@@ -180,24 +183,27 @@ class Paisaje:
             giro = rng.uniform(0, 2 * math.pi)
             for i in range(hijos):
                 ang = giro + i * 2 * math.pi / hijos + rng.uniform(-0.4, 0.4)
-                abre = rng.uniform(0.5, 0.95)
-                nd = d * math.cos(abre) + (u * math.cos(ang) + v * math.sin(ang)) * math.sin(abre)
-                nd[1] += 0.12
+                ab = rng.uniform(*ab_rango)
+                nd = d * math.cos(ab) + (u * math.cos(ang) + v * math.sin(ang)) * math.sin(ab)
+                nd[1] += 0.2
                 rama(b, _norm(nd), largo * rng.uniform(0.6, 0.8), radio * 0.62, nivel - 1)
             if nivel >= 1:
                 rama(b, _norm(d + rng.uniform(-0.2, 0.2, 3)), largo * 0.72, radio * 0.66, nivel - 1)
 
+        # Forma de la copa: copa = alto/ancho de cada racimo; abre = cuánto se separan las ramas.
+        copa = rng.uniform(0.8, 1.15) if copa is None else copa
+        ab_rango = (0.32, 0.72) if abre is None else abre
         tilt = _norm(np.array([rng.uniform(-0.08, 0.08), 1.0, rng.uniform(-0.08, 0.08)]))
-        rama(p - tilt * 0.15, tilt, alto * 0.3, alto * 0.034, 2)
+        rama(p - tilt * 0.15, tilt, alto * rng.uniform(0.26, 0.36), alto * 0.034, 2)
         pts = np.array(puntas)
         centro = pts.mean(0)
         cs, ns, sh = [], [], []
         for b in pts:
-            R = alto * rng.uniform(0.15, 0.22)
+            R = alto * rng.uniform(0.17, 0.25)
             d = rng.normal(size=(por_copa, 3)); d /= np.linalg.norm(d, axis=1, keepdims=True)
             d[:, 1] = np.where(d[:, 1] < -0.35, -d[:, 1], d[:, 1])       # Casi nada por debajo de la copa.
             rr = rng.uniform(0.62, 1.0, (por_copa, 1))
-            c = b + d * R * rr * np.array([1.0, 0.72, 1.0])
+            c = b + d * R * rr * np.array([1.0, 0.8 * copa, 1.0])
             afuera = c - centro
             afuera /= np.linalg.norm(afuera, axis=1, keepdims=True) + 1e-9
             ns.append(d * 0.6 + afuera * 0.4 + rng.normal(scale=0.45, size=(por_copa, 3)) + [0, 0.35, 0])
@@ -354,6 +360,24 @@ class Paisaje:
             out.append(np.array([x, GY + hgt - 0.03, z]))
         return out
 
+    def flores(self, g, atlas, puntos):
+        """Manchas de flores silvestres pequeñas (blancas, amarillas y lila) agrupadas en el pasto."""
+        rng = self.rng
+        tonos = np.array([lin((0.95, 0.95, 0.92)), lin((0.98, 0.84, 0.25)), lin((0.72, 0.6, 0.9)), lin((0.95, 0.95, 0.92))])
+        cs, ns, cols = [], [], []
+        for p in puntos:
+            if fbm(p[0] / 9, p[2] / 9, 2, self.seed + 33) < 0.5: continue
+            c = tonos[int(rng.integers(0, len(tonos)))]
+            n = int(rng.integers(6, 18))
+            off = rng.normal(scale=0.35, size=(n, 3)) * [1, 0, 1] + [0, 0, 0]
+            h = rng.uniform(0.06, 0.2, (n, 1))
+            cs.append(p + off + np.c_[np.zeros(n), h[:, 0], np.zeros(n)])
+            ns.append(np.tile([0, 1.0, 0], (n, 1)) + rng.normal(scale=0.3, size=(n, 3)))
+            cols.append(np.tile(c, (n, 1)) * rng.uniform(0.85, 1.1, (n, 1)))
+        if cs:
+            self._hojas(g, atlas, np.concatenate(cs), np.concatenate(ns), 0.022, pal=None, mat='follaje', forma=1.0,
+                        colores=np.concatenate(cols))
+
     def _bordes(self, n):
         """Puntos pegados al zócalo, la terraza y el camino: ahí el pasto crece sin cortar."""
         rng, out = self.rng, []
@@ -396,13 +420,15 @@ class Paisaje:
         elif k == 'desierto': cerca.update(cactus=9, roca=14, arbusto=5, matas=250)
         elif k == 'ciudad': cerca.update(arbol=5, arbusto=12, roca=0)
         nev = 0.35 if k == 'nieve' else 0.0
-        for p in self.puntos(cerca['arbol'], F - 1.5, CERCA - 3): self.arbol(g, 'cerca', p, rng.uniform(6.0, 9.5))
+        for p in self.puntos(cerca['arbol'], F - 1.5, CERCA - 3):
+            self.arbol(g, 'cerca', p, rng.uniform(6.0, 10.0), copa=rng.uniform(0.85, 1.5), abre=(0.25, 0.6))
         for p in self.puntos(cerca['conifera'], F - 1.5, CERCA - 3): self.conifera(g, 'cerca', p, rng.uniform(7, 12), nev)
         for p in self.puntos(cerca['palmera'], F - 3, CERCA - 4): self.palmera(g, 'cerca', p, rng.uniform(5.5, 8.5))
         for p in self.puntos(cerca['arbusto'], F - 5, CERCA - 2): self.arbusto(g, 'cerca', p, rng.uniform(0.6, 1.3))
         for p in self.puntos(cerca['roca'], F - 4, CERCA - 2, 1.5): self.roca(g, 'cerca', p, rng.uniform(0.3, 1.1))
         for p in self.puntos(cerca['cactus'], F - 4, CERCA - 2): self.cactus(g, 'cerca', p, rng.uniform(1.6, 3.4))
         self.matas(g, 'cerca', self.puntos(cerca['matas'] // 6, 7.5, F + 3, 1.0) + self._bordes(cerca['matas'] // 3))
+        if k in ('jardin', 'otono', 'lago', 'bosque'): self.flores(g, 'cerca', self.puntos(260, 8.0, CERCA - 2, 1.0))
         if k == 'lago': self.muelle()
         if k == 'ciudad': self.ciudad()
         self._variantes_lejos(nev)
@@ -445,17 +471,20 @@ class Paisaje:
     def _variantes_lejos(self, nev):
         """Árboles lejanos: pocas variantes repetidas miles de veces sobre el terreno."""
         k, rng = self.k, self.rng
-        mezcla = dict(jardin=('arbol', 0.006, 600), otono=('arbol', 0.012, 700), bosque=('mixto', 0.03, 800),
+        mezcla = dict(jardin=('arbol', 0.014, 700), otono=('arbol', 0.012, 700), bosque=('mixto', 0.03, 800),
                       montanas=('conifera', 0.02, 1100), nieve=('conifera', 0.02, 1000), lago=('mixto', 0.02, 1100),
                       playa=('palmera', 0.004, 400), isla=('palmera', 0.01, 3200), desierto=('cactus', 0.0015, 300),
                       ciudad=('arbol', 0.004, 250)).get(k)
         tipo, dens, radio = mezcla
         tipos = ['arbol', 'conifera'] if tipo == 'mixto' else [tipo]
         variantes = []
+        formas = [(1.0, (0.3, 0.6)), (1.5, (0.18, 0.4)), (0.85, (0.45, 0.85)), (1.2, (0.3, 0.6)), (1.9, (0.12, 0.3))]
         for tp in tipos:
-            for i in range(3):
+            for i in range(5 if tp == 'arbol' else 3):
                 gv = Geo((1, 1))
-                if tp == 'arbol': self.arbol(gv, 'var', (0, 0, 0), rng.uniform(7, 10), por_copa=520, hoja=0.11)
+                if tp == 'arbol':
+                    copa, ab = formas[i]
+                    self.arbol(gv, 'var', (0, 0, 0), rng.uniform(6, 12), por_copa=480, hoja=0.12, copa=copa, abre=ab)
                 elif tp == 'conifera': self.conifera(gv, 'var', (0, 0, 0), rng.uniform(9, 13), nev)
                 elif tp == 'palmera': self.palmera(gv, 'var', (0, 0, 0), rng.uniform(6, 9))
                 else: self.cactus(gv, 'var', (0, 0, 0), rng.uniform(2, 3.5))
@@ -473,9 +502,14 @@ class Paisaje:
         if self.con_agua: ok &= hgt > AGUA + 0.5
         if k in ('montanas', 'nieve'): ok &= hgt < self.M * 9
         if tipo != 'cactus' and k != 'isla':
-            ok &= fbm(x / 120, z / 120, 3, self.seed + 21) > 0.36   # Claros y manchas de bosque.
+            # Bosquecillos y claros: casi nada fuera de las manchas, y más juntos dentro de ellas.
+            mancha = fbm(x / 140, z / 140, 4, self.seed + 21)
+            ok &= (mancha > 0.5) | ((mancha > 0.4) & (rng.random(len(x)) < 0.12))
+        # Vista abierta desde la terraza: hacia el frente (−Z) los árboles empiezan más lejos.
+        frente = (z < 0) & (np.abs(x) < -z * 0.7)
+        ok &= ~frente | (r > 160)
         idx = np.nonzero(ok)[0][:n]
-        self.far_points = (x[idx], z[idx], hgt[idx], rng.uniform(0.7, 1.35, len(idx)), rng.uniform(0, 2 * math.pi, len(idx)))
+        self.far_points = (x[idx], z[idx], hgt[idx], rng.uniform(0.6, 1.4, len(idx)), rng.uniform(0, 2 * math.pi, len(idx)))
         self.far_variants = variantes
 
 
