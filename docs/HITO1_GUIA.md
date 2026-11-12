@@ -149,6 +149,12 @@ En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
 | Entornos · lago y ciudad | Casa del lago: el muelle es caminable y el agua refleja el sol. Loft nocturno: ventanas y farolas encendidas, cielo con pocas estrellas |
 | Entornos · salir y recordar | Passthrough restaura la luz de la escena (color, fuerza y dirección). Al reiniciar la app se recuerda el último estilo |
 | Ajustes → Página: día / sepia / noche | Cada toque pasa al modo siguiente y redibuja la doble página. Sepia: papel crema. Noche en PDF, EPUB, TXT y MOBI: fondo casi negro y letra crema. Noche en cómics: solo más oscuro, sin invertir. Se recuerda al reiniciar |
+| Título de la tapa | El título y el lomo ya no se ven a través de las páginas ni desde atrás del libro |
+| Reloj de muñeca | Las correas rodean la muñeca (antes apuntaban hacia arriba) |
+| Caminar con la mano | Pellizco del dedo medio izquierdo: se avanza hacia donde se mira. Girar la cabeza cambia la dirección. El teletransporte con la mano apunta bien aunque se haya girado en un punto de lectura |
+| Tamaño de los menús | Con el asa sujeta (pellizco o grip), pellizcar con la otra mano y separar o juntar: el menú crece o se achica (0,5x a 3x). Al reabrir conserva el tamaño. Probar con la esfera y con el panel |
+| Entornos horneados | Menú → Entornos → Moderna cálida: luz con sombras suaves, tablas en el piso, cojines, cortinas, árboles con hojas y cielo con nubes. La consola de Unity no debe mostrar «Falta el sombreador FolioXR/Baked». Anotar FPS medio y tiempo de carga (línea «Entorno horneado ...») |
+| Entornos sin hornear | Un estilo que aún no tenga archivos horneados se sigue viendo con la versión procedural anterior, sin errores |
 
 | Abrir la app | Ves tu habitación (passthrough) y un libro frente a ti |
 | Portada | La página izquierda muestra la portada azul «Folio XR» |
