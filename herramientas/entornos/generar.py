@@ -44,6 +44,7 @@ def escena(t, lejos=True):
     sc = bpy.context.scene
     sc.render.engine = 'CYCLES'
     sc.cycles.device = 'CPU'
+    if os.environ.get('FOLIO_GPU', '1') != '0': usar_gpu(sc)
     sc.cycles.use_denoising = True
     sc.cycles.max_bounces = 6
     sc.cycles.diffuse_bounces = 4
@@ -119,6 +120,34 @@ def mundo(ctx):
             li.color = (1.0, 0.70, 0.42); li.shadow_soft_size = 0.09
             ob = bpy.data.objects.new('lampara', li); sc.collection.objects.link(ob)
             ob.location = ub((pos[0] * sx, pos[1], pos[2] * sz))
+
+
+_GPU = None
+
+
+def usar_gpu(sc):
+    """Usa la tarjeta gráfica si hay (OptiX o CUDA en NVIDIA, HIP en AMD, oneAPI en Intel). FOLIO_GPU=0 la desactiva."""
+    global _GPU
+    if _GPU is None:
+        _GPU = ''
+        try:
+            prefs = bpy.context.preferences.addons['cycles'].preferences
+            for tipo in ('OPTIX', 'CUDA', 'HIP', 'ONEAPI'):
+                try:
+                    prefs.compute_device_type = tipo
+                except TypeError:
+                    continue
+                prefs.get_devices()
+                gpus = [d for d in prefs.devices if d.type == tipo]
+                if gpus:
+                    for d in prefs.devices: d.use = d.type == tipo
+                    _GPU = f'{tipo}: ' + ', '.join(d.name for d in gpus)
+                    break
+        except Exception as e:
+            log('no se pudo revisar la tarjeta gráfica:', e)
+        log('tarjeta gráfica:', _GPU or 'ninguna, se usa la CPU')
+    if _GPU:
+        sc.cycles.device = 'GPU'
 
 
 def leer_exr(path):
