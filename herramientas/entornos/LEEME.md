@@ -22,6 +22,8 @@ Los nombres de tema están en `temas.py` y son los mismos de `EnvironmentTheme.c
 
 Opciones de `--todo`: `--tam` (lado del atlas, 4096), `--spp` (muestras de la casa, 28), `--pano` (ancho del panorama, 6144) y `--spp-pano` (16). Con dos núcleos, un tema tarda unos 35 a 45 minutos. Si la corrida se corta, al repetirla reutiliza los horneados ya guardados en `/tmp/bl/cache`.
 
+La caché y los temporales ocupan unos 2 GB. Si el disco de `/tmp` tiene poco espacio, indica otra carpeta con `FOLIO_CACHE=/ruta/con/espacio`. La tarjeta gráfica se usa sola si hay; `FOLIO_GPU=0` fuerza el procesador.
+
 ## Qué produce
 
 En `hito1/Assets/FolioXR/Resources/Entornos/<tema>/`:

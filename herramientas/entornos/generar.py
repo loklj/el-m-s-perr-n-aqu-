@@ -41,6 +41,11 @@ def ub(p):
 # ───────────── Escena ─────────────
 def escena(t, lejos=True):
     bpy.ops.wm.read_factory_settings(use_empty=True)
+    # Los archivos temporales de Cycles (cientos de MB por horneado) van junto a la caché, no a /tmp:
+    # así basta con FOLIO_CACHE para usar un disco con espacio.
+    temporal = os.path.join(CACHE, 'tmp')
+    os.makedirs(temporal, exist_ok=True)
+    bpy.context.preferences.filepaths.temporary_directory = temporal
     sc = bpy.context.scene
     sc.render.engine = 'CYCLES'
     sc.cycles.device = 'CPU'
