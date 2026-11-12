@@ -16,6 +16,8 @@ public interface FolioHtmlSource extends Closeable {
         String extension = path.toLowerCase(java.util.Locale.ROOT);
         if (extension.endsWith(".txt")) return new FolioTxtSource(path, encoding, cancelled);
         if (extension.endsWith(".mobi") || extension.endsWith(".azw") || extension.endsWith(".azw3")) return new FolioMobiSource(path, cancelled);
-        return new FolioEpubContainer(path);
+        if (extension.endsWith(".docx") || extension.endsWith(".odt") || extension.endsWith(".rtf")) return new FolioDocumentSource(path, cancelled);
+        if (extension.endsWith(".epub")) return new FolioEpubContainer(path);
+        throw new IOException(FolioDocumentDiagnostics.unsupported(extension));
     }
 }

@@ -1,6 +1,6 @@
 # Formatos, protección y licencias — Fase 0
 
-Diseño original: 5 de noviembre de 2026. **Estado de implementación actualizado el 11 de noviembre de 2026 en la sección 8**. Las secciones históricas describen alternativas; el estado vigente y las dependencias efectivas están al final. Las pruebas JVM no acreditan el renderizado en Quest.
+Diseño original: 5 de noviembre de 2026. **Estado de implementación actualizado el 11 de noviembre de 2026 en las secciones 8 y 9**. Las secciones históricas describen alternativas; el estado vigente y las dependencias efectivas están al final. Las pruebas JVM no acreditan el renderizado en Quest.
 
 ## 1. Decisión de implementación
 
@@ -191,7 +191,8 @@ Consulta HTTPS realizada el 5 de noviembre de 2026. Se leyeron los documentos de
 | CBR RAR4 | Experimental | Junrar 7.5.5, Java puro: conversión temporal a CBZ y lector de cómics existente. Se procesan también entradas no visuales para conservar el diccionario de archivos sólidos. Cuotas de 32 MiB por entrada, 512 MiB extraídos y 10.000 entradas; se rechazan contraseña y multivolumen. Fixture propio RAR4 almacenado; falta validar compresión/sólidos variados en Quest |
 | CBR RAR5 | No compatible | Junrar no admite RAR5. Mensaje: «CBR (RAR5) aún no compatible: conviértelo a CBZ». No se añade biblioteca nativa ni dependencia de licencia incompatible |
 | MOBI/AZW/AZW3 con campo de cifrado activo | No compatible (DRM) | Se comprueba antes de leer texto, también en la cabecera KF8 de un híbrido; nunca se descifra |
-| KFX, DOC/DOCX, ODT, RTF, FB2, CB7 | No compatible en esta entrega | Fuera del encargo; importación/reconocimiento no equivale a lectura |
+| KFX, DOC binario, FB2, CB7 | No compatible | No hay lector incluido; diagnóstico documental actualizado en la sección 9 |
+| DOCX, ODT, RTF | Experimental desde el encargo 11 | Conversores propios hacia el motor HTML; ver alcance y límites en la sección 9 |
 
 ### Motor compartido y preferencias
 
@@ -220,3 +221,39 @@ Fuentes y procedencia:
 ### Validación
 
 Ver `tests/formatos/LEEME.md` para comandos reproducibles. Compilación Java 8 contra android.jar API 34; fixtures propios para TXT, PalmDOC, HUFF/CDIC, KF8, DRM sintético, archivo truncado, CBR ZIP y RAR4. Las pruebas no ejecutan WebView ni Unity y no acreditan nitidez, 72 FPS, latencia de página ni todas las variantes reales de MOBI/RAR.
+
+## 9. Estado — Encargo 11, Documentos
+
+11 de noviembre de 2026. Rama `fase2/documentos`, rebasada el 12 de noviembre sobre `50ddb17` de `fase-1/preparacion`; conserva PageTheme y los cambios de Claude. Se mantiene el protocolo JNI y se conectan las fuentes documentales a `FolioHtmlSource` / `FolioTextRenderer`: la paginación WebView, el ajuste de letra, el progreso proporcional, la caché y la precarga son los existentes. No cambia PDF/FXR1 ni se modifican Environments, Tools o Scripts/Menu.
+
+| Formato | Estado vigente | Alcance |
+| --- | --- | --- |
+| DOCX | **Experimental** | Conversor propio OOXML: párrafos, títulos por estilo/outline, negrita y cursiva de runs/estilos de carácter, listas básicas, tablas simples e imágenes PNG/JPEG locales. Paquete identificado por sus partes, incluso renombrado. No ejecuta macros ni relaciones externas |
+| ODT | **Experimental** | Conversor propio ODF: texto, títulos, estilos de negrita/cursiva con herencia, listas anidadas, tablas simples e imágenes PNG/JPEG del ZIP. Requiere mimetype de documento de texto. Manifest con encryption-data se rechaza sin descifrar ni afirmar que sea DRM |
+| RTF | **Experimental** | Parser de grupos/control words: estilos directos, títulos con outlinelevel o estilos declarados con outlinelevel, texto Unicode `u/uc`, escapes hexadecimales y páginas de códigos, listas simplificadas, celdas/filas e imágenes pict PNG/JPEG hexadecimales o binarias |
+| DOC binario / OLE-CFB | **No compatible** | Falta un conversor binario. Una firma OLE no demuestra que sea Word: también puede ser Office cifrado u otro contenido. Se explica esa ambigüedad y se recomienda exportar DOCX/PDF desde el PC |
+| KFX | **No compatible** | No hay lector incluido. Se recomienda una edición EPUB/PDF sin DRM; no se infiere DRM por extensión ni se promete soporte futuro |
+| Desconocidos | **No compatible** | Mensaje «Formato aún no compatible», con la razón: no hay lector o no se reconoce la estructura. El diagnóstico de apertura no promete soporte futuro |
+
+Estos estados sustituyen la fila conjunta de documentos no compatibles del encargo 10. PDF, EPUB, TXT, MOBI/KF8, CBZ/CBR conservan los estados y limitaciones de la sección 8.
+
+### Elección DOCX y licencias
+
+Se examinó **java-mammoth 1.13.0**, revisión [`6375848`](https://github.com/mwilliamson/java-mammoth/tree/6375848a1979f0ab38be59e400b6b5ebe827103b), BSD-2-Clause. Su [POM](https://github.com/mwilliamson/java-mammoth/blob/6375848a1979f0ab38be59e400b6b5ebe827103b/pom.xml) no declara dependencias de producción: **no se descarta por dependencias pesadas**. Sin embargo, su clase [XmlWriter](https://github.com/mwilliamson/java-mammoth/blob/6375848a1979f0ab38be59e400b6b5ebe827103b/src/main/java/org/zwobble/mammoth/internal/xml/XmlWriter.java), usada al escribir mapas de estilos incrustados, referencia `javax.xml.stream` (StAX), ausente de android.jar API 34. No se ha validado una distribución recortada/adaptada para Android. Se aplica la alternativa expresamente autorizada: **conversor propio de document.xml**, sin empaquetar Mammoth ni añadir StAX, POI, Gradle o JAR nuevos. No se copia código de Mammoth. ODT y RTF también son código propio; solo usan APIs Java/XML/ZIP del sistema. No se añade GPL/LGPL/AGPL.
+
+### Fidelidad y límites
+
+- La primera página indica **«Vista simplificada»**. No se promete reproducción de Word/LibreOffice: márgenes, encabezados/pies, saltos y diseño fijo se reorganizan. Notas, objetos, imágenes externas o de tipos no admitidos generan avisos cuando se detectan; tampoco se ejecutan campos RTF, OLE, scripts, macros o enlaces del documento.
+- Las listas DOCX multinivel se aplanan con aviso; listas dentro de celdas, reinicios/numeración compleja y estilos de párrafo avanzados no se reproducen fielmente. RTF representa listas con viñetas y filas como tablas independientes. ODT conserva la anidación de listas; filas/columnas repetidas se muestran una sola vez, con aviso. Celdas combinadas, objetos flotantes, comentarios/revisiones, fuentes incrustadas, WMF/EMF/SVG e imágenes ODT inline quedan fuera del subconjunto. Se recomienda PDF si importa la distribución exacta.
+- XML se lee con **SAX por flujo**, pero conserva un árbol acotado para estilos/conversión: **4 MiB por parte XML, 60.000 nodos, profundidad 64 y 64 atributos por elemento**. No es un lector de documentos Office de varios GB. El manejador lexical obligatorio rechaza DTD antes de expandir entidades, también con UTF-16; el resolver rechaza entidades externas. No depende de setFeature no admitidos por Android.
+- Hasta 10.000 entradas ZIP; HTML convertido hasta 16 MiB, bloque hasta 1 MiB UTF-8. Capítulos en archivo temporal, cortados entre bloques completos alrededor de 200.000 caracteres; el temporal se elimina al cerrar o fallar. Las tablas/listas grandes pueden alcanzar el límite de bloque y se rechazan expresamente.
+- RTF se analiza por flujo, con límite de 32 MiB de entrada y 128 grupos anidados. Las imágenes embebidas están acotadas a 8 MiB cada una y 16 MiB en conjunto. Las imágenes ZIP se leen bajo demanda hasta 8 MiB; el renderizador heredado también impone el límite de 4 millones de píxeles. Solo PNG/JPEG en esta entrega.
+- Conversión fuera del hilo UI, con comprobaciones de cancelación durante lectura y recorrido. Se conserva el conteo completo previo a la primera página y el timeout de 300 s del motor compartido. No se promete apertura instantánea de archivos grandes.
+
+### Pruebas y pendientes
+
+Corpus original reproducible en `tests/fixtures/documentos/`, generador y pruebas en `tests/documentos/`. Incluye documentos válidos y dañados, XML con entidades, imagen externa, RTF con objeto omitido, manifest con indicador de cifrado sintético y firmas OLE/KFX que **no son documentos completos**. No contiene libros ajenos, contenido cifrado real ni descifradores.
+
+Los tres documentos válidos fueron abiertos y exportados a PDF por LibreOfficeDev 26.8.0.0.alpha0; DOCX/ODT también se leyeron con Pandoc, DOCX con python-docx y sus PNG con Pillow. Es una comprobación independiente de apertura, no una certificación de conformidad completa ni de fidelidad en Quest. Ver comandos y resultados JVM/C# en `tests/documentos/LEEME.md`. Quedan pendientes APK, WebView en Horizon OS, nitidez, rendimiento y corpus real más amplio; el Paso 10 recoge las pruebas del visor.
+
+La publicación rebasada conserva Scripts/Menu íntegramente según la instrucción del 12 de noviembre; no incluye los cambios previos de etiquetas ni el botón de diagnóstico del menú. Los diagnósticos de importación/apertura permanecen en FolioLibrary y BookLibrary.

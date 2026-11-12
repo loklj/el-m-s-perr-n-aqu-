@@ -30,3 +30,7 @@ Los 1240 incluyen comprobaciones de cada tramo del TXT grande; no son 1240 archi
 Los fixtures de `tests/fixtures/formatos/` son originales y regenerables con `python3 tests/formatos/generar.py`. RAR4 usa almacenamiento sin compresión; RAR5 es solo una firma para comprobar rechazo. El fixture DRM solo activa el indicador de cifrado: no contiene texto realmente cifrado ni descifrador. La prueba KF8 contiene un esqueleto y un fragmento; no acredita todos los índices reales.
 
 Las pruebas JVM no usan WebView ni Android real. Las pruebas C# usan el archivo real PdfPageRenderer, pero sustituyen tipos Unity/JNI: no acreditan compilación de Unity, texturas GPU, rendimiento ni fidelidad visual. La revisión del rebase también comprobó que `LoadRaw` permaneciera idéntico al de la base y que no hubiera cambios propios en PDF Java, Tools, SphereMenuView o WifiServer. Las pruebas en Quest están en el Paso 10 de la guía.
+
+El encargo 11 amplía el puente de 15 a 18 comprobaciones para DOCX/ODT/RTF. El total histórico de esta página corresponde al encargo 10; resultados actuales combinados en [tests/documentos/LEEME.md](../documentos/LEEME.md).
+
+Tras el rebase del 12 de noviembre sobre `50ddb17`, el puente compila también PageTheme real y suma 23 comprobaciones: valida colores/alpha FXR1 nocturnos y selección de modo para documentos/cómics.
