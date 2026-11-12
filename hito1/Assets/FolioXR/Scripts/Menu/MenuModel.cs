@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using FolioXR.Accessibility;
 using FolioXR.Books;
 using FolioXR.Environments;
 using FolioXR.Reading;
@@ -82,6 +83,9 @@ namespace FolioXR.Menu
         public MenuModel(FolioBook book, FolioEnvironmentController environment, Func<bool> sphereStyle,
             Action<bool> setSphereStyle)
         {
+            FolioAccessibility.Changed += () => { if (SelectedCategory == MenuCategory.Ajustes) RebuildOptions(); };
+            LicenseViewer.Changed += () => { if (SelectedCategory == MenuCategory.Ajustes && _settingsGroup == 5) RebuildOptions(); };
+            BookCollections.Changed += () => { if (SelectedCategory == MenuCategory.Biblioteca) RebuildOptions(); };
             _book = book;
             _environment = environment;
             _sphereStyle = sphereStyle;
@@ -116,6 +120,7 @@ namespace FolioXR.Menu
             {
                 _removeId = null;
                 _removing = false;
+                BookCollections.Forget(entry.id);
                 library.Remove(entry);
             }
             RebuildOptions();
@@ -178,7 +183,10 @@ namespace FolioXR.Menu
         }
 
         // ── «+ Agregar libro» y configuración de un libro (pedido del usuario, 11 nov 2026) ──
-        private int _libraryMode; // 0 = lista, 1 = elegir de dónde agregar.
+        private int _libraryMode; // 0 = lista, 1 = elegir de dónde agregar, 2 = organizar.
+        private int _settingsGroup; // 0 = grupos; 1 lectura, 2 libro y movimiento, 3 herramientas, 4 accesibilidad, 5 acerca de.
+        private string _keyboardCollection; // "" = nueva colección; otro = renombrar esa colección.
+        private float _deleteCollectionUntil;
         private string _setupId;
         private TouchScreenKeyboard _keyboard;
         private string _keyboardFor;
@@ -237,6 +245,10 @@ namespace FolioXR.Menu
                 options.Add(new MenuOption("Cuero: " + BookCover.LeatherNames[leather],
                     () => { library.SetLeather(entry, (leather + 1) % BookCover.LeatherNames.Length); RebuildOptions(); }));
             }
+            string folder = BookCollections.CollectionOf(entry.id);
+            options.Add(new MenuOption("Colección:\n" + (folder.Length == 0 ? "ninguna" : Shorten(folder, 22)),
+                () => { BookCollections.Assign(entry.id, BookCollections.NextFor(entry.id)); RebuildOptions(); },
+                () => BookCollections.Names.Count > 0));
             options.Add(new MenuOption(configured ? "Listo" : "Listo: guardar", () =>
             {
                 library.FinishSetup(entry);
@@ -273,7 +285,17 @@ namespace FolioXR.Menu
             if (_keyboard == null) return;
             TouchScreenKeyboard.Status status = _keyboard.status;
             if (status == TouchScreenKeyboard.Status.Visible) return;
-            if (status == TouchScreenKeyboard.Status.Done && BookLibrary.Instance != null)
+            if (status == TouchScreenKeyboard.Status.Done && _keyboardCollection != null)
+            {
+                string name = (_keyboard.text ?? string.Empty).Trim();
+                if (_keyboardCollection.Length == 0)
+                {
+                    if (BookCollections.Create(name)) BookCollections.SetActive(name);
+                    else if (name.Length > 0) BookLibrary.NotifyUser("Ya existe una colección «" + name + "».");
+                }
+                else BookCollections.Rename(_keyboardCollection, name);
+            }
+            else if (status == TouchScreenKeyboard.Status.Done && BookLibrary.Instance != null)
             {
                 if (_keyboardBookmark >= 0)
                     BookLibrary.Instance.RenameBookmark(_keyboardFor, _keyboardBookmark, _keyboard.text);
@@ -283,8 +305,93 @@ namespace FolioXR.Menu
             _keyboardBookmark = -1;
             _keyboard = null;
             _keyboardFor = null;
+            _keyboardCollection = null;
             if (SelectedCategory == MenuCategory.Biblioteca) RebuildOptions();
             Changed?.Invoke();
+        }
+
+        /// <summary>Teclado para crear (oldName vacío) o renombrar una colección.</summary>
+        private void OpenCollectionKeyboard(string oldName)
+        {
+            if (!TouchScreenKeyboard.isSupported)
+            { BookLibrary.NotifyUser("El teclado del sistema no está disponible en este visor."); return; }
+            _keyboardBookmark = -1;
+            _keyboardFor = null;
+            _keyboardCollection = oldName ?? string.Empty;
+            _keyboard = TouchScreenKeyboard.Open(oldName ?? string.Empty, TouchScreenKeyboardType.Default,
+                false, false, false, false, "Nombre de la colección", 40);
+        }
+
+        /// <summary>Organizar la biblioteca: orden, formato, colecciones y estantería (encargo 18).</summary>
+        private void AddOrganizeOptions(List<MenuOption> options)
+        {
+            options.Add(new MenuOption("Volver", () => { _libraryMode = 0; RebuildOptions(); }));
+            int sort = (int)BookCollections.Sort, filter = (int)BookCollections.Filter;
+            options.Add(new MenuOption("Ordenar:\n" + BookCollections.SortNames[sort],
+                () => BookCollections.SetSort((BookCollections.SortMode)((sort + 1) % 3))));
+            options.Add(new MenuOption("Formato:\n" + BookCollections.FilterNames[filter],
+                () => BookCollections.SetFilter((BookCollections.FormatFilter)((filter + 1) % BookCollections.FilterNames.Length)),
+                marked: () => BookCollections.Filter != BookCollections.FormatFilter.All));
+            string active = BookCollections.Active;
+            options.Add(new MenuOption("Colección:\n" + (active.Length == 0 ? "todas" : Shorten(active, 22)),
+                () => BookCollections.SetActive(BookCollections.NextActive()), () => BookCollections.Names.Count > 0,
+                () => active.Length > 0));
+            options.Add(new MenuOption("+ Nueva colección", () => OpenCollectionKeyboard(string.Empty)));
+            options.Add(new MenuOption("Renombrar\ncolección", () => OpenCollectionKeyboard(active), () => active.Length > 0));
+            bool confirm = Time.unscaledTime < _deleteCollectionUntil;
+            options.Add(new MenuOption(confirm ? "¿Borrar? Toca\notra vez" : "Borrar colección\n(no borra libros)", () =>
+            {
+                if (!confirm) { _deleteCollectionUntil = Time.unscaledTime + 4f; RebuildOptions(); return; }
+                _deleteCollectionUntil = 0f;
+                BookCollections.Delete(active);
+            }, () => active.Length > 0));
+            bool house = _environment != null && _environment.IsActive;
+            options.Add(new MenuOption(house ? "Estantería: en la\nbiblioteca de la casa"
+                    : "Estantería: " + (BookShelf.FreeStanding ? "ocultar" : "mostrar"),
+                () => { BookShelf.SetFreeStanding(!BookShelf.FreeStanding); RebuildOptions(); }, () => !house,
+                () => house || BookShelf.FreeStanding));
+        }
+
+        /// <summary>Accesibilidad (encargo 18, parte 3).</summary>
+        private void AddAccessibilityOptions(List<MenuOption> options)
+        {
+            options.Add(new MenuOption("Mano principal:\n" + (FolioAccessibility.LeftHanded ? "izquierda (zurdo)" : "derecha"),
+                () => FolioAccessibility.SetLeftHanded(!FolioAccessibility.LeftHanded), marked: () => FolioAccessibility.LeftHanded));
+            options.Add(new MenuOption("Alto contraste: " + (FolioAccessibility.HighContrast ? "sí" : "no"),
+                () => FolioAccessibility.SetHighContrast(!FolioAccessibility.HighContrast), marked: () => FolioAccessibility.HighContrast));
+            options.Add(new MenuOption("Reducir movimiento: " + (FolioAccessibility.ReduceMotion ? "sí" : "no"),
+                () => FolioAccessibility.SetReduceMotion(!FolioAccessibility.ReduceMotion), marked: () => FolioAccessibility.ReduceMotion));
+            options.Add(new MenuOption("Subtítulos de\navisos: " + (FolioAccessibility.Captions ? "sí" : "no"),
+                () => FolioAccessibility.SetCaptions(!FolioAccessibility.Captions), marked: () => FolioAccessibility.Captions));
+            float[] sizes = { 0.8f, 1f, 1.35f, 1.75f };
+            string[] names = { "pequeño", "normal", "grande", "muy grande" };
+            int size = 1;
+            for (int i = 0; i < sizes.Length; i++) if (Mathf.Abs(FolioAccessibility.MenuSize - sizes[i]) < 0.05f) size = i;
+            options.Add(new MenuOption("Tamaño del menú:\n" + names[size],
+                () => FolioAccessibility.SetMenuSize(sizes[(size + 1) % sizes.Length])));
+        }
+
+        /// <summary>Acerca de y licencias de terceros (encargo 18, parte 4).</summary>
+        private void AddAboutOptions(List<MenuOption> options)
+        {
+            LicenseViewer viewer = LicenseViewer.Instance;
+            options.Add(new MenuOption("Folio XR\nversión " + LicenseViewer.Version));
+            if (viewer == null) return;
+            if (viewer.Showing)
+            {
+                options.Add(new MenuOption(Shorten(viewer.Title, 26) + "\npágina " + (viewer.Page + 1) + " de " + viewer.PageCount));
+                options.Add(new MenuOption("Página siguiente", viewer.NextPage, () => viewer.Page + 1 < viewer.PageCount));
+                options.Add(new MenuOption("Página anterior", viewer.PreviousPage, () => viewer.Page > 0));
+                options.Add(new MenuOption("Cerrar licencia", viewer.Close));
+                return;
+            }
+            viewer.LoadIndex();
+            if (viewer.Files.Count == 0) options.Add(new MenuOption(viewer.Loading ? "Cargando licencias…" : "Licencias de terceros:\nsin archivos"));
+            foreach (string file in viewer.Files)
+            {
+                string f = file;
+                options.Add(new MenuOption("Licencia:\n" + Shorten(System.IO.Path.GetFileNameWithoutExtension(f), 26), () => viewer.Open(f)));
+            }
         }
 
         private void OpenBookmarkKeyboard(int page)
@@ -481,6 +588,11 @@ namespace FolioXR.Menu
                         AddBookSources(options, library);
                         break;
                     }
+                    if (_libraryMode == 2)
+                    {
+                        AddOrganizeOptions(options);
+                        break;
+                    }
                     if (library.Importing)
                     {
                         options.Add(new MenuOption(library.ImportLine));
@@ -489,6 +601,7 @@ namespace FolioXR.Menu
                     else
                     {
                         options.Add(new MenuOption("+ Agregar libro", () => { _libraryMode = 1; RebuildOptions(); }));
+                        options.Add(new MenuOption("Organizar y\nestantería", () => { _libraryMode = 2; RebuildOptions(); }));
                         options.Add(new MenuOption(_removing ? "Elige el libro\na quitar" : "Quitar de la\nbiblioteca",
                             () => { _removing = !_removing; _removeId = null; RebuildOptions(); },
                             () => library.Books.Count > 0, () => _removing));
@@ -510,12 +623,13 @@ namespace FolioXR.Menu
                         options.Add(new MenuOption(Shorten(library.BookmarkTitle(position), 24) + "\npág. " + (position + 1),
                             () => library.GoToBookmark(position)));
                     }
-                    int bookPages = Mathf.Max(1, (library.Books.Count + BooksPerPage - 1) / BooksPerPage);
+                    List<BookEntry> visible = BookCollections.View(library.Books);
+                    int bookPages = Mathf.Max(1, (visible.Count + BooksPerPage - 1) / BooksPerPage);
                     _libraryPage = Mathf.Clamp(_libraryPage, 0, bookPages - 1);
-                    int last = Mathf.Min(library.Books.Count, (_libraryPage + 1) * BooksPerPage);
+                    int last = Mathf.Min(visible.Count, (_libraryPage + 1) * BooksPerPage);
                     for (int i = _libraryPage * BooksPerPage; i < last; i++)
                     {
-                        BookEntry entry = library.Books[i];
+                        BookEntry entry = visible[i];
                         string text = _removeId == entry.id ? "¿Quitar? Toca\notra vez"
                             : Shorten(entry.title, 30) + "\n" +
                               (entry.CanOpen ? entry.ProgressText : entry.format.ToUpperInvariant() + " · pronto");
@@ -526,6 +640,7 @@ namespace FolioXR.Menu
                         options.Add(new MenuOption("Más libros\n" + (_libraryPage + 1) + " de " + bookPages,
                             () => { _libraryPage = (_libraryPage + 1) % bookPages; RebuildOptions(); }));
                     if (library.Books.Count == 0) options.Add(new MenuOption("Aún no hay libros:\nimporta el primero"));
+                    else if (visible.Count == 0) options.Add(new MenuOption("Ningún libro con\neste filtro"));
                     options.Add(new MenuOption("Índice del libro", () => OpenReadingList(1), () => library.CanReadContents && !library.Repaginating));
                     options.Add(new MenuOption("Lista de marcadores", () => OpenReadingList(2), () => library.Current != null));
                     break;
@@ -562,17 +677,35 @@ namespace FolioXR.Menu
                     break;
                 }
                 case MenuCategory.Ajustes:
+                    if (_settingsGroup == 0)
+                    {
+                        string[] groups = { "Lectura", "Libro y movimiento", "Herramientas\ny trazos", "Accesibilidad", "Acerca de y\nlicencias" };
+                        for (int g = 0; g < groups.Length; g++)
+                        {
+                            int group = g + 1;
+                            options.Add(new MenuOption(groups[g], () => { _settingsGroup = group; RebuildOptions(); }));
+                        }
+                        break;
+                    }
+                    options.Add(new MenuOption("Volver", () =>
+                    {
+                        if (_settingsGroup == 5) LicenseViewer.Instance?.Close();
+                        _settingsGroup = 0;
+                        RebuildOptions();
+                    }));
+                    if (_settingsGroup == 4) { AddAccessibilityOptions(options); break; }
+                    if (_settingsGroup == 5) { AddAboutOptions(options); break; }
                     // Una sola casilla por ajuste, coherente con el menú compacto de la base.
                     string[] encodings = { "auto", "UTF-8", "Windows-1252" };
                     int encodingIndex = Array.IndexOf(encodings, PdfPageRenderer.TxtEncoding);
                     if (encodingIndex < 0) encodingIndex = 0;
                     string nextEncoding = encodings[(encodingIndex + 1) % encodings.Length];
-                    options.Add(new MenuOption("Codificación TXT:\n" +
+                    if (_settingsGroup == 1) options.Add(new MenuOption("Codificación TXT:\n" +
                         (encodings[encodingIndex] == "auto" ? "automática" : encodings[encodingIndex]),
                         () => { BookLibrary.Instance.SetTxtEncoding(nextEncoding); RebuildOptions(); },
                         () => BookLibrary.Instance != null && !BookLibrary.Instance.Repaginating));
                     PageThemeMode pageMode = PageTheme.Current;
-                    options.Add(new MenuOption("Página:\n" + PageTheme.Name(pageMode),
+                    if (_settingsGroup == 1) options.Add(new MenuOption("Página:\n" + PageTheme.Name(pageMode),
                         () => { PageTheme.Set((PageThemeMode)(((int)pageMode + 1) % 3)); RebuildOptions(); }));
                     string[] fontNames = { "pequeña", "normal", "grande" };
                     float[] fontScales = { 0.8f, 1f, 1.25f };
@@ -580,7 +713,7 @@ namespace FolioXR.Menu
                     for (int f = 0; f < fontScales.Length; f++)
                         if (Mathf.Approximately(PdfPageRenderer.EpubFontScale, fontScales[f])) font = f;
                     float nextFont = fontScales[(font + 1) % fontScales.Length];
-                    options.Add(new MenuOption("Letra: " + fontNames[font],
+                    if (_settingsGroup == 1) options.Add(new MenuOption("Letra: " + fontNames[font],
                         () => BookLibrary.Instance.SetEpubFontScale(nextFont),
                         () => BookLibrary.Instance != null && !BookLibrary.Instance.Repaginating));
                     if (_book != null)
@@ -588,36 +721,36 @@ namespace FolioXR.Menu
                         int steps = Mathf.RoundToInt((FolioBook.MaxRenderScale - FolioBook.MinRenderScale) / FolioBook.RenderScaleStep) + 1;
                         int sharp = Mathf.Clamp(Mathf.RoundToInt((_book.RenderScale - FolioBook.MinRenderScale) / FolioBook.RenderScaleStep), 0, steps - 1);
                         float nextScale = FolioBook.MinRenderScale + ((sharp + 1) % steps) * FolioBook.RenderScaleStep;
-                        options.Add(new MenuOption("Nitidez: " + _book.RenderScale.ToString("F1", CultureInfo.InvariantCulture).Replace('.', ','),
+                        if (_settingsGroup == 1) options.Add(new MenuOption("Nitidez: " + _book.RenderScale.ToString("F1", CultureInfo.InvariantCulture).Replace('.', ','),
                             () => { _book.SetRenderScale(nextScale); RebuildOptions(); }));
                     }
-                    options.Add(new MenuOption("Menú: " + (_sphereStyle() ? "esfera" : "simple"),
+                    if (_settingsGroup == 2) options.Add(new MenuOption("Menú: " + (_sphereStyle() ? "esfera" : "simple"),
                         () => _setSphereStyle(!_sphereStyle())));
-                    options.Add(new MenuOption("Física: " + (_book != null && _book.RealisticPhysics ? "Realista" : "Flotante"),
+                    if (_settingsGroup == 2) options.Add(new MenuOption("Física: " + (_book != null && _book.RealisticPhysics ? "Realista" : "Flotante"),
                         () => { _book.SetRealisticPhysics(!_book.RealisticPhysics); RebuildOptions(); }, () => _book != null));
-                    options.Add(new MenuOption("Acostado: " + (FolioBook.LyingMode ? "sí" : "no"),
+                    if (_settingsGroup == 2) options.Add(new MenuOption("Acostado: " + (FolioBook.LyingMode ? "sí" : "no"),
                         () => { FolioBook.SetLyingMode(!FolioBook.LyingMode); if (_book != null) _book.PlaceInFrontOfView(); RebuildOptions(); },
                         marked: () => FolioBook.LyingMode));
-                    options.Add(new MenuOption("Velocidad: " + (FolioLocomotion.Jog ? "trotar" : "caminar"),
+                    if (_settingsGroup == 2) options.Add(new MenuOption("Velocidad: " + (FolioLocomotion.Jog ? "trotar" : "caminar"),
                         () => { FolioLocomotion.SetJog(!FolioLocomotion.Jog); RebuildOptions(); }, marked: () => FolioLocomotion.Jog));
-                    options.Add(new MenuOption("Viñeta: " + (FolioLocomotion.VignetteEnabled ? "sí" : "no"),
+                    if (_settingsGroup == 2) options.Add(new MenuOption("Viñeta: " + (FolioLocomotion.VignetteEnabled ? "sí" : "no"),
                         () => { FolioLocomotion.SetVignette(!FolioLocomotion.VignetteEnabled); RebuildOptions(); }));
-                    options.Add(new MenuOption("Giro: " + (FolioLocomotion.SmoothTurn ? "suave" : "por pasos"),
+                    if (_settingsGroup == 2) options.Add(new MenuOption("Giro: " + (FolioLocomotion.SmoothTurn ? "suave" : "por pasos"),
                         () => { FolioLocomotion.SetSmoothTurn(!FolioLocomotion.SmoothTurn); RebuildOptions(); }));
-                    options.Add(new MenuOption("Tamaño normal", () => _book.ResetBookScale(), () => _book != null));
-                    options.Add(new MenuOption("Guardar herramientas", ToolRegistry.StoreAll, () => ToolRegistry.Instance != null));
-                    options.Add(new MenuOption(_pendingClear == 1 ? "¿Borrar? Toca\notra vez" : "Borrar trazos\nde esta página",
+                    if (_settingsGroup == 2) options.Add(new MenuOption("Tamaño normal", () => _book.ResetBookScale(), () => _book != null));
+                    if (_settingsGroup == 3) options.Add(new MenuOption("Guardar herramientas", ToolRegistry.StoreAll, () => ToolRegistry.Instance != null));
+                    if (_settingsGroup == 3) options.Add(new MenuOption(_pendingClear == 1 ? "¿Borrar? Toca\notra vez" : "Borrar trazos\nde esta página",
                         () => ConfirmClear(1), () => InkManager.Instance != null));
-                    options.Add(new MenuOption(_pendingClear == 2 ? "¿Borrar? Toca\notra vez" : "Borrar trazos\nde la casa",
+                    if (_settingsGroup == 3) options.Add(new MenuOption(_pendingClear == 2 ? "¿Borrar? Toca\notra vez" : "Borrar trazos\nde la casa",
                         () => ConfirmClear(2), () => InkManager.HasHouse));
-                    options.Add(new MenuOption("Traer libro", () => _book.PlaceInFrontOfView(), () => _book != null));
-                    options.Add(new MenuOption("Fuente: " + ReadingLayout.FontName,
+                    if (_settingsGroup == 2) options.Add(new MenuOption("Traer libro", () => _book.PlaceInFrontOfView(), () => _book != null));
+                    if (_settingsGroup == 1) options.Add(new MenuOption("Fuente: " + ReadingLayout.FontName,
                         () => BookLibrary.Instance.SetReadingLayout((ReadingLayout.Font + 1) % 2, ReadingLayout.LineSpacing, ReadingLayout.Margin),
                         () => BookLibrary.Instance != null && !BookLibrary.Instance.Repaginating));
-                    options.Add(new MenuOption("Interlineado: " + ReadingLayout.LineSpacing.ToString("F1", CultureInfo.InvariantCulture).Replace('.', ','),
+                    if (_settingsGroup == 1) options.Add(new MenuOption("Interlineado: " + ReadingLayout.LineSpacing.ToString("F1", CultureInfo.InvariantCulture).Replace('.', ','),
                         () => BookLibrary.Instance.SetReadingLayout(ReadingLayout.Font, ReadingLayout.LineSpacing == 1.2f ? 1.4f : ReadingLayout.LineSpacing == 1.4f ? 1.8f : 1.2f, ReadingLayout.Margin),
                         () => BookLibrary.Instance != null && !BookLibrary.Instance.Repaginating));
-                    options.Add(new MenuOption("Márgenes: " + (ReadingLayout.Margin == 24 ? "estrechos" : ReadingLayout.Margin == 48 ? "normales" : "amplios"),
+                    if (_settingsGroup == 1) options.Add(new MenuOption("Márgenes: " + (ReadingLayout.Margin == 24 ? "estrechos" : ReadingLayout.Margin == 48 ? "normales" : "amplios"),
                         () => BookLibrary.Instance.SetReadingLayout(ReadingLayout.Font, ReadingLayout.LineSpacing, ReadingLayout.Margin == 24 ? 48 : ReadingLayout.Margin == 48 ? 72 : 24),
                         () => BookLibrary.Instance != null && !BookLibrary.Instance.Repaginating));
                     break;

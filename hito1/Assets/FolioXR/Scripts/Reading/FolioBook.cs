@@ -24,6 +24,7 @@ using System.Collections;
 using System.Globalization;
 using System.IO;
 using FolioXR.Environments;
+using FolioXR.Accessibility;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.Rendering;
@@ -255,10 +256,10 @@ namespace FolioXR.Reading
         /// <summary>Reserva un lado físico para herramientas; consume también el pellizco hasta abrir.</summary>
         public void SetToolInputSuppressed(XRNode side, bool suppressed)
         {
-            _toolInputSuppressed[side == XRNode.LeftHand ? 0 : 1] = suppressed;
+            _toolInputSuppressed[side == Hands.Support ? 0 : 1] = suppressed;
             if (suppressed)
             {
-                if (side == XRNode.LeftHand) _leftGrabPinchConsumed = true;
+                if (side == Hands.Support) _leftGrabPinchConsumed = true;
                 else _rightGrabPinchConsumed = true;
             }
         }
@@ -277,6 +278,7 @@ namespace FolioXR.Reading
         private void Awake()
         {
             PageTheme.Changed += OnPageThemeChanged;
+            FolioAccessibility.Changed += OnAccessibilityChanged;
             _baseScale = transform.localScale;
             RealisticPhysics = PlayerPrefs.GetInt(PhysicsPrefsKey, 1) != 0;
             _body = GetComponent<Rigidbody>();
@@ -401,7 +403,7 @@ namespace FolioXR.Reading
             bool next = false, prev = false;
             for (int i = 0; i < 2; i++)
             {
-                XRNode side = i == 0 ? XRNode.LeftHand : XRNode.RightHand;
+                XRNode side = i == 0 ? Hands.Support : Hands.Main;
                 bool primary = Pressed(side, CommonUsages.primaryButton);
                 bool secondary = Pressed(side, CommonUsages.secondaryButton);
                 if (!_toolInputSuppressed[i])
@@ -413,7 +415,7 @@ namespace FolioXR.Reading
                 _nextWasDown[i] = primary;
                 _prevWasDown[i] = secondary;
             }
-            bool recenter = Pressed(XRNode.RightHand, CommonUsages.primary2DAxisClick);
+            bool recenter = Pressed(Hands.Main, CommonUsages.primary2DAxisClick);
             if (!InputPaused && next) NextSpread();
             if (!InputPaused && prev) PreviousSpread();
             if (!InputPaused && recenter && !_recenterWasDown) PlaceInFrontOfView();
@@ -544,8 +546,8 @@ namespace FolioXR.Reading
                 _renderScaleStickLatched = true;
                 return;
             }
-            float y = FolioXR.Tools.ToolRegistry.ReservesStick(XRNode.LeftHand)
-                ? 0f : ReadAxis(XRNode.LeftHand, CommonUsages.primary2DAxis).y;
+            float y = FolioXR.Tools.ToolRegistry.ReservesStick(Hands.Support)
+                ? 0f : ReadAxis(Hands.Support, CommonUsages.primary2DAxis).y;
             if (Mathf.Abs(y) < 0.3f) _renderScaleStickLatched = false;
             if (_renderScaleStickLatched || Mathf.Abs(y) <= 0.7f) return;
 
@@ -645,14 +647,21 @@ namespace FolioXR.Reading
             return Vector3.Distance(bookCollider.ClosestPoint(wrist), wrist) < pinchIgnoreNearBook;
         }
 
+        // Modo zurdo: las manos cambian de papel (pasar página, apoyo) y se vuelven a buscar.
+        private void OnAccessibilityChanged()
+        {
+            _leftHand = _rightHand = null;
+            FindHands();
+        }
+
         private void FindHands()
         {
             OVRHand[] hands = FindObjectsByType<OVRHand>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             foreach (OVRHand hand in hands)
             {
                 OVRPlugin.Hand side = hand.GetHand();
-                if (side == OVRPlugin.Hand.HandLeft && _leftHand == null) _leftHand = hand;
-                else if (side == OVRPlugin.Hand.HandRight && _rightHand == null) _rightHand = hand;
+                if (side == Hands.SupportHand && _leftHand == null) _leftHand = hand;
+                else if (side == Hands.MainHand && _rightHand == null) _rightHand = hand;
             }
             Debug.Log("[FolioXR] Manos para pasar página: " + hands.Length + " OVRHand, izquierda=" +
                       (_leftHand != null) + ", derecha=" + (_rightHand != null));
@@ -809,7 +818,7 @@ namespace FolioXR.Reading
                 ApplyLayout();
             }
             if (_turn == null) _turn = PageTurnEffect.Create(leftPage != null ? leftPage : rightPage);
-            if (turning && _turn != null && leftPage != null && rightPage != null)
+            if (turning && _turn != null && leftPage != null && rightPage != null && !FolioAccessibility.ReduceMotion)
             {
                 // La hoja sale del lado que se deja y cae sobre el otro; debajo ya está la página nueva.
                 bool towardLeft = forward != RightToLeft;
@@ -1079,6 +1088,7 @@ namespace FolioXR.Reading
         private void OnDestroy()
         {
             PageTheme.Changed -= OnPageThemeChanged;
+            FolioAccessibility.Changed -= OnAccessibilityChanged;
             if (_renderer != null)
             {
                 _renderer.Dispose();

@@ -21,9 +21,23 @@ namespace FolioXR.Environments
     }
 
     /// <summary>Raíz y puntos locales. Posee exclusivamente los recursos creados por Build.</summary>
+    /// <summary>
+    /// Una fila de la estantería de la biblioteca donde caben los libros del usuario (encargo 18). Coordenadas
+    /// locales de la raíz de la casa: Left y Right sobre la tabla, en el borde delantero de los libros pintados.
+    /// </summary>
+    public sealed class ShelfRow
+    {
+        public Vector3 Left { get; }
+        public Vector3 Right { get; }
+        public Vector3 Facing { get; }
+        public ShelfRow(Vector3 left, Vector3 right, Vector3 facing) { Left = left; Right = right; Facing = facing; }
+    }
+
     public sealed class HouseBuildResult : IDisposable
     {
         public GameObject Root { get; internal set; }
+        /// <summary>Filas libres para la estantería 3D, de la más cómoda a la menos cómoda.</summary>
+        public IReadOnlyList<ShelfRow> ShelfRows { get; internal set; } = Array.Empty<ShelfRow>();
         public IReadOnlyList<ReadingPoint> ReadingPoints { get; internal set; }
         public int TriangleCount { get; internal set; }
         public int MeshCount { get; internal set; }

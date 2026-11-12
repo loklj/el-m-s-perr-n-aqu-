@@ -1,6 +1,7 @@
 using FolioXR.Environments;
 using FolioXR.Reading;
 using FolioXR.Tools;
+using FolioXR.Accessibility;
 using UnityEngine;
 using UnityEngine.XR;
 
@@ -65,6 +66,7 @@ namespace FolioXR.Menu
             _audio.playOnAwake = false;
             _audio.spatialBlend = 0f;
             FolioXR.Books.BookLibrary.Notice += OnLibraryNotice;
+            FolioAccessibility.Changed += OnAccessibilityChanged;
             _click = Tone("Clic del menú", 800f, 0.035f, 0.08f);
             _notice = Tone("Fin de lectura", 440f, 0.65f, 0.07f);
         }
@@ -106,8 +108,8 @@ namespace FolioXR.Menu
             if (_rig == null) _rig = FindFirstObjectByType<OVRCameraRig>();
             foreach (OVRHand hand in FindObjectsByType<OVRHand>(FindObjectsInactive.Include, FindObjectsSortMode.None))
             {
-                if (hand.GetHand() == OVRPlugin.Hand.HandLeft) _left.Bind(hand);
-                if (hand.GetHand() == OVRPlugin.Hand.HandRight) _right.Bind(hand);
+                if (hand.GetHand() == Hands.SupportHand) _left.Bind(hand);
+                if (hand.GetHand() == Hands.MainHand) _right.Bind(hand);
             }
             if (_panel == null && _book != null && _environment != null)
             {
@@ -146,15 +148,15 @@ namespace FolioXR.Menu
             if (!_focused) return;
             // El puño usado para sostener el libro no debe abrir/cerrar el menú al soltar.
             bool gesture = false;
-            if ((_book != null && _book.IsGrabbed) || ToolRegistry.HoldsHand(XRNode.LeftHand)) _left.Reset();
+            if ((_book != null && _book.IsGrabbed) || ToolRegistry.HoldsHand(Hands.Support)) _left.Reset();
             else gesture = _left.UpdateGesture();
             if (_book != null) _book.LeftPinchSuppressed = _left.PalmUp;
-            InputDevice leftDevice = InputDevices.GetDeviceAtXRNode(XRNode.LeftHand);
+            InputDevice leftDevice = InputDevices.GetDeviceAtXRNode(Hands.Support);
             bool menu = Down(leftDevice, CommonUsages.menuButton);
             bool close = false;
             for (int i = 0; i < 2; i++)
             {
-                XRNode side = i == 0 ? XRNode.LeftHand : XRNode.RightHand;
+                XRNode side = i == 0 ? Hands.Support : Hands.Main;
                 bool back = Down(InputDevices.GetDeviceAtXRNode(side), CommonUsages.secondaryButton);
                 close |= back && !_backWas[i] && !ToolRegistry.HoldsController(side);
                 _backWas[i] = back; // Flanco real incluso si la herramienta reserva B/Y.
@@ -180,9 +182,9 @@ namespace FolioXR.Menu
                 FollowRigJump();
                 _panel.BeginPointers();
                 if (_dragSlot != 0 && _scaleSlot != 0)
-                    UpdatePointer(0, XRNode.LeftHand, _rig != null ? _rig.leftControllerAnchor : null, _left);
+                    UpdatePointer(0, Hands.Support, _rig != null ? Hands.SupportAnchor(_rig) : null, _left);
                 if (IsOpen && _dragSlot != 1 && _scaleSlot != 1)
-                    UpdatePointer(1, XRNode.RightHand, _rig != null ? _rig.rightControllerAnchor : null, _right);
+                    UpdatePointer(1, Hands.Main, _rig != null ? Hands.MainAnchor(_rig) : null, _right);
                 _panel.EndPointers();
             }
             else
@@ -191,7 +193,7 @@ namespace FolioXR.Menu
                 // sostenido nunca selecciona el botón que aparezca debajo del rayo.
                 for (int i = 0; i < 2; i++)
                 {
-                    InputDevice device = InputDevices.GetDeviceAtXRNode(i == 0 ? XRNode.LeftHand : XRNode.RightHand);
+                    InputDevice device = InputDevices.GetDeviceAtXRNode(i == 0 ? Hands.Support : Hands.Main);
                     _triggerWas[i] = !device.isValid || Down(device, CommonUsages.triggerButton);
                     _touchArmed[i] = _hasTip[i] = false;
                 }
@@ -221,11 +223,11 @@ namespace FolioXR.Menu
                 Head = camera.transform,
                 Space = _rig.trackingSpace != null ? _rig.trackingSpace : _rig.transform
             };
-            if (TrackedController(XRNode.LeftHand, out _) && _rig.leftControllerAnchor != null)
+            if (TrackedController(Hands.Support, out _) && Hands.SupportAnchor(_rig) != null)
             {
                 input.AnchorValid = true;
                 input.FollowAnchor = true;
-                input.Anchor = _rig.leftControllerAnchor.position;
+                input.Anchor = Hands.SupportAnchor(_rig).position;
             }
             else if (_left.TryBone(OVRSkeleton.BoneId.Hand_WristRoot, out Vector3 wrist) &&
                 _left.TryBone(OVRSkeleton.BoneId.Hand_Middle1, out Vector3 knuckle))
@@ -233,7 +235,7 @@ namespace FolioXR.Menu
                 input.AnchorValid = true;
                 input.Anchor = (wrist + knuckle) * 0.5f; // Centro de la palma.
             }
-            if (_dragSlot != 1 && _scaleSlot != 1 && !ToolRegistry.HoldsHand(XRNode.RightHand) && !ToolRegistry.HoldsController(XRNode.RightHand) &&
+            if (_dragSlot != 1 && _scaleSlot != 1 && !ToolRegistry.HoldsHand(Hands.Main) && !ToolRegistry.HoldsController(Hands.Main) &&
                 _right.TryBone(OVRSkeleton.BoneId.Hand_IndexTip, out Vector3 tip))
             {
                 input.TipValid = true;
@@ -241,7 +243,7 @@ namespace FolioXR.Menu
             }
             for (int i = 0; i < 2; i++)
             {
-                XRNode node = i == 0 ? XRNode.LeftHand : XRNode.RightHand;
+                XRNode node = i == 0 ? Hands.Support : Hands.Main;
                 bool tracked = TrackedController(node, out InputDevice device);
                 bool trigger = Down(device, CommonUsages.triggerButton);
                 bool edge = trigger && !_triggerWas[i];
@@ -363,18 +365,18 @@ namespace FolioXR.Menu
         private void LoadMenuScales()
         {
             if (_panel != null)
-                _panel.UserScale = Mathf.Clamp(PlayerPrefs.GetFloat(MenuScaleKey + "panel", 1f), MinMenuScale, MaxMenuScale);
+                _panel.UserScale = Mathf.Clamp(PlayerPrefs.GetFloat(MenuScaleKey + "panel", FolioAccessibility.MenuSize), MinMenuScale, MaxMenuScale);
             if (_sphere != null)
-                _sphere.UserScale = Mathf.Clamp(PlayerPrefs.GetFloat(MenuScaleKey + "esfera", 1f), MinMenuScale, MaxMenuScale);
+                _sphere.UserScale = Mathf.Clamp(PlayerPrefs.GetFloat(MenuScaleKey + "esfera", FolioAccessibility.MenuSize), MinMenuScale, MaxMenuScale);
         }
 
         private bool GrabPoint(int slot, out Vector3 point, out bool held, out float reach)
         {
-            XRNode node = slot == 0 ? XRNode.LeftHand : XRNode.RightHand;
+            XRNode node = slot == 0 ? Hands.Support : Hands.Main;
             point = Vector3.zero; held = false; reach = 0f;
             if (TrackedController(node, out InputDevice device))
             {
-                Transform anchor = _rig == null ? null : slot == 0 ? _rig.leftControllerAnchor : _rig.rightControllerAnchor;
+                Transform anchor = _rig == null ? null : slot == 0 ? Hands.SupportAnchor(_rig) : Hands.MainAnchor(_rig);
                 if (anchor == null || ToolRegistry.HoldsController(node)) return false;
                 point = anchor.position;
                 held = Down(device, CommonUsages.gripButton);
@@ -447,13 +449,13 @@ namespace FolioXR.Menu
 
         private bool AllReleased()
         {
-            foreach (XRNode node in new[] { XRNode.LeftHand, XRNode.RightHand })
+            foreach (XRNode node in new[] { Hands.Support, Hands.Main })
             {
                 InputDevice device = InputDevices.GetDeviceAtXRNode(node);
                 if (Down(device, CommonUsages.primaryButton) || Down(device, CommonUsages.secondaryButton) ||
                     Down(device, CommonUsages.primary2DAxisClick) || Down(device, CommonUsages.menuButton) ||
                     Down(device, CommonUsages.triggerButton)) return false;
-                if ((node == XRNode.LeftHand || (_environment != null && _environment.IsActive)) &&
+                if ((node == Hands.Support || (_environment != null && _environment.IsActive)) &&
                     device.TryGetFeatureValue(CommonUsages.primary2DAxis, out Vector2 axis) &&
                     (Mathf.Abs(axis.x) >= 0.3f || Mathf.Abs(axis.y) >= 0.3f)) return false;
             }
@@ -513,6 +515,13 @@ namespace FolioXR.Menu
         }
 
         /// <summary>Avisos de la biblioteca (importación, errores al abrir): se muestran frente a la vista.</summary>
+        private void OnAccessibilityChanged()
+        {
+            LoadMenuScales();
+            _panel?.RefreshPalette();
+            _sphere?.RefreshPalette();
+        }
+
         private void OnLibraryNotice(string message)
         {
             if (_view == null || Camera.main == null) return;

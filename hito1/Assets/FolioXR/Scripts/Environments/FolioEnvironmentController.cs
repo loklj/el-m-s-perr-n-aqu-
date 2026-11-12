@@ -60,6 +60,9 @@ namespace FolioXR.Environments
                 ? _rig.trackingSpace.position.y : 0f;
         public bool InputPaused { get; set; }
         /// <summary>Raíz de la casa activa (trazos guardados en sus coordenadas) o null en passthrough.</summary>
+        /// <summary>Filas de la estantería de la biblioteca de la casa activa (vacío en passthrough).</summary>
+        public IReadOnlyList<ShelfRow> ShelfRows =>
+            _active && _house != null ? _house.ShelfRows : (IReadOnlyList<ShelfRow>)Array.Empty<ShelfRow>();
         public Transform HouseRoot => _active && _house != null && _house.Root != null ? _house.Root.transform : null;
         public string EnvironmentName => _theme != null ? _theme.Name : null;
         public bool IsTeleportFloor(Collider collider) =>

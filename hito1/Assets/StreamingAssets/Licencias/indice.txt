@@ -1,0 +1,5 @@
+# Generado por FolioXRLicenseIndex al compilar. Un archivo por línea.
+AtkinsonHyperlegible-OFL.txt
+GentiumBookPlus-OFL.txt
+junrar-7.5.5.txt
+slf4j-1.7.36.txt

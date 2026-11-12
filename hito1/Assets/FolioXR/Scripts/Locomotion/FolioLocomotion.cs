@@ -1,5 +1,6 @@
 using FolioXR.Environments;
 using FolioXR.Reading;
+using FolioXR.Accessibility;
 using UnityEngine;
 using UnityEngine.XR;
 
@@ -23,8 +24,8 @@ namespace FolioXR.Locomotion
         private const float MiddleOn = 0.7f, MiddleOff = 0.4f, IndexBlock = 0.6f;
         private const float Press = 0.7f, Release = 0.3f, MaxTeleport = 10f;
         private static FolioLocomotion _instance;
-        public static bool VignetteEnabled => PlayerPrefs.GetInt(VignettePrefsKey, 1) != 0;
-        public static bool SmoothTurn => PlayerPrefs.GetInt(SmoothTurnPrefsKey, 0) != 0;
+        public static bool VignetteEnabled => PlayerPrefs.GetInt(VignettePrefsKey, 1) != 0 || FolioAccessibility.ReduceMotion;
+        public static bool SmoothTurn => PlayerPrefs.GetInt(SmoothTurnPrefsKey, 0) != 0 && !FolioAccessibility.ReduceMotion;
         private FolioEnvironmentController _environment;
         private OVRCameraRig _rig;
         private FolioBook _book;
@@ -111,13 +112,13 @@ namespace FolioXR.Locomotion
                 _capsule.detectCollisions = true;
                 _capsule.enableOverlapRecovery = true;
             }
-            if (_hand == null || !_hand.isActiveAndEnabled)
+            if (_hand == null || !_hand.isActiveAndEnabled || _hand.GetHand() != Hands.MainHand)
                 foreach (OVRHand hand in FindObjectsByType<OVRHand>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-                    if (hand.GetHand() == OVRPlugin.Hand.HandRight && hand.isActiveAndEnabled)
+                    if (hand.GetHand() == Hands.MainHand && hand.isActiveAndEnabled)
                     { _hand = hand; break; }
-            if (_leftHand == null || !_leftHand.isActiveAndEnabled)
+            if (_leftHand == null || !_leftHand.isActiveAndEnabled || _leftHand.GetHand() != Hands.SupportHand)
                 foreach (OVRHand hand in FindObjectsByType<OVRHand>(FindObjectsInactive.Include, FindObjectsSortMode.None))
-                    if (hand.GetHand() == OVRPlugin.Hand.HandLeft && hand.isActiveAndEnabled)
+                    if (hand.GetHand() == Hands.SupportHand && hand.isActiveAndEnabled)
                     { _leftHand = hand; break; }
             if (_visuals == null && _book != null && Camera.main != null)
                 _visuals = LocomotionVisuals.TryCreate(transform, _book, Camera.main);
@@ -155,9 +156,9 @@ namespace FolioXR.Locomotion
                 _ignoredBook = ignoreBook;
             }
 
-            bool leftValid = ControllerAxis(XRNode.LeftHand, out Vector2 left);
+            bool leftValid = ControllerAxis(Hands.Support, out Vector2 left);
             left = Vector2.ClampMagnitude(left, 1f);
-            bool rightValid = ControllerAxis(XRNode.RightHand, out Vector2 right);
+            bool rightValid = ControllerAxis(Hands.Main, out Vector2 right);
             if (!leftValid) _walkArmed = false;
             else if (left.magnitude < Release) _walkArmed = true;
             Vector3 forward = Vector3.ProjectOnPlane(_rig.centerEyeAnchor.forward, Vector3.up);
@@ -250,7 +251,7 @@ namespace FolioXR.Locomotion
             bool reliable = _leftHand != null && _leftHand.isActiveAndEnabled && _leftHand.IsTracked &&
                 !_leftHand.IsSystemGestureInProgress && _leftHand.IsPointerPoseValid && _leftHand.PointerPose != null;
             bool walking = reliable && MiddlePinch(_leftHand, _leftWalking ? MiddleOff : MiddleOn) &&
-                !FolioXR.Tools.ToolRegistry.HoldsHand(XRNode.LeftHand);
+                !FolioXR.Tools.ToolRegistry.HoldsHand(Hands.Support);
             if (walking != _leftWalking)
             {
                 _leftWalking = walking;
@@ -328,7 +329,7 @@ namespace FolioXR.Locomotion
             }
             if (_aim == AimSource.Controller)
             {
-                Transform source = _rig.rightControllerAnchor;
+                Transform source = Hands.MainAnchor(_rig);
                 if (source == null) { CancelAim(); return; }
                 DrawArc(source.position, source.forward);
             }

@@ -94,15 +94,7 @@ namespace FolioXR.Menu
             }
             _palette = new Texture2D(8, 1, TextureFormat.RGBA32, false)
             { name = "Colores de la esfera", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
-            _palette.SetPixels(new[] {
-                new Color(0.07f, 0.13f, 0.30f, 0.94f), // casilla
-                new Color(0.08f, 0.42f, 0.92f, 0.96f), // marcada
-                new Color(0.09f, 0.10f, 0.14f, 0.80f), // deshabilitada
-                Color.white,                           // íconos
-                new Color(0.55f, 0.95f, 1f, 1f),       // marco del frente
-                new Color(0.26f, 0.18f, 0.42f, 0.94f), // «Volver»
-                Color.white, Color.white });
-            _palette.Apply(false, true);
+            RefreshPalette();
             _bodyTexture = BodyTexture();
 
             // Orden de dibujo fijo: cuerpo → categorías → sus textos → opciones y marco → textos de opciones.
@@ -222,6 +214,28 @@ namespace FolioXR.Menu
         // ───────────────────────── Recursos fijos ─────────────────────────
 
         /// <summary>Degradado radial: centro azul translúcido y borde claro, como un brillo.</summary>
+        /// <summary>Colores de las casillas; con alto contraste: negro, blanco y amarillo (accesibilidad).</summary>
+        internal void RefreshPalette()
+        {
+            if (_palette == null) return;
+            _palette.SetPixels(FolioXR.Accessibility.FolioAccessibility.HighContrast ? new[] {
+                new Color(0f, 0f, 0f, 1f),             // casilla
+                new Color(1f, 0.85f, 0f, 1f),          // marcada
+                new Color(0.06f, 0.06f, 0.06f, 0.9f),  // deshabilitada
+                Color.white,                           // íconos
+                new Color(1f, 1f, 1f, 1f),             // marco del frente
+                new Color(0.2f, 0.2f, 0.2f, 1f),       // «Volver»
+                Color.white, Color.white } : new[] {
+                new Color(0.07f, 0.13f, 0.30f, 0.94f), // casilla
+                new Color(0.08f, 0.42f, 0.92f, 0.96f), // marcada
+                new Color(0.09f, 0.10f, 0.14f, 0.80f), // deshabilitada
+                Color.white,                           // íconos
+                new Color(0.55f, 0.95f, 1f, 1f),       // marco del frente
+                new Color(0.26f, 0.18f, 0.42f, 0.94f), // «Volver»
+                Color.white, Color.white });
+            _palette.Apply(false, false);
+        }
+
         private static Texture2D BodyTexture()
         {
             const int size = 128;
@@ -709,7 +723,9 @@ namespace FolioXR.Menu
             if (_notice != null && _notice.gameObject.activeSelf && Time.unscaledTime >= _noticeUntil)
                 _notice.gameObject.SetActive(false);
             float dt = Time.unscaledDeltaTime;
-            _scale = Mathf.MoveTowards(_scale, _open ? 1f : 0f, dt / OpenSeconds);
+            // Con «reducir movimiento» aparece y desaparece sin crecer.
+            _scale = FolioXR.Accessibility.FolioAccessibility.ReduceMotion ? (_open ? 1f : 0f)
+                : Mathf.MoveTowards(_scale, _open ? 1f : 0f, dt / OpenSeconds);
             if (_scale <= 0f)
             {
                 if (_root.gameObject.activeSelf) _root.gameObject.SetActive(false);
@@ -984,7 +1000,7 @@ namespace FolioXR.Menu
                         ring.Snapping = false;
                     }
                 }
-                else if (Mathf.Abs(ring.Velocity) > 40f)
+                else if (Mathf.Abs(ring.Velocity) > 40f && !FolioXR.Accessibility.FolioAccessibility.ReduceMotion)
                 {
                     ring.Scroll += ring.Velocity * dt;
                     ring.Velocity *= Mathf.Exp(-2.5f * dt);

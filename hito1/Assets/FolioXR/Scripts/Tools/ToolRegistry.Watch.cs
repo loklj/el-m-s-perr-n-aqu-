@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using FolioXR.Menu;
+using FolioXR.Accessibility;
 using UnityEngine;
 using UnityEngine.XR;
 
@@ -168,7 +169,8 @@ namespace FolioXR.Tools
         {
             if (_watchBody == null)
                 return false;
-            OVRSkeleton skeleton = _inputs[0].Skeleton;
+            // Modo zurdo: el reloj va en la muñeca derecha y se toca con la izquierda.
+            OVRSkeleton skeleton = _inputs[FolioAccessibility.LeftHanded ? 1 : 0].Skeleton;
             if (!TryBone(skeleton, OVRSkeleton.BoneId.Hand_WristRoot, OVRSkeleton.BoneId.XRHand_Wrist, out Vector3 wrist) ||
                 !TryBone(skeleton, OVRSkeleton.BoneId.Hand_Index1, OVRSkeleton.BoneId.XRHand_IndexProximal, out Vector3 index) ||
                 !TryBone(skeleton, OVRSkeleton.BoneId.Hand_Pinky1, OVRSkeleton.BoneId.XRHand_LittleProximal, out Vector3 pinky) ||
@@ -216,9 +218,9 @@ namespace FolioXR.Tools
         private void UpdateWatchTouches()
         {
             UpdateClock();
-            bool rightFree = !SideHeld(XRNode.RightHand) && (_grab == null || !_grab.HoldsSide(XRNode.RightHand));
+            bool rightFree = !SideHeld(Hands.Main) && (_grab == null || !_grab.HoldsSide(Hands.Main));
             Vector3 tip = Vector3.zero;
-            bool pointer = _wristValid && rightFree && TryPointer(XRNode.RightHand, out tip);
+            bool pointer = _wristValid && rightFree && TryPointer(Hands.Main, out tip);
 
             // Tocar la esfera del reloj abre o cierra la bandeja de herramientas (solo con manos).
             bool face = pointer && _wrist == _watchBody && _watchBody != null && _watchBody.gameObject.activeSelf;
@@ -258,8 +260,8 @@ namespace FolioXR.Tools
             }
 
             // Sacar herramienta tocando su ícono: solo con la mano derecha real (sin mando).
-            GrabInput hand = _inputs[1];
-            bool summon = pointer && !_book.InputPaused && hand.Reliable && hand.IndexTip != null && !_inputs[3].Reliable;
+            GrabInput hand = _inputs[FolioAccessibility.LeftHanded ? 0 : 1];
+            bool summon = pointer && !_book.InputPaused && hand.Reliable && hand.IndexTip != null && !_inputs[FolioAccessibility.LeftHanded ? 2 : 3].Reliable;
             for (int slot = 0; slot < _tools.Count; slot++)
             {
                 FolioTool tool = _tools[slot];

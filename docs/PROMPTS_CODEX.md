@@ -43,7 +43,7 @@ Responde siempre en español. Repositorio: https://github.com/loklj/el-m-s-perr-
 | 15 | Archivos gigantes y rendimiento | `fase4/rendimiento` | Pendiente |
 | 16 | Los otros 19 entornos | `entornos/19-temas` | Pendiente |
 | 17 | Pulido de lectura: modo noche, sepia, fuentes, búsqueda e índice | `fase5/lectura` | Parte 1 integrada por Claude. Partes 2/4/5 implementadas por Codex el 12 nov 2026: fuentes OFL, interlineado/márgenes, TOC y marcadores con nombre; rebase sobre `c29434d`, pendientes revisión y visor. Partes 3 y 6 pendientes |
-| 18 | Estantería 3D, carpetas y accesibilidad | `fase5/estanteria` | Pendiente |
+| 18 | Estantería 3D, carpetas y accesibilidad | `fase-1/preparacion` | Hecho por Claude el 12 nov 2026 (sin probar en el visor): estantería 3D en la casa y en passthrough, colecciones, orden y filtro, accesibilidad y licencias |
 | | 🧪 Prueba en el visor: versión candidata | | |
 | 19 | Preparación para la tienda: licencias, privacidad, VRC y build de lanzamiento | `tienda/lanzamiento` | Pendiente |
 | 20 | Correcciones finales tras la prueba completa | `tienda/correcciones` | Se escribe con el resultado de la prueba |

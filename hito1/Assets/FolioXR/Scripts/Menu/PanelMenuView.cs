@@ -65,15 +65,7 @@ namespace FolioXR.Menu
             if (_font == null) return false;
             _palette = new Texture2D(8, 1, TextureFormat.RGBA32, false)
             { name = "Colores del menú", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
-            _palette.SetPixels(new[] {
-                new Color(0.075f, 0.085f, 0.10f, 0.9f), // panel
-                new Color(0.15f, 0.18f, 0.23f, 1f),     // botón
-                new Color(0.08f, 0.36f, 0.8f, 1f),      // marcado
-                new Color(0.22f, 0.52f, 0.95f, 1f),     // hover
-                new Color(0.10f, 0.11f, 0.13f, 1f),     // deshabilitado
-                new Color(0.06f, 0.23f, 0.48f, 1f),     // pulsado
-                Color.white, new Color(0.4f, 0.7f, 1f, 1f) });
-            _palette.Apply(false, true);
+            RefreshPalette();
             _surfaceMaterial = Clone(source, "Superficies del menú", _palette);
             // Las superficies van antes que el texto (cola 3000), aunque el orden por distancia diga otra cosa.
             _surfaceMaterial.renderQueue = (int)RenderQueue.Transparent - 1;
@@ -99,6 +91,28 @@ namespace FolioXR.Menu
         }
 
         /// <summary>Clon transparente del material URP Unlit de la página; también lo usa la esfera.</summary>
+        /// <summary>Colores del panel; con alto contraste: negro, blanco y amarillo (accesibilidad).</summary>
+        internal void RefreshPalette()
+        {
+            if (_palette == null) return;
+            _palette.SetPixels(FolioXR.Accessibility.FolioAccessibility.HighContrast ? new[] {
+                new Color(0f, 0f, 0f, 1f),               // panel
+                new Color(0.12f, 0.12f, 0.12f, 1f),      // botón
+                new Color(1f, 0.85f, 0f, 1f),            // marcado
+                new Color(1f, 1f, 1f, 1f),               // hover
+                new Color(0.05f, 0.05f, 0.05f, 1f),      // deshabilitado
+                new Color(0.75f, 0.6f, 0f, 1f),          // pulsado
+                Color.white, new Color(1f, 0.85f, 0f, 1f) } : new[] {
+                new Color(0.075f, 0.085f, 0.10f, 0.9f), // panel
+                new Color(0.15f, 0.18f, 0.23f, 1f),     // botón
+                new Color(0.08f, 0.36f, 0.8f, 1f),      // marcado
+                new Color(0.22f, 0.52f, 0.95f, 1f),     // hover
+                new Color(0.10f, 0.11f, 0.13f, 1f),     // deshabilitado
+                new Color(0.06f, 0.23f, 0.48f, 1f),     // pulsado
+                Color.white, new Color(0.4f, 0.7f, 1f, 1f) });
+            _palette.Apply(false, false); // Legible: se vuelve a pintar al cambiar el contraste.
+        }
+
         internal static Material Clone(Material source, string name, Texture texture)
         {
             var material = new Material(source) { name = "FolioXR " + name };

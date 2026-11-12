@@ -221,6 +221,7 @@ namespace FolioXR.Environments
                 Table(new Vector3(0.55f, 0f, -1.0f), 0.55f, 0.55f, 0.53f);
                 Lamp(new Vector3(0.5f, 0f, -0.1f));
                 Bookshelf(new Vector3(1.7f, 0f, 4.55f), 3.2f, 0f);
+                ShelfRows(new Vector3(1.7f, 0f, 4.55f), 3.2f, 0f);
                 Bookshelf(new Vector3(5.55f, 0f, -3.25f), 2.6f, 90f);
                 B(Cream, new Vector3(2.1f, 0.006f, 1.1f), new Vector3(2.7f, 0.012f, 3f), true);
                 // Cama orientada al balcón, con cabecera, colchón, manta y dos almohadas.
@@ -277,6 +278,24 @@ namespace FolioXR.Environments
                         x += bw + 0.006f;
                     }
                 }
+            }
+
+            /// <summary>
+            /// Filas de la biblioteca (a la altura de los ojos primero) para los libros del usuario. Van 2 cm por
+            /// delante de los libros pintados, que en la versión horneada terminan en z local −0,20.
+            /// </summary>
+            private void ShelfRows(Vector3 origin, float width, float yaw)
+            {
+                Matrix4x4 m = _planScale * Group(origin, yaw);
+                var rows = new List<ShelfRow>();
+                foreach (int row in new[] { 3, 4, 2 })
+                {
+                    float y = 0.108f + row * 0.38f;
+                    rows.Add(new ShelfRow(m.MultiplyPoint3x4(new Vector3(-width * 0.5f + 0.10f, y, -0.205f)),
+                                          m.MultiplyPoint3x4(new Vector3(width * 0.5f - 0.10f, y, -0.205f)),
+                                          m.MultiplyVector(Vector3.back).normalized));
+                }
+                _result.ShelfRows = rows.AsReadOnly();
             }
 
             private void Seat(Vector3 position, float width, float yaw)
