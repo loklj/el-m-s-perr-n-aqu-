@@ -13,22 +13,22 @@ namespace FolioXR.Books
     /// </summary>
     public static class BookCollections
     {
-        public enum SortMode { Recent, Title, Author }
+        public enum SortMode { Recent, Title, Author, Manual }
         public enum FormatFilter { All, Pdf, Comics, Ebooks, Documents }
 
         private const string SortKey = "folioxr.lib.orden", FilterKey = "folioxr.lib.formato",
                              CollectionKey = "folioxr.lib.coleccion", DataKey = "folioxr.lib.colecciones";
         public static event Action Changed;
 
-        public static readonly string[] SortNames = { "recientes", "título", "autor" };
+        public static readonly string[] SortNames = { "recientes", "título", "autor", "a mano" };
         public static readonly string[] FilterNames = { "todos", "PDF", "cómics", "libros", "documentos" };
 
         [Serializable] private sealed class Folder { public string name; public List<string> ids = new List<string>(); }
-        [Serializable] private sealed class Store { public List<Folder> folders = new List<Folder>(); }
+        [Serializable] private sealed class Store { public List<Folder> folders = new List<Folder>(); public List<string> order = new List<string>(); }
 
         private static Store _store;
 
-        public static SortMode Sort => (SortMode)Mathf.Clamp(PlayerPrefs.GetInt(SortKey, 0), 0, 2);
+        public static SortMode Sort => (SortMode)Mathf.Clamp(PlayerPrefs.GetInt(SortKey, 0), 0, 3);
         public static FormatFilter Filter => (FormatFilter)Mathf.Clamp(PlayerPrefs.GetInt(FilterKey, 0), 0, 4);
 
         /// <summary>Colección visible; vacío = todas.</summary>
@@ -140,6 +140,20 @@ namespace FolioXR.Books
                         return c != 0 ? c : compare.Compare(a.title ?? "", b.title ?? "", options);
                     });
                     break;
+                case SortMode.Manual:
+                {
+                    // Orden que la persona armó en la estantería; los libros nuevos van al final.
+                    var rank = new Dictionary<string, int>();
+                    for (int i = 0; i < Data.order.Count; i++) if (!rank.ContainsKey(Data.order[i])) rank[Data.order[i]] = i;
+                    result.Sort((a, b) =>
+                    {
+                        bool ka = rank.TryGetValue(a.id ?? "", out int ra), kb = rank.TryGetValue(b.id ?? "", out int rb);
+                        if (ka && kb) return ra.CompareTo(rb);
+                        if (ka != kb) return ka ? -1 : 1;
+                        return b.lastRead.CompareTo(a.lastRead);
+                    });
+                    break;
+                }
                 default:
                     result.Sort((a, b) => b.lastRead.CompareTo(a.lastRead));
                     break;
@@ -172,11 +186,30 @@ namespace FolioXR.Books
             }
         }
 
+        /// <summary>
+        /// Coloca un libro en la estantería antes de otro (o al final si before es null) y pasa a «a mano».
+        /// view es lo que la estantería muestra ahora: desde ahí se arma el orden, así nada salta de lugar.
+        /// </summary>
+        public static void Place(IReadOnlyList<BookEntry> view, string id, string before)
+        {
+            if (string.IsNullOrEmpty(id) || view == null) return;
+            var ids = new List<string>();
+            foreach (BookEntry b in view) if (b != null && b.id != id) ids.Add(b.id);
+            int at = before != null ? ids.IndexOf(before) : -1;
+            if (at < 0) ids.Add(id); else ids.Insert(at, id);
+            // Los libros ocultos por un filtro o una colección conservan su lugar relativo, detrás.
+            foreach (string old in Data.order) if (!ids.Contains(old)) ids.Add(old);
+            Data.order = ids;
+            PlayerPrefs.SetInt(SortKey, (int)SortMode.Manual);
+            Save();
+        }
+
         /// <summary>Al quitar un libro de la biblioteca también sale de su colección.</summary>
         public static void Forget(string id)
         {
             bool changed = false;
             foreach (Folder f in Data.folders) changed |= f.ids.Remove(id);
+            changed |= Data.order.Remove(id);
             if (changed) Save();
         }
 
@@ -192,6 +225,7 @@ namespace FolioXR.Books
                     _store = new Store();
                 }
                 if (_store.folders == null) _store.folders = new List<Folder>();
+                if (_store.order == null) _store.order = new List<string>();
                 return _store;
             }
         }

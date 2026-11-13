@@ -13,7 +13,9 @@ namespace FolioXR.Books
     /// En la casa, los libros del usuario aparecen en la estantería real de la biblioteca (filas a la altura
     /// de los ojos, delante de los libros pintados). En passthrough, una estantería propia aparece frente a
     /// la persona desde el menú. Se toma un libro pellizcando su lomo (manos) o con el grip cerca (mandos):
-    /// sale del estante y se abre. El libro abierto falta del estante, como en una biblioteca de verdad.
+    /// sale del estante y queda en la mano. Soltarlo junto a una fila lo deja ahí (el orden se guarda,
+    /// «a mano»); soltarlo lejos del estante lo abre. El libro abierto falta del estante, y soltarlo
+    /// sobre una fila lo cierra y lo guarda en ese lugar (pedido del usuario, 13 nov 2026).
     /// Usa la misma vista que el menú (colección, formato y orden de <see cref="BookCollections"/>).
     /// </summary>
     public sealed class BookShelf : MonoBehaviour
@@ -32,7 +34,17 @@ namespace FolioXR.Books
             public Vector3 Size;        // Ancho (lomo), alto y fondo.
             public int FirstVertex;
             public TextMesh Title;
+            public int Row;             // Fila donde quedó.
+            public float Along;         // Distancia desde el inicio de la fila hasta el centro del lomo.
         }
+
+        private struct Line { public Vector3 Left, Right, Facing; }
+        private readonly List<Line> _lines = new List<Line>();
+        private List<BookEntry> _view = new List<BookEntry>();
+        private int _held = -1, _heldRole;
+        private Vector3 _heldOffset;
+        private bool _bookWasGrabbed;
+        private GameObject _marker;
 
         private readonly List<Slot> _slots = new List<Slot>();
         private readonly List<Vector3> _vertices = new List<Vector3>();
@@ -110,7 +122,8 @@ namespace FolioXR.Books
             if (!ReferenceEquals(rows, _rowsSource)) { _rowsSource = rows; _dirty = true; }
             if (!house && !_freePlaced) PlaceFree();
             string current = library.Current != null ? library.Current.id : null;
-            if (_dirty || current != _shownCurrent) Rebuild(library, house ? rows : null, current);
+            // Con un libro en la mano no se rearma (se soltaría solo); el cambio espera a que lo suelte.
+            if ((_dirty && _held < 0) || current != _shownCurrent) Rebuild(library, house ? rows : null, current);
             if (!_meshObject.activeSelf) { _meshObject.SetActive(true); _titles.gameObject.SetActive(true); }
             UpdateInteraction(library);
         }
@@ -144,6 +157,7 @@ namespace FolioXR.Books
             renderer.receiveShadows = false;
             _titles = new GameObject("Títulos").transform;
             _titles.SetParent(transform, false);
+            _marker = MarkerObject();
             return true;
         }
 
@@ -183,9 +197,12 @@ namespace FolioXR.Books
             _vertices.Clear(); _uv.Clear(); _triangles.Clear();
             foreach (Slot s in _slots) if (s.Title != null) Destroy(s.Title.gameObject);
             _slots.Clear();
-            _hover = _taking = -1;
+            _hover = _taking = _held = -1;
+            if (_marker != null) _marker.SetActive(false);
 
             List<BookEntry> books = BookCollections.View(library.Books);
+            _view = books;
+            _lines.Clear();
             // Filas como (izquierda, derecha, hacia la sala), en coordenadas del mundo.
             var lines = new List<(Vector3 left, Vector3 right, Vector3 facing)>();
             if (rows != null)
@@ -199,9 +216,11 @@ namespace FolioXR.Books
                 BuildFrame();
                 lines.AddRange(FreeRows());
             }
-            int index = 0, placed = 0;
+            int index = 0, placed = 0, rowIndex = -1;
             foreach (var line in lines)
             {
+                rowIndex++;
+                _lines.Add(new Line { Left = line.left, Right = line.right, Facing = line.facing });
                 Vector3 along = (line.right - line.left).normalized;
                 float length = Vector3.Distance(line.left, line.right);
                 Quaternion rotation = Quaternion.LookRotation(line.facing, Vector3.up);
@@ -215,7 +234,7 @@ namespace FolioXR.Books
                     if (current != null && entry.id == current) { x += width + 0.004f; continue; } // Hueco del libro abierto.
                     // El lomo queda en el plano de la fila; el libro se extiende hacia atrás.
                     Vector3 center = line.left + along * (x + width * 0.5f) + Vector3.up * (height * 0.5f) + line.facing * 0.017f;
-                    AddBook(entry, center, rotation, new Vector3(width, height, 0.034f));
+                    AddBook(entry, center, rotation, new Vector3(width, height, 0.034f), rowIndex, x + width * 0.5f);
                     x += width + 0.004f;
                     placed++;
                 }
@@ -242,13 +261,13 @@ namespace FolioXR.Books
             return f == "cbz" || f == "cbr" || f == "zip" ? 0.27f : f == "docx" || f == "odt" || f == "rtf" ? 0.28f : 0.235f;
         }
 
-        private void AddBook(BookEntry entry, Vector3 center, Quaternion rotation, Vector3 size)
+        private void AddBook(BookEntry entry, Vector3 center, Quaternion rotation, Vector3 size, int row, float along)
         {
             int leather = Mathf.Clamp(BookLibrary.Leather(entry), 0, BookCover.LeatherColors.Length - 1);
             int first = _vertices.Count;
             // Lomo (frente) y tapas en cuero; arriba se ve el canto de las hojas.
             Box(center - rotation * Vector3.forward * (size.z * 0.5f), rotation, size, leather, 8);
-            var slot = new Slot { Entry = entry, Center = center, Rotation = rotation, Size = size, FirstVertex = first };
+            var slot = new Slot { Entry = entry, Center = center, Rotation = rotation, Size = size, FirstVertex = first, Row = row, Along = along };
             // Título a lo largo del lomo, de abajo hacia arriba.
             var go = new GameObject("Lomo · " + entry.title);
             go.transform.SetParent(_titles, false);
@@ -365,6 +384,8 @@ namespace FolioXR.Books
                 }
                 return;
             }
+            if (_held >= 0) { UpdateHeld(library); return; }
+            if (ReturnOpenBook(library)) return;
             int hover = -1;
             float best = float.MaxValue;
             for (int role = 0; role < 2; role++)
@@ -374,7 +395,12 @@ namespace FolioXR.Books
                 if (near < 0) continue;
                 if (pressed && !wasPressed)
                 {
-                    Take(near);
+                    // El libro queda en la mano: soltarlo decide si vuelve al estante o se abre.
+                    _held = near;
+                    _heldRole = role;
+                    _heldOffset = point - _slots[near].Center;
+                    _hover = -1;
+                    Debug.Log("[FolioXR] Estantería: en la mano «" + _slots[near].Entry.title + "».");
                     return;
                 }
                 if (distance < best) { best = distance; hover = near; }
@@ -387,6 +413,143 @@ namespace FolioXR.Books
             }
         }
 
+        private void UpdateHeld(BookLibrary library)
+        {
+            Slot s = _slots[_held];
+            if (!Probe(_heldRole, out Vector3 point, out bool pressed, out _, out _))
+            {
+                // Se perdió la mano: el libro vuelve a su lugar.
+                Move(_held, s.Center);
+                _held = -1;
+                if (_marker != null) _marker.SetActive(false);
+                return;
+            }
+            Vector3 center = point - _heldOffset;
+            bool onShelf = DropTarget(center, s.Entry.id, out string before, out Vector3 markerAt, out Quaternion markerRotation);
+            if (pressed)
+            {
+                Move(_held, center);
+                if (_marker != null)
+                {
+                    _marker.SetActive(onShelf);
+                    if (onShelf) _marker.transform.SetPositionAndRotation(markerAt, markerRotation);
+                }
+                return;
+            }
+            if (_marker != null) _marker.SetActive(false);
+            int index = _held;
+            _held = -1;
+            if (onShelf)
+            {
+                Debug.Log("[FolioXR] Estantería: «" + s.Entry.title + "» guardado " + (before != null ? "antes de otro libro." : "al final."));
+                BookCollections.Place(_view, s.Entry.id, before);
+                _dirty = true;
+            }
+            else
+            {
+                Move(index, s.Center);
+                Take(index);
+            }
+        }
+
+        /// <summary>El libro abierto, soltado sobre una fila, se cierra y queda guardado en ese lugar.</summary>
+        private bool ReturnOpenBook(BookLibrary library)
+        {
+            bool grabbed = _book != null && _book.IsGrabbed;
+            bool released = _bookWasGrabbed && !grabbed;
+            _bookWasGrabbed = grabbed;
+            if (grabbed && library.Current != null)
+            {
+                bool over = DropTarget(_book.transform.position, library.Current.id, out _, out Vector3 at, out Quaternion rotation);
+                if (_marker != null)
+                {
+                    _marker.SetActive(over);
+                    if (over) _marker.transform.SetPositionAndRotation(at, rotation);
+                }
+                return true;
+            }
+            if (!released || library.Current == null) return false;
+            if (_marker != null) _marker.SetActive(false);
+            if (!DropTarget(_book.transform.position, library.Current.id, out string before, out _, out _)) return false;
+            Debug.Log("[FolioXR] Estantería: «" + library.Current.title + "» cerrado y guardado.");
+            BookCollections.Place(_view, library.Current.id, before);
+            library.CloseCurrent();
+            _dirty = true;
+            return true;
+        }
+
+        /// <summary>
+        /// ¿El punto está sobre una fila? Si es así, before es el libro ante el que quedaría (null = al final)
+        /// y at/rotation marcan el hueco con una barrita dorada.
+        /// </summary>
+        private bool DropTarget(Vector3 point, string id, out string before, out Vector3 at, out Quaternion rotation, float extra = 0f)
+        {
+            before = null; at = Vector3.zero; rotation = Quaternion.identity;
+            int bestRow = -1; float bestScore = float.MaxValue, bestAlong = 0f;
+            for (int r = 0; r < _lines.Count; r++)
+            {
+                Line line = _lines[r];
+                Vector3 axis = line.Right - line.Left;
+                float length = axis.magnitude;
+                if (length < 0.01f) continue;
+                axis /= length;
+                Vector3 d = point - line.Left;
+                float along = Vector3.Dot(d, axis), up = Vector3.Dot(d, Vector3.up), depth = Vector3.Dot(d, line.Facing);
+                if (along < -0.08f - extra || along > length + 0.08f + extra) continue;
+                if (up < -0.06f - extra || up > 0.34f + extra) continue;
+                if (depth < -0.2f - extra || depth > 0.22f + extra) continue;
+                float score = Mathf.Abs(up - 0.12f) + Mathf.Abs(depth) * 0.5f;
+                if (score < bestScore) { bestScore = score; bestRow = r; bestAlong = Mathf.Clamp(along, 0f, length); }
+            }
+            if (bestRow < 0) return false;
+            // Primer libro de esa fila (o de las siguientes) que queda a la derecha del punto.
+            float markerAlong = -1f;
+            for (int i = 0; i < _slots.Count; i++)
+            {
+                Slot s = _slots[i];
+                if (s.Entry.id == id || s.Row < bestRow) continue;
+                if (s.Row == bestRow && s.Along < bestAlong) { markerAlong = s.Along + s.Size.x * 0.5f + 0.002f; continue; }
+                before = s.Entry.id;
+                if (s.Row == bestRow) markerAlong = s.Along - s.Size.x * 0.5f - 0.002f;
+                break;
+            }
+            Line row = _lines[bestRow];
+            if (markerAlong < 0f) markerAlong = Mathf.Min(bestAlong, 0.01f);
+            Vector3 dir = (row.Right - row.Left).normalized;
+            at = row.Left + dir * markerAlong + Vector3.up * 0.12f + row.Facing * 0.02f;
+            rotation = Quaternion.LookRotation(row.Facing, Vector3.up);
+            return true;
+        }
+
+        private void Move(int index, Vector3 center) => SetBox(index, center);
+
+        private GameObject MarkerObject()
+        {
+            var go = new GameObject("Hueco en la estantería");
+            go.transform.SetParent(transform, false);
+            var mesh = new Mesh { name = "Hueco" };
+            var v = new List<Vector3>(); var uv = new List<Vector2>(); var t = new List<int>();
+            Vector3 h = new Vector3(0.0025f, 0.12f, 0.015f);
+            void F(Vector3 c, Vector3 a, Vector3 b)
+            {
+                int k = v.Count;
+                v.Add(c - a - b); v.Add(c + a - b); v.Add(c + a + b); v.Add(c - a + b);
+                for (int i = 0; i < 4; i++) uv.Add(Texel(9, 2));
+                t.AddRange(new[] { k, k + 2, k + 1, k, k + 3, k + 2, k, k + 1, k + 2, k, k + 2, k + 3 });
+            }
+            F(Vector3.forward * h.z, Vector3.right * h.x, Vector3.up * h.y);
+            F(-Vector3.forward * h.z, Vector3.right * h.x, Vector3.up * h.y);
+            F(Vector3.right * h.x, Vector3.forward * h.z, Vector3.up * h.y);
+            F(-Vector3.right * h.x, Vector3.forward * h.z, Vector3.up * h.y);
+            mesh.SetVertices(v); mesh.SetUVs(0, uv); mesh.SetTriangles(t, 0);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = _material;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            go.SetActive(false);
+            return go;
+        }
+
         private void Take(int index)
         {
             _taking = index;
@@ -395,10 +558,13 @@ namespace FolioXR.Books
         }
 
         /// <summary>Saca el libro «amount» metros del estante (hacia la sala).</summary>
-        private void Pull(int index, float amount)
+        private void Pull(int index, float amount) => SetBox(index, _slots[index].Center + _slots[index].Rotation * Vector3.forward * amount);
+
+        /// <summary>Lleva el libro (caja y título) a un centro de lomo nuevo, con la misma orientación.</summary>
+        private void SetBox(int index, Vector3 spineCenter)
         {
             Slot s = _slots[index];
-            Vector3 offset = s.Rotation * Vector3.forward * amount;
+            Vector3 offset = spineCenter - s.Center;
             int count = 24; // Seis caras de cuatro vértices.
             Vector3 boxCenter = s.Center - s.Rotation * Vector3.forward * (s.Size.z * 0.5f);
             var vertices = new List<Vector3>(count);

@@ -106,6 +106,7 @@ namespace FolioXR.Reading
         private PageTurnEffect _turn;
         /// <summary>Tapas de cuero con título o tapas propias (11 nov 2026).</summary>
         public BookCover Cover { get; private set; }
+        public BookBody Body { get; private set; }
         private bool _coverPagesPending;
 
         internal void RequestCoverPages(BookCover cover)
@@ -376,6 +377,7 @@ namespace FolioXR.Reading
 
             _defaultPath = pdfPath;
             if (Cover == null) Cover = BookCover.Attach(this);
+            if (Body == null) Body = BookBody.Attach(this);
             if (_pendingPath == null) Cover.Apply(false, 0, "Libro de muestra", false);
             // Un libro de la biblioteca pedido durante el arranque reemplaza al de prueba.
             string startPath = pdfPath, startId = null;
@@ -997,6 +999,7 @@ namespace FolioXR.Reading
                 statusText.transform.localRotation = Quaternion.identity;
             }
             if (Cover != null) Cover.Layout();
+            if (Body != null) Body.Layout();
         }
 
         private void ShowError(PdfResult result)

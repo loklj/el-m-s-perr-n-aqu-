@@ -23,7 +23,7 @@ from mathutils import Vector
 import fx, casa, materiales, paisaje, cielo, temas
 
 REPO = os.path.abspath(os.path.join(AQUI, '..', '..'))
-SALIDA = os.path.join(REPO, 'hito1', 'Assets', 'FolioXR', 'Resources', 'Entornos')
+SALIDA = os.environ.get('FOLIO_SALIDA', os.path.join(REPO, 'hito1', 'Assets', 'FolioXR', 'Resources', 'Entornos'))
 CACHE = os.environ.get('FOLIO_CACHE', '/tmp/bl/cache')
 CELDAS = {'follaje', 'hojas', 'pasto_hoja'}
 CELDA_PX = 4
@@ -435,12 +435,17 @@ def panorama(ctx, ancho, spp, E):
         base = render(f'{CACHE}/{t["slug"]}_base', 1024, 512, 1, cache=True)[..., :3]
         ctx['sky'].sun_disc = True
         for o, h in oculto.items(): o.hide_render = h
-    # 2) Tierra: la casa y lo cercano no se ven (ya existen en 3D), pero sí dan sombra y reflejo.
-    for o in ctx['fijos']:
-        o.visible_camera = False
+    # 2) Tierra: la casa no se ve (ya existe en 3D), pero sí da sombra y reflejo. Lo cercano horneado
+    # se apaga: sus parches de suelo tapaban el terreno interior y lo dejaban negro, y ese suelo se ve
+    # en el visor más allá de la malla cercana cuando uno lee lejos del punto del panorama.
+    casa_ob, cerca_ob = ctx['fijos']
+    # La casa tampoco: el ojo está dentro de ella y el suelo bajo el piso salía negro en su sombra.
+    casa_ob.hide_render = True
+    cerca_ob.hide_render = True
     for o in todos:
         if o.name.startswith('terreno_dentro'): o.hide_render = False
-    tierra = render(f'{CACHE}/{t["slug"]}_tierra_{ancho}_{spp}', ancho, alto, spp, transparente=True, cache=True)
+    tierra = render(f'{CACHE}/{t["slug"]}_tierra3_{ancho}_{spp}', ancho, alto, spp, transparente=True, cache=True)
+    cerca_ob.hide_render = False; casa_ob.hide_render = False
     # 3) Distancia, para la bruma.
     vl = bpy.context.view_layer
     dm = bpy.data.materials.new('distancia'); dm.use_nodes = True
@@ -449,9 +454,11 @@ def panorama(ctx, ancho, spp, E):
     nt.links.new(cd.outputs['View Distance'], em.inputs['Strength']); nt.links.new(em.outputs[0], out.inputs[0])
     vl.material_override = dm
     sc.cycles.use_denoising = False
-    dist = render(f'{CACHE}/{t["slug"]}_dist', 2048, 1024, 1, transparente=True, cache=True)[..., 0]
+    cerca_ob.hide_render = True; casa_ob.hide_render = True
+    dist = render(f'{CACHE}/{t["slug"]}_dist3', 2048, 1024, 1, transparente=True, cache=True)[..., 0]
     sc.cycles.use_denoising = True
     vl.material_override = None
+    cerca_ob.hide_render = False; casa_ob.hide_render = False
     # 4) Composición por franjas de filas: a 6144 × 3072 el panorama completo en float64 no cabe en 8 GB.
     dist = cv2.resize(dist, (ancho, alto), interpolation=cv2.INTER_LINEAR)
     rgb = cielo.componer(t, base, tierra, dist, ancho, alto, E)
@@ -504,7 +511,7 @@ def todo(t, a):
     t0 = time.time()
     # Para hornear la casa o el terreno cercano no hacen falta los miles de árboles lejanos (solo
     # aportan sombra a cientos de metros) y con ellos el proceso puede pasar de 8 GB.
-    ctx = escena(t, lejos=not a.solo)
+    ctx = escena(t, lejos=a.solo in (None, 'pano'))
     sc = bpy.context.scene
     slug = t['slug']
     out = os.path.join(SALIDA, slug)
@@ -513,7 +520,10 @@ def todo(t, a):
         if o.name.startswith('terreno_dentro'): o.hide_render = True
     # Cada horneado puede ir en un proceso aparte (--solo): con 8 GB no caben los dos seguidos.
     fe = f'{CACHE}/{t["slug"]}_E.txt'
-    if os.path.exists(fe): E = float(open(fe).read())
+    datos_previos = os.path.join(SALIDA, slug, 'datos.json')
+    if a.solo == 'pano' and os.path.exists(datos_previos):
+        E = float(json.load(open(datos_previos))['exposicion'])   # La misma con que se hornearon los atlas.
+    elif os.path.exists(fe): E = float(open(fe).read())
     else:
         E = exposicion(ctx)
         with open(fe, 'w') as f: f.write(repr(E))
@@ -523,6 +533,12 @@ def todo(t, a):
     ctx['fijos'] = [casa_ob, cerca_ob]
     if a.solo == 'cerca':
         horneado_guardado(cerca_ob, a.tam, max(16, a.spp // 2), f'{CACHE}/{slug}_cerca_{a.tam}.npy')
+        return memoria()
+    if a.solo == 'pano':
+        # Solo rehace el cielo (cielo.jpg); casa y cercano quedan como están en Resources.
+        pano, _ = panorama(ctx, a.pano, a.spp_pano, E)
+        guardar_jpg(f'{out}/cielo.jpg', cielo.a_srgb(pano, E), 92)
+        log(f'{slug}: panorama listo en {(time.time() - t0) / 60:.1f} min')
         return memoria()
     luz_casa = horneado_guardado(casa_ob, a.tam, a.spp, f'{CACHE}/{slug}_casa_{a.tam}.npy')
     if a.solo == 'casa': return memoria()
@@ -547,7 +563,7 @@ if __name__ == '__main__':
     ap.add_argument('tema')
     ap.add_argument('--vista', default='sofa,terraza,cama,jardin')
     ap.add_argument('--todo', action='store_true')
-    ap.add_argument('--solo', choices=['casa', 'cerca'], help='hornea solo ese atlas y termina (se guarda en caché)')
+    ap.add_argument('--solo', choices=['casa', 'cerca', 'pano'], help='hornea solo ese atlas y termina (se guarda en caché)')
     ap.add_argument('--tam', type=int, default=4096)
     ap.add_argument('--spp', type=int, default=28)
     ap.add_argument('--pano', type=int, default=6144)

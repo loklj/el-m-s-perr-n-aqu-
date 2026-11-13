@@ -115,7 +115,7 @@ class Paisaje:
             out = [r0]
             while out[-1] < r1: out.append(out[-1] * paso + 0.02)
             return np.array(out)
-        for nombre, radios in (('terreno_dentro', anillos(2.0, CERCA - 0.3, 1.035)),
+        for nombre, radios in (('terreno_dentro', anillos(0.05, CERCA - 0.3, 1.035)),
                                ('terreno_fuera', anillos(CERCA - 0.3, LEJOS, 1.028))):
             v, f = self._polar(radios, 0, 2 * math.pi, 720)
             if np.cross(v[f[0][1]] - v[f[0][0]], v[f[0][2]] - v[f[0][0]])[2] < 0:

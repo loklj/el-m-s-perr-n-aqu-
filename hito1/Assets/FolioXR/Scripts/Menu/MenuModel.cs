@@ -343,7 +343,7 @@ namespace FolioXR.Menu
             options.Add(new MenuOption("Volver", () => { _libraryMode = 0; RebuildOptions(); }));
             int sort = (int)BookCollections.Sort, filter = (int)BookCollections.Filter;
             options.Add(new MenuOption("Ordenar:\n" + BookCollections.SortNames[sort],
-                () => BookCollections.SetSort((BookCollections.SortMode)((sort + 1) % 3))));
+                () => BookCollections.SetSort((BookCollections.SortMode)((sort + 1) % 4))));
             options.Add(new MenuOption("Formato:\n" + BookCollections.FilterNames[filter],
                 () => BookCollections.SetFilter((BookCollections.FormatFilter)((filter + 1) % BookCollections.FilterNames.Length)),
                 marked: () => BookCollections.Filter != BookCollections.FormatFilter.All));

@@ -178,7 +178,7 @@ namespace FolioXR.Reading
             Vector3 page = _book.leftPage.transform.localScale;
             float width = page.x, height = page.y;
             float half = width * 0.5f + _book.gutter * 0.5f;
-            float outside = 0.012f + 0.0015f; // Cara exterior de la tapa (grosor 12 mm).
+            float outside = BookBody.BackFace + 0.0004f; // Cara exterior de las tapas duras (BookBody).
             // Visto desde fuera (+Z) la izquierda y la derecha se invierten: la portada de un libro normal
             // (detrás de las páginas izquierdas, x < 0) queda a la derecha de quien mira por fuera.
             float front = _rtl ? half : -half;
@@ -198,7 +198,7 @@ namespace FolioXR.Reading
             _title.characterSize = Fit(_title.text, width * 0.8f, height * 0.35f);
 
             _spine.text = Wrap(_titleText, 40, 1);
-            _spine.transform.localPosition = new Vector3(0f, 0f, outside);
+            _spine.transform.localPosition = new Vector3(0f, 0f, outside + BookBody.SpineBulge);
             // Lomo: el texto corre de arriba hacia abajo, como en los libros en español.
             _spine.transform.localRotation = facingOut * Quaternion.Euler(0f, 0f, -90f);
             _spine.characterSize = Fit(_spine.text, height * 0.85f, Mathf.Max(0.006f, _book.gutter + 0.014f));
