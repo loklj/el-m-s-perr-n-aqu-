@@ -24,7 +24,20 @@ namespace FolioXR.Reading
 
         private FolioBook _book;
         private Renderer _coverBox;
-        private Mesh _boards, _spine, _blocks, _leftCurl, _rightCurl, _leftShade, _rightShade;
+        private Mesh _spine, _closedSpine, _leftCurl, _rightCurl, _leftShade, _rightShade;
+        private readonly Mesh[] _boards = new Mesh[2], _blocks = new Mesh[2];
+        private readonly Transform[] _halves = new Transform[2];   // 0 izquierda, 1 derecha.
+        private Renderer _spineRenderer, _closedSpineRenderer;
+        private float _fold, _nextSweep;                           // 0 abierto, 1 cerrado.
+        private bool _contentsHidden;
+        private readonly List<Renderer> _hidden = new List<Renderer>();
+        private const float FoldSeconds = 0.4f;
+
+        /// <summary>Libro cerrado: la mitad de la portada se pliega sobre la otra y queda la tapa a la vista.</summary>
+        public bool Closed { get; private set; }
+        public bool Folding => _fold > 0.001f && _fold < 0.999f;
+        /// <summary>Lado que no se mueve al cerrar (+1 derecha, -1 izquierda): ahí queda el libro cerrado.</summary>
+        public int RestSide => _book != null && _book.RightToLeft ? -1 : 1;
         private Material _paperEdge, _shade;
         private Texture2D _edgeTexture, _shadeTexture;
         private readonly List<Object> _owned = new List<Object>();
@@ -54,12 +67,19 @@ namespace FolioXR.Reading
                 _paperEdge.color = new Color(0.96f, 0.93f, 0.86f);
                 if (_paperEdge.HasProperty("_Smoothness")) _paperEdge.SetFloat("_Smoothness", 0.15f);
             }
-            _boards = Own(new Mesh { name = "Tapas duras" });
             _spine = Own(new Mesh { name = "Lomo" });
-            _blocks = Own(new Mesh { name = "Bloques de hojas" });
-            Part("Tapas duras", _boards, leather);
-            Part("Lomo", _spine, leather);
-            Part("Bloques de hojas", _blocks, _paperEdge);
+            _closedSpine = Own(new Mesh { name = "Lomo cerrado" });
+            _spineRenderer = Part("Lomo", _spine, leather, transform);
+            _closedSpineRenderer = Part("Lomo cerrado", _closedSpine, leather, transform);
+            for (int i = 0; i < 2; i++)
+            {
+                _halves[i] = new GameObject(i == 0 ? "Mitad izquierda" : "Mitad derecha").transform;
+                _halves[i].SetParent(transform, false);
+                _boards[i] = Own(new Mesh { name = "Tapa dura" });
+                _blocks[i] = Own(new Mesh { name = "Bloque de hojas" });
+                Part("Tapa dura", _boards[i], leather, _halves[i]);
+                Part("Bloque de hojas", _blocks[i], _paperEdge, _halves[i]);
+            }
 
             // Hojas curvadas: la malla vive en el espacio de la página (escala ancho × alto × 1).
             _leftCurl = Own(PageMesh(true, 0f, 1f, 0f));
@@ -83,15 +103,76 @@ namespace FolioXR.Reading
 
         private T Own<T>(T item) where T : Object { _owned.Add(item); return item; }
 
-        private void Part(string name, Mesh mesh, Material material)
+        private Renderer Part(string name, Mesh mesh, Material material, Transform parent)
         {
             var item = new GameObject(name);
-            item.transform.SetParent(transform, false);
+            item.transform.SetParent(parent, false);
             item.AddComponent<MeshFilter>().sharedMesh = mesh;
             var renderer = item.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = material;
             renderer.shadowCastingMode = ShadowCastingMode.On;
             renderer.receiveShadows = true;
+            return renderer;
+        }
+
+        /// <summary>Cierra o abre el libro (animado salvo instant o «reducir movimiento»).</summary>
+        public void SetClosed(bool closed, bool instant = false)
+        {
+            Closed = closed;
+            if (instant || FolioXR.Accessibility.FolioAccessibility.ReduceMotion) _fold = closed ? 1f : 0f;
+            ApplyFold();
+        }
+
+        private void Update()
+        {
+            float target = Closed ? 1f : 0f;
+            if (!Mathf.Approximately(_fold, target))
+            {
+                _fold = Mathf.MoveTowards(_fold, target, Time.deltaTime / FoldSeconds);
+                ApplyFold();
+            }
+            else if (_contentsHidden && Time.unscaledTime >= _nextSweep) HideContents(true);
+        }
+
+        private void ApplyFold()
+        {
+            if (_halves[0] == null) return;
+            int rest = RestSide;
+            float angle = Mathf.SmoothStep(0f, 1f, _fold) * 180f;
+            // La mitad de la portada gira sobre el lomo pasando por delante (hacia quien lee).
+            _halves[0].localRotation = rest > 0 ? Quaternion.Euler(0f, -angle, 0f) : Quaternion.identity;
+            _halves[1].localRotation = rest < 0 ? Quaternion.Euler(0f, angle, 0f) : Quaternion.identity;
+            bool shut = _fold >= 0.5f;
+            if (_spineRenderer != null) _spineRenderer.enabled = !shut;
+            if (_closedSpineRenderer != null) _closedSpineRenderer.enabled = shut;
+            if (_book.Cover != null) _book.Cover.PlaceSpine(shut, rest);
+            HideContents(_fold > 0.001f);
+        }
+
+        /// <summary>
+        /// Con el libro plegado no se ven páginas, trazos ni marcadores (todo lo que cuelga del libro y no
+        /// es tapa ni cuerpo). forceRenderingOff no toca «enabled», que sigue siendo de quien dibuja la página.
+        /// </summary>
+        private void HideContents(bool hide)
+        {
+            _nextSweep = Time.unscaledTime + 0.5f;
+            foreach (Renderer r in _hidden) if (r != null) r.forceRenderingOff = false;
+            _hidden.Clear();
+            _contentsHidden = hide;
+            if (!hide) return;
+            Transform root = _book.leftPage != null ? _book.leftPage.transform.parent : transform;
+            for (int i = 0; i < root.childCount; i++)
+            {
+                Transform child = root.GetChild(i);
+                if (child == _halves[0] || child == _halves[1] || child == _spineRenderer.transform ||
+                    child == _closedSpineRenderer.transform || (_book.Cover != null && _book.Cover.Owns(child)) ||
+                    (_book.statusText != null && child == _book.statusText.transform)) continue;
+                foreach (Renderer r in child.GetComponentsInChildren<Renderer>(true))
+                {
+                    r.forceRenderingOff = true;
+                    _hidden.Add(r);
+                }
+            }
         }
 
         private static void SetPageMesh(Renderer page, Mesh mesh)
@@ -117,8 +198,8 @@ namespace FolioXR.Reading
         // La sombra del pliegue aparece y desaparece con su hoja.
         private void LateUpdate()
         {
-            if (_leftOverlay != null) _leftOverlay.enabled = _book.leftPage != null && _book.leftPage.enabled;
-            if (_rightOverlay != null) _rightOverlay.enabled = _book.rightPage != null && _book.rightPage.enabled;
+            if (_leftOverlay != null) _leftOverlay.enabled = _book.leftPage != null && _book.leftPage.enabled && !_contentsHidden;
+            if (_rightOverlay != null) _rightOverlay.enabled = _book.rightPage != null && _book.rightPage.enabled && !_contentsHidden;
         }
 
         /// <summary>Hundimiento (en metros, hacia +Z) a una distancia del lomo dada como fracción del ancho.</summary>
@@ -178,18 +259,33 @@ namespace FolioXR.Reading
             BuildBoards(w, h, g);
             BuildSpine(h, g);
             BuildBlocks(w, h, g);
+            BuildClosedSpine(h, g);
+            // La portada (imagen o título) viaja con la mitad que se pliega.
+            if (_book.Cover != null) _book.Cover.AttachFront(_halves[RestSide > 0 ? 0 : 1], _halves[RestSide > 0 ? 1 : 0]);
+            ApplyFold();
+        }
+
+        /// <summary>Lomo del libro cerrado: une las dos tapas, una sobre otra, por el lado del pliegue.</summary>
+        private void BuildClosedSpine(float h, float g)
+        {
+            var mesh = new MeshBuilder();
+            float y = h * 0.5f + Overhang, edge = g * 0.5f + 0.0015f, depth = Block + Board;
+            int rest = RestSide;
+            float x0 = rest > 0 ? edge - Board - 0.001f : -edge, x1 = rest > 0 ? edge : -edge + Board + 0.001f;
+            mesh.Box(x0, x1, -y, y, -depth, depth, 2.5f);
+            mesh.Apply(_closedSpine);
         }
 
         private void BuildBoards(float w, float h, float g)
         {
-            var mesh = new MeshBuilder();
             float y = h * 0.5f + Overhang;
             for (int side = -1; side <= 1; side += 2)
             {
+                var mesh = new MeshBuilder();
                 float inner = side * (g * 0.5f + 0.0015f), outer = side * (g * 0.5f + w + Overhang);
                 mesh.Box(Mathf.Min(inner, outer), Mathf.Max(inner, outer), -y, y, Block, Block + Board, 2.5f);
+                mesh.Apply(_boards[side < 0 ? 0 : 1]);
             }
-            mesh.Apply(_boards);
         }
 
         private void BuildSpine(float h, float g)
@@ -224,17 +320,21 @@ namespace FolioXR.Reading
                     else mesh.Quad(p[3], p[2], p[1], p[0], Vector2.zero, Vector2.right * 0.1f, Vector2.one * 0.1f, Vector2.up * 0.1f);
                 }
             }
+            // Fondo del pliegue entre las dos hojas (en sombra): sin él se vería a través del libro.
+            float gh = g * 0.5f + 0.002f, crease = CurlDepth + 0.0004f;
+            mesh.Quad(new Vector3(-gh, -y, crease), new Vector3(-gh, y, crease), new Vector3(gh, y, crease), new Vector3(gh, -y, crease),
+                      Vector2.zero, Vector2.up * 0.1f, Vector2.one * 0.1f, Vector2.right * 0.1f);
             mesh.Apply(_spine);
         }
 
         private void BuildBlocks(float w, float h, float g)
         {
-            var mesh = new MeshBuilder();
             float y = h * 0.5f;
             const int steps = 16;
             float lines = Block / 0.00035f; // Una línea cada ~0,35 mm, como el canto de un libro impreso.
             for (int side = -1; side <= 1; side += 2)
             {
+                var mesh = new MeshBuilder();
                 float gx = side * g * 0.5f, ox = side * (g * 0.5f + w);
                 // Canto delantero (lado opuesto al lomo): plano, de z = 0 a z = Block.
                 Vector3 a = new Vector3(ox, -y, 0f), b = new Vector3(ox, y, 0f), c = new Vector3(ox, y, Block), d = new Vector3(ox, -y, Block);
@@ -262,12 +362,19 @@ namespace FolioXR.Reading
                 Vector3 e = new Vector3(gx, -y, CurlDepth), f = new Vector3(gx, y, CurlDepth), k = new Vector3(gx, y, Block), m = new Vector3(gx, -y, Block);
                 if (side < 0) mesh.Quad(e, f, k, m, Vector2.zero, Vector2.right, Vector2.one, Vector2.up);
                 else mesh.Quad(m, k, f, e, Vector2.up, Vector2.one, Vector2.right, Vector2.zero);
+                // Hoja de papel bajo la página (misma curva): es lo que se ve mientras el libro se pliega.
+                Vector2 plain = new Vector2(0.5f, 0.6f);
+                for (int i = 0; i < steps; i++)
+                {
+                    float f0 = i / (float)steps, f1 = (i + 1) / (float)steps;
+                    float x0 = Mathf.Lerp(gx, ox, f0), x1 = Mathf.Lerp(gx, ox, f1);
+                    var p0 = new Vector3(x0, -y, Curl(f0) + 0.0007f); var p1 = new Vector3(x0, y, Curl(f0) + 0.0007f);
+                    var p2 = new Vector3(x1, y, Curl(f1) + 0.0007f); var p3 = new Vector3(x1, -y, Curl(f1) + 0.0007f);
+                    if (side > 0) mesh.Quad(p0, p1, p2, p3, plain, plain, plain, plain);
+                    else mesh.Quad(p3, p2, p1, p0, plain, plain, plain, plain);
+                }
+                mesh.Apply(_blocks[side < 0 ? 0 : 1]);
             }
-            // Fondo del pliegue entre las dos hojas: papel, a la altura donde terminan las hojas curvadas.
-            float gh = g * 0.5f, crease = CurlDepth + 0.0004f;
-            mesh.Quad(new Vector3(-gh, -y, crease), new Vector3(-gh, y, crease), new Vector3(gh, y, crease), new Vector3(gh, -y, crease),
-                      new Vector2(0, 0), new Vector2(h * 40f, 0), new Vector2(h * 40f, 2), new Vector2(0, 2));
-            mesh.Apply(_blocks);
         }
 
         /// <summary>Canto del bloque: líneas finas de papel (u a lo largo, v a través de las hojas).</summary>
@@ -312,6 +419,7 @@ namespace FolioXR.Reading
 
         private void OnDestroy()
         {
+            foreach (Renderer r in _hidden) if (r != null) r.forceRenderingOff = false;
             foreach (Object item in _owned) if (item != null) Destroy(item);
             if (_coverBox != null) _coverBox.enabled = true;
         }

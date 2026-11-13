@@ -243,6 +243,7 @@ namespace FolioXR.Reading
         public bool GoToPage(int leftIndex)
         {
             if (_busy || _renderer == null || _pageCount <= 0) return false;
+            if (Closed) OpenBook();   // Ir a una página (índice, marcador, búsqueda) abre el libro.
             int target = new BookSpread(leftIndex, _pageCount, SingleCover, RightToLeft).First;
             StartCoroutine(ShowSpread(target));
             return true;
@@ -378,6 +379,7 @@ namespace FolioXR.Reading
             _defaultPath = pdfPath;
             if (Cover == null) Cover = BookCover.Attach(this);
             if (Body == null) Body = BookBody.Attach(this);
+            if (GetComponent<BookHands>() == null) gameObject.AddComponent<BookHands>();
             if (_pendingPath == null) Cover.Apply(false, 0, "Libro de muestra", false);
             // Un libro de la biblioteca pedido durante el arranque reemplaza al de prueba.
             string startPath = pdfPath, startId = null;
@@ -397,6 +399,7 @@ namespace FolioXR.Reading
         private IEnumerator LoadDocument(string path, string documentId, int leftPage)
         {
             _busy = true;
+            if (Body != null && Body.Closed) { Body.SetClosed(false, true); ClosedChanged?.Invoke(); }
             string previousPath = _renderer != null ? _renderer.PdfPath : null;
             if (_renderer != null)
             {
@@ -629,7 +632,7 @@ namespace FolioXR.Reading
         {
             if (_renderScaleStatusUntil <= 0f || Time.unscaledTime < _renderScaleStatusUntil) return;
             _renderScaleStatusUntil = 0f;
-            if (!_statusIsError) SetStatus(_lastPageStatus);
+            if (!_statusIsError) SetStatus(Closed ? ClosedStatus : _lastPageStatus);
         }
 
         private static float ClampRenderScale(float value)
@@ -761,9 +764,33 @@ namespace FolioXR.Reading
             Debug.Log("[FolioXR] Dynamic Resolution desactivada: la nitidez la controla la app (1,4 a 1,8).");
         }
 
+        /// <summary>Libro cerrado (tapa a la vista). Las páginas siguen cargadas: abrirlo es inmediato.</summary>
+        public bool Closed => Body != null && Body.Closed;
+        private const string ClosedStatus = "Libro cerrado\nAbrir: A/X, pellizco derecho o deslizar un dedo por la tapa";
+        public event System.Action ClosedChanged;
+
+        public void CloseBook()
+        {
+            if (Body == null || Closed || !_spreadReady) return;
+            Body.SetClosed(true);
+            SetStatus(ClosedStatus);
+            Debug.Log("[FolioXR] Libro: cerrado.");
+            ClosedChanged?.Invoke();
+        }
+
+        public void OpenBook()
+        {
+            if (Body == null || !Closed) return;
+            Body.SetClosed(false);
+            SetStatus(_lastPageStatus ?? string.Empty);
+            Debug.Log("[FolioXR] Libro: abierto.");
+            ClosedChanged?.Invoke();
+        }
+
         [ContextMenu("Siguiente doble página")]
         public void NextSpread()
         {
+            if (Closed) { OpenBook(); return; }
             if (_busy || _renderer == null) return;
             int target = _shownSpread.Next(_pageCount);
             if (!_spreadReady || target == _leftIndex || target < 0) return;
@@ -774,7 +801,10 @@ namespace FolioXR.Reading
         public void PreviousSpread()
         {
             if (_busy || _renderer == null) return;
+            if (Closed) return;
             int target = _shownSpread.Previous;
+            // Pasar hacia atrás desde la primera página cierra el libro, como uno de papel.
+            if (_spreadReady && target == _leftIndex) { CloseBook(); return; }
             if (!_spreadReady || target == _leftIndex || target < 0) return;
             StartCoroutine(ShowSpread(target));
         }
@@ -906,8 +936,8 @@ namespace FolioXR.Reading
                     : "Vista previa del Editor: el PDF real solo se dibuja en el Quest.\n";
                 _lastPageStatus = preview + "Páginas " + (leftIndex + 1) +
                           (right != null ? "-" + shownRight : string.Empty) + " de " + _pageCount +
-                          "\nSiguiente: A/X o pellizco derecho · Anterior: B/Y o pellizco izquierdo";
-                SetStatus(_lastPageStatus);
+                          "\nSiguiente: A/X, pellizco derecho o deslizar un dedo por la hoja · Anterior: B/Y o pellizco izquierdo";
+                SetStatus(Closed ? ClosedStatus : _lastPageStatus);
             }
 
             _busy = false;

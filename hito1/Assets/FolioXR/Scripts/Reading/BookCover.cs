@@ -149,13 +149,51 @@ namespace FolioXR.Reading
             _frontImage.enabled = ownCovers && _frontTexture != null;
             _backImage.enabled = ownCovers && _backTexture != null;
             Layout();
+            if (_book.Body != null) _book.Body.Layout();
             if (ownCovers) _book.RequestCoverPages(this);
+        }
+
+        // BookBody: la portada cuelga de la mitad que se pliega y la contraportada de la que queda quieta.
+        private Transform _frontHalf, _backHalf;
+        private bool _spineShut;
+        private int _spineRest = 1;
+
+        internal void AttachFront(Transform frontHalf, Transform backHalf)
+        {
+            if (_frontHalf == frontHalf && _backHalf == backHalf) return;
+            _frontHalf = frontHalf; _backHalf = backHalf;
+            _frontImage.transform.SetParent(frontHalf, false);
+            _title.transform.SetParent(frontHalf, false);
+            _backImage.transform.SetParent(backHalf, false);
+            Layout();
+        }
+
+        internal bool Owns(Transform item) => item == _title.transform || item == _spine.transform ||
+            item == _frontImage.transform || item == _backImage.transform;
+
+        /// <summary>Título del lomo: detrás del pliegue con el libro abierto, en el canto con el libro cerrado.</summary>
+        internal void PlaceSpine(bool shut, int rest)
+        {
+            _spineShut = shut; _spineRest = rest;
+            float outside = BookBody.BackFace + 0.0004f;
+            if (!shut)
+            {
+                _spine.transform.localPosition = new Vector3(0f, 0f, outside + BookBody.SpineBulge);
+                _spine.transform.localRotation = Quaternion.Euler(0f, 180f, 0f) * Quaternion.Euler(0f, 0f, -90f);
+            }
+            else
+            {
+                float x = _book.gutter * 0.5f + 0.0015f - BookBody.Board - 0.0016f;
+                _spine.transform.localPosition = new Vector3(rest > 0 ? x : -x, 0f, 0f);
+                _spine.transform.localRotation = Quaternion.Euler(0f, rest > 0 ? 90f : -90f, 0f) * Quaternion.Euler(0f, 0f, -90f);
+            }
         }
 
         internal void SetRightToLeft(bool value)
         {
             _rtl = value;
             Layout();
+            if (_book.Body != null) _book.Body.Layout();
         }
 
         internal void SetCoverPages(Texture2D front, Texture2D back)
@@ -198,9 +236,8 @@ namespace FolioXR.Reading
             _title.characterSize = Fit(_title.text, width * 0.8f, height * 0.35f);
 
             _spine.text = Wrap(_titleText, 40, 1);
-            _spine.transform.localPosition = new Vector3(0f, 0f, outside + BookBody.SpineBulge);
             // Lomo: el texto corre de arriba hacia abajo, como en los libros en español.
-            _spine.transform.localRotation = facingOut * Quaternion.Euler(0f, 0f, -90f);
+            PlaceSpine(_spineShut, _spineRest);
             _spine.characterSize = Fit(_spine.text, height * 0.85f, Mathf.Max(0.006f, _book.gutter + 0.014f));
         }
 

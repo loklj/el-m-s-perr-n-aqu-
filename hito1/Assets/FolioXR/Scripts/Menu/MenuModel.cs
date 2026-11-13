@@ -238,6 +238,14 @@ namespace FolioXR.Menu
             options.Add(new MenuOption("Lectura: " + (rtl ? "manga" : "normal"),
                 () => { library.SetRightToLeft(entry, !rtl); RebuildOptions(); }, marked: () => library.RightToLeft(entry)));
             bool singleCover = BookLibrary.SingleCover(entry);
+            // Atajo: el archivo ya trae su portada como primera página (cómics, PDF escaneados).
+            bool hasCover = singleCover && BookLibrary.OwnCovers(entry);
+            options.Add(new MenuOption("El archivo trae\nportada: " + (hasCover ? "sí" : "no"), () =>
+            {
+                library.SetSingleCover(entry, !hasCover);
+                library.SetOwnCovers(entry, !hasCover);
+                RebuildOptions();
+            }, () => !library.Repaginating, marked: () => BookLibrary.SingleCover(entry) && BookLibrary.OwnCovers(entry)));
             options.Add(new MenuOption("Portada sola: " + (singleCover ? "sí" : "no"),
                 () => { library.SetSingleCover(entry, !singleCover); RebuildOptions(); },
                 () => !library.Repaginating, marked: () => BookLibrary.SingleCover(entry)));
@@ -665,7 +673,11 @@ namespace FolioXR.Menu
                     options.Add(new MenuOption("Lectura: " + (_book != null && _book.RightToLeft ? "manga" : "normal"),
                         () => { _book.SetRightToLeft(!_book.RightToLeft); RebuildOptions(); }, () => _book != null,
                         () => _book != null && _book.RightToLeft));
-                    options.Add(new MenuOption("Cerrar libro", library.CloseCurrent, () => library.Current != null));
+                    bool shut = _book != null && _book.Closed;
+                    options.Add(new MenuOption(shut ? "Abrir el libro" : "Cerrar la tapa",
+                        () => { if (_book.Closed) _book.OpenBook(); else _book.CloseBook(); RebuildOptions(); },
+                        () => _book != null && library.Current != null));
+                    options.Add(new MenuOption("Dejar este libro\n(vuelve el de muestra)", library.CloseCurrent, () => library.Current != null));
                     options.Add(new MenuOption("Editar libro", () => { _setupId = library.Current.id; RebuildOptions(); },
                         () => library.Current != null));
                     BookEntry current = library.Current;

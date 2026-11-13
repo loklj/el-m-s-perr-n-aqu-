@@ -25,6 +25,7 @@ namespace FolioXR.Reading {
   private BookSpread _shownSpread;private bool _spreadReady,_spreadLayoutDirty,_busy,_resolutionDirty;
   private int _leftIndex,_pageCount,_renderedWidth;private float _aspectHeightOverWidth,gutter;
   private string _lastPageStatus;private UnityEngine.Texture2D _leftTexture,_rightTexture;private PageTurnEffect _turn;
+  public bool Closed;public void OpenBook(){Closed=false;}public void CloseBook(){Closed=true;}private const string ClosedStatus="";
   public float BookScale=1;public BookCover Cover;private PdfPageRenderer _renderer=new PdfPageRenderer();
   public UnityEngine.Renderer leftPage=new UnityEngine.Renderer(),rightPage=new UnityEngine.Renderer();
   public event Action<int,int> SpreadShown;public int Progress=-1;public List<int> Requests=>_renderer.Requests;
