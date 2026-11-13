@@ -84,19 +84,23 @@ namespace FolioXR.Reading
         public event System.Action ScaleReset;
         /// <summary>Identificador estable del documento (nombre + tamaño) para guardar trazos por página.</summary>
         public string DocumentId { get; private set; }
-        /// <summary>Página izquierda visible (desde 0) o -1 mientras no hay doble página lista.</summary>
+        /// <summary>Primera página real de la apertura (progreso), aunque esté a la derecha; -1 si no está lista.</summary>
         public int LeftPageIndex => _spreadReady ? _leftIndex : -1;
-        public bool RightPageVisible => _spreadReady && rightPage != null && rightPage.enabled;
+        public bool RightPageVisible => RightSlotPage >= 0 && rightPage != null && rightPage.enabled;
         public int PageCount => _pageCount;
 
         // ── Encargos 8 y 9 (Claude, 11 nov 2026): manga, animación, modo acostado ──
         public const string LyingPrefsKey = "folioxr.lying";
+        public const string SingleCoverPrefsPrefix = "folioxr.singleCover.";
+        public bool SingleCover { get; private set; }
+        private BookSpread _shownSpread;
+        private bool _spreadLayoutDirty;
         private const string RtlPrefsPrefix = "folioxr.rtl.";
         /// <summary>Lectura de derecha a izquierda (manga), guardada por libro.</summary>
         public bool RightToLeft { get; private set; }
         /// <summary>Página (desde 0) que muestra cada lado, o -1 si ese lado está vacío.</summary>
-        public int LeftSlotPage => !_spreadReady ? -1 : !RightToLeft ? _leftIndex : _leftIndex + 1 < _pageCount ? _leftIndex + 1 : -1;
-        public int RightSlotPage => !_spreadReady ? -1 : RightToLeft ? _leftIndex : _leftIndex + 1 < _pageCount ? _leftIndex + 1 : -1;
+        public int LeftSlotPage => _spreadReady ? _shownSpread.Left : -1;
+        public int RightSlotPage => _spreadReady ? _shownSpread.Right : -1;
         /// <summary>Modo acostado: el libro se coloca hacia donde mira la cabeza, aunque sea el techo.</summary>
         public static bool LyingMode => PlayerPrefs.GetInt(LyingPrefsKey, 0) != 0;
         private PageTurnEffect _turn;
@@ -149,6 +153,30 @@ namespace FolioXR.Reading
             PlayerPrefs.Save();
         }
 
+        public static bool GetSingleCover(string documentId) =>
+            !string.IsNullOrEmpty(documentId) && PlayerPrefs.GetInt(SingleCoverPrefsPrefix + documentId, 0) != 0;
+
+        public void SetSingleCoverFor(string documentId, bool value)
+        {
+            if (string.IsNullOrEmpty(documentId)) return;
+            PlayerPrefs.SetInt(SingleCoverPrefsPrefix + documentId, value ? 1 : 0);
+            PlayerPrefs.Save();
+            if (documentId != DocumentId || SingleCover == value) return;
+            SingleCover = value;
+            RefreshSpreadLayout();
+        }
+
+        private void RefreshSpreadLayout()
+        {
+            // Si se cambia mientras llega una textura, terminar esa apertura y actualizarla después.
+            _spreadLayoutDirty = true;
+            if (!_busy && _spreadReady && _renderer != null)
+            {
+                _spreadLayoutDirty = false;
+                StartCoroutine(ShowSpread(_leftIndex, false));
+            }
+        }
+
         public void SetRightToLeft(bool value)
         {
             if (RightToLeft == value) return;
@@ -161,9 +189,9 @@ namespace FolioXR.Reading
             Debug.Log("[FolioXR] Lectura: " + (value ? "manga (derecha a izquierda)" : "normal"));
             if (Cover != null) Cover.SetRightToLeft(value);
             // Vuelve a mostrar la doble página con los lados cambiados (mismo índice: sin animación).
-            if (!_busy && _spreadReady && _renderer != null) StartCoroutine(ShowSpread(_leftIndex));
+            RefreshSpreadLayout();
         }
-        /// <summary>Doble página mostrada: página izquierda (desde 0) y total. La biblioteca guarda el progreso.</summary>
+        /// <summary>Apertura mostrada: primera página real (desde 0) y total. Conserva los índices del documento.</summary>
         public event System.Action<int, int> SpreadShown;
         /// <summary>Un documento pedido no se pudo abrir: identificador (o null) y mensaje para el usuario.</summary>
         public event System.Action<string, string> DocumentFailed;
@@ -214,8 +242,7 @@ namespace FolioXR.Reading
         public bool GoToPage(int leftIndex)
         {
             if (_busy || _renderer == null || _pageCount <= 0) return false;
-            int target = Mathf.Clamp(leftIndex, 0, _pageCount - 1);
-            target -= target % 2;
+            int target = new BookSpread(leftIndex, _pageCount, SingleCover, RightToLeft).First;
             StartCoroutine(ShowSpread(target));
             return true;
         }
@@ -230,7 +257,7 @@ namespace FolioXR.Reading
 
         private PdfPageRenderer _renderer;
         private int _pageCount;
-        private int _leftIndex; // pagina izquierda de la doble pagina actual (indice desde 0)
+        private int _leftIndex; // Primera página real de la apertura; no es una ranura física.
         private bool _busy;
         private Texture2D _leftTexture;
         private Texture2D _rightTexture;
@@ -402,11 +429,13 @@ namespace FolioXR.Reading
             _renderer = renderer;
             _pageCount = pages;
             DocumentId = documentId ?? BuildDocumentId(path);
-            RightToLeft = PlayerPrefs.GetInt(RtlPrefsPrefix + DocumentId, 0) != 0;
+            RightToLeft = GetRightToLeft(DocumentId);
+            SingleCover = GetSingleCover(DocumentId);
+            _spreadLayoutDirty = false;
             _spreadReady = false; // Otro documento: sin animación de hoja.
             Debug.Log("[FolioXR] PDF: " + path + " (" + pages + " páginas, id=" + DocumentId + ")");
             int start = Mathf.Clamp(leftPage, 0, pages - 1);
-            yield return ShowSpread(start - start % 2);
+            yield return ShowSpread(start);
         }
 
         private void Update()
@@ -433,6 +462,7 @@ namespace FolioXR.Reading
             _recenterWasDown = recenter;
 
             if (pinchToTurnPages) UpdatePinchPageTurn();
+            if (_spreadLayoutDirty && !_busy && _spreadReady && _renderer != null) RefreshSpreadLayout();
             if (_pageThemeDirty && GoToPage(_leftIndex)) _pageThemeDirty = false;
             if (!InputPaused) UpdateRenderScaleInput();
             else _renderScaleStickLatched = true;
@@ -733,8 +763,8 @@ namespace FolioXR.Reading
         public void NextSpread()
         {
             if (_busy || _renderer == null) return;
-            int target = _leftIndex + 2;
-            if (target >= _pageCount) return;
+            int target = _shownSpread.Next(_pageCount);
+            if (!_spreadReady || target == _leftIndex || target < 0) return;
             StartCoroutine(ShowSpread(target));
         }
 
@@ -742,8 +772,8 @@ namespace FolioXR.Reading
         public void PreviousSpread()
         {
             if (_busy || _renderer == null) return;
-            int target = Mathf.Max(0, _leftIndex - 2);
-            if (target == _leftIndex) return;
+            int target = _shownSpread.Previous;
+            if (!_spreadReady || target == _leftIndex || target < 0) return;
             StartCoroutine(ShowSpread(target));
         }
 
@@ -780,8 +810,13 @@ namespace FolioXR.Reading
             transform.SetPositionAndRotation(position, rotation);
         }
 
-        private IEnumerator ShowSpread(int leftIndex)
+        private IEnumerator ShowSpread(int leftIndex, bool animate = true)
         {
+            bool rtl = RightToLeft;
+            BookSpread spread = new BookSpread(leftIndex, _pageCount, SingleCover, rtl);
+            _spreadLayoutDirty = false;
+            if (spread.First < 0) yield break;
+            leftIndex = spread.First;
             float spreadStart = Time.realtimeSinceStartup;
             int previousLeft = _leftIndex;
             bool hadSpread = _spreadReady;
@@ -802,9 +837,9 @@ namespace FolioXR.Reading
                 leftResult = r;
             });
 
-            if (leftResult.Ok && leftIndex + 1 < _pageCount)
+            if (leftResult.Ok && spread.Second >= 0)
             {
-                yield return _renderer.RenderPage(leftIndex + 1, width, (t, r) =>
+                yield return _renderer.RenderPage(spread.Second, width, (t, r) =>
                 {
                     right = t;
                     rightResult = r;
@@ -820,14 +855,16 @@ namespace FolioXR.Reading
 
             ReadingDiagnostics.Record(!hadSpread ? "first_spread_ms" : System.Math.Abs((long)leftIndex - previousLeft) > 2 ? "random_spread_ms" : "spread_ready_ms",
                 (Time.realtimeSinceStartup - spreadStart) * 1000.0);
-            bool turning = _spreadReady && leftIndex != _leftIndex && _leftTexture != null;
+            bool turning = animate && _spreadReady && leftIndex != _leftIndex;
             bool forward = leftIndex > _leftIndex;
             _leftIndex = leftIndex;
+            _shownSpread = spread;
             _spreadReady = true;
             _renderedWidth = width;
             SpreadShown?.Invoke(leftIndex, _pageCount);
-            // En manga la primera página de la pareja va a la derecha.
-            Texture2D newLeft = RightToLeft ? right : left, newRight = RightToLeft ? left : right;
+            // La portada ocupa el lado opuesto a la primera página de las parejas siguientes.
+            Texture2D newLeft = spread.Left == spread.First ? left : right;
+            Texture2D newRight = spread.Right == spread.First ? left : right;
             if (left.width > 0)
             {
                 _aspectHeightOverWidth = left.height / (float)left.width;
@@ -837,8 +874,8 @@ namespace FolioXR.Reading
             if (turning && _turn != null && leftPage != null && rightPage != null && !FolioAccessibility.ReduceMotion)
             {
                 // La hoja sale del lado que se deja y cae sobre el otro; debajo ya está la página nueva.
-                bool towardLeft = forward != RightToLeft;
-                Texture2D lifted = towardLeft ? _rightTexture : _leftTexture;
+                bool towardLeft = forward != rtl;
+                Texture2D lifted = (towardLeft ? _rightTexture : _leftTexture) ?? Texture2D.whiteTexture;
                 if (lifted != null)
                 {
                     if (towardLeft) ShowPage(rightPage, newRight);
@@ -891,13 +928,12 @@ namespace FolioXR.Reading
         private void ShowPage(Renderer page, Texture2D texture)
         {
             if (page == null) return;
-            page.enabled = texture != null;
-            // .material crea una copia propia del material para este libro.
-            if (texture != null)
-            {
-                page.material.mainTexture = texture;
-                page.material.color = PageTheme.Tint(_renderer != null ? _renderer.PdfPath : null);
-            }
+            page.enabled = true;
+            // Papel vacío: material limpio y sin página asociada para tinta, marcadores o progreso.
+            string path = _renderer != null ? _renderer.PdfPath : null;
+            page.material.mainTexture = texture != null ? texture : Texture2D.whiteTexture;
+            page.material.color = texture == null && PageTheme.NeedsRemap(path)
+                ? new Color(30f / 255, 29f / 255, 28f / 255) : PageTheme.Tint(path);
         }
 
         private void ReplaceTexture(ref Texture2D slot, Texture2D incoming, Renderer target)

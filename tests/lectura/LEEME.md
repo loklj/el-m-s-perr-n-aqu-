@@ -54,3 +54,14 @@ Este paso requiere red y no es necesario para las pruebas normales. Los nombres 
 ## Límites de la evidencia
 
 No se ha compilado una APK Unity ni ejecutado en Quest. Falta validar empaquetado AAR en Unity, carga de fuentes en WebView, teclado/persistencia SQLite, memoria, latencia, nitidez y FPS. Los índices PDF/MOBI complejos requieren ampliar corpus. El menú conserva el orden anterior y no hay cambios propios en Environments, Tools, Resources ni herramientas. Los marcadores siguen guardando páginas; no se convierten en localizadores semánticos al cambiar tipografía.
+
+## Portada sola (13 de noviembre de 2026)
+
+```bash
+DOTNET_ROOT=/ruta/dotnet-con-sdk-8 python3 tests/lectura/validar-portada.py
+DOTNET_ROOT=/ruta/dotnet-con-sdk-8 python3 tests/lectura/validar-ui.py
+```
+
+863 comprobaciones de `BookSpread` y miembros reales de `FolioBook`: el script extrae las propiedades y métodos originales, sin duplicar el algoritmo en el arnés. Se sustituyen solamente el renderizador, los contratos Unity y los miembros de escena que no intervienen en esta prueba; no equivale a compilar `FolioBook` completo ni Unity. Se comprueban páginas 0..100, todos los saltos, recorridos ida/vuelta, lados normal/manga, última página, reapertura de preferencias, cambio diferido, animación invocada, papel vacío y fallo de carga.
+
+La batería biblioteca/menú pasa 22 comprobaciones (incluye opciones por libro y repaginación sin redondear páginas impares). Regresión: 28 del puente C#, 22 JVM y 11 JavaScript de `tests/busqueda/validar.sh`. Total de esta entrega: **946 comprobaciones**. Sigue pendiente la prueba de animación/materiales y gestos en Quest.

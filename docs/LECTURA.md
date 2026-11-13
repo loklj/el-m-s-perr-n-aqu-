@@ -63,3 +63,13 @@ SQLite ya tenía `bookmarks.label`: se reutiliza, **sin borrar datos ni cambiar 
 Comandos y recuento en [tests/lectura/LEEME.md](../tests/lectura/LEEME.md). Incluye compilación de todos los plugins Java contra API 34, fixtures propios EPUB/NCX/MOBI/KF8/PDF, datos inválidos, cancelación, CSS real en Chromium, hashes de fuentes y C# real de MenuModel/BookLibrary/puente con stubs. PyMuPDF leyó de forma independiente los PDF válidos con sus tres marcadores. No se distribuye esa herramienta ni se copia código suyo.
 
 Estas pruebas no son una compilación de Unity ni acreditan WebView de Horizon OS, SQLite Android, nitidez a 45 cm, rendimiento ni 72 FPS. Las pruebas del dispositivo están en el Paso 10 de la guía.
+
+## Estado: portada sola (13 de noviembre de 2026)
+
+Implementada en `lectura/portada`, pendiente de prueba visual en Quest. Biblioteca → «Editar libro» → «Portada sola: sí/no»; también aparece al configurar un libro nuevo. Por defecto **no**. Se guarda inmediatamente por identificador en `folioxr.singleCover.<id>`, igual que la preferencia de lectura manga.
+
+Con «sí», la página 0 aparece sola a la derecha (a la izquierda en manga), junto a una hoja vacía. Siguen las parejas (1,2), (3,4)… Con «no», se conserva (0,1), (2,3)… Una última página sin pareja también tiene papel vacío al otro lado. El papel vacío sigue el tema día/sepia/noche y devuelve `-1` como ranura: no es una página del archivo ni recibe trazos por página.
+
+`BookSpread` centraliza emparejamiento, ranuras y avance/retroceso. `FolioBook` conserva como progreso la primera página real de la apertura; los números de marcador, TOC y búsqueda no cambian. El salto siempre incluye la página solicitada. La repaginación calcula el destino proporcional sin redondearlo antes: el emparejamiento se aplica al mostrarlo. Cambiar la opción o manga durante un render termina la apertura en curso y la refresca después, sin animación por el cambio de ajuste. La opción se deshabilita mientras se repagina.
+
+Pruebas: `tests/lectura/validar-portada.py` ejecuta la regla y los miembros reales de navegación/presentación de `FolioBook`, extraídos sin reescribirlos, con contratos mínimos de Unity. Cubre libros vacíos, de una página, pares/impares, normal/manga, saltos, ida/vuelta, preferencias por libro, cambios durante render, papel nocturno y fallos de página. No compila el resto de `FolioBook` ni valida GPU, gesto o animación en el visor. La prueba de biblioteca/menú añade persistencia, bloqueo durante repaginación y conservación de destinos impares.

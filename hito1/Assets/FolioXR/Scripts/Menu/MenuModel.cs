@@ -237,6 +237,10 @@ namespace FolioXR.Menu
             bool rtl = library.RightToLeft(entry);
             options.Add(new MenuOption("Lectura: " + (rtl ? "manga" : "normal"),
                 () => { library.SetRightToLeft(entry, !rtl); RebuildOptions(); }, marked: () => library.RightToLeft(entry)));
+            bool singleCover = BookLibrary.SingleCover(entry);
+            options.Add(new MenuOption("Portada sola: " + (singleCover ? "sí" : "no"),
+                () => { library.SetSingleCover(entry, !singleCover); RebuildOptions(); },
+                () => !library.Repaginating, marked: () => BookLibrary.SingleCover(entry)));
             bool own = BookLibrary.OwnCovers(entry);
             options.Add(new MenuOption(own ? "Tapas: las del\narchivo" : "Tapas: de cuero\ncon el título",
                 () => { library.SetOwnCovers(entry, !own); RebuildOptions(); }));

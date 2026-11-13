@@ -248,7 +248,6 @@ namespace FolioXR.Books
                 Repaginating = true;
                 _awaitingPagination = false;
                 _relocatePage = Mathf.Clamp(Mathf.RoundToInt(entry.position / (float)(entry.pages - 1) * (pageCount - 1)), 0, pageCount - 1);
-                _relocatePage -= _relocatePage % 2;
                 return;
             }
             if (Repaginating && _book.DocumentId == _repaginateId)
@@ -258,7 +257,6 @@ namespace FolioXR.Books
                     if (!_paginationReady) return; // La doble página anterior puede terminar antes de comenzar la recarga.
                     _awaitingPagination = false;
                     _relocatePage = Mathf.Clamp(Mathf.RoundToInt(_epubProgress * (pageCount - 1)), 0, pageCount - 1);
-                    _relocatePage -= _relocatePage % 2;
                     return; // No guardar la posición provisional antes de reubicarla.
                 }
                 Repaginating = false;
@@ -733,6 +731,20 @@ namespace FolioXR.Books
         {
             PlayerPrefs.SetInt(StylePrefix + entry.id + ".leather", index);
             ApplyIfCurrent(entry);
+        }
+
+        public static bool SingleCover(BookEntry entry) => entry != null && FolioBook.GetSingleCover(entry.id);
+
+        public void SetSingleCover(BookEntry entry, bool value)
+        {
+            if (entry == null || Repaginating) return;
+            if (_book != null) _book.SetSingleCoverFor(entry.id, value);
+            else
+            {
+                PlayerPrefs.SetInt(FolioBook.SingleCoverPrefsPrefix + entry.id, value ? 1 : 0);
+                PlayerPrefs.Save();
+            }
+            StateChanged?.Invoke();
         }
 
         public void SetRightToLeft(BookEntry entry, bool value)

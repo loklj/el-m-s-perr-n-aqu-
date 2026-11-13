@@ -21,6 +21,13 @@ class UiTest {
   AndroidJavaClass.Handler=(name,args)=>name=="bookmarksJson"?(object)json:name=="renameBookmark"||name=="removeBookmark"?(object)true:null;
   Call(library,"LoadBookmarks");Check(library.NamedBookmarks.Count==2,"Lista nominal");Check(library.BookmarkTitle(10)=="Favorito"&&library.BookmarkTitle(20)=="Página 21","Nombres antiguos sin etiqueta");
   var menu=new MenuModel(book,new FolioXR.Environments.FolioEnvironmentController(),()=>false,b=>{});
+  menu.Select(MenuCategory.Biblioteca);menu.Invoke(menu.Options.ToList().FindIndex(x=>x.Text=="Editar libro"));
+  int portada=menu.Options.ToList().FindIndex(x=>x.Text.StartsWith("Portada sola:"));
+  Check(portada>=0&&menu.Options[portada].Text.EndsWith("no"),"Portada desactivada por defecto");
+  menu.Invoke(portada);Check(BookLibrary.SingleCover(entry)&&menu.Options[portada].Text.EndsWith("sí"),"Portada guardada y etiqueta actualizada");
+  Check(!BookLibrary.SingleCover(new BookEntry{id="otro"}),"Preferencia aislada por libro");
+  Property(library,"Repaginating",true);menu.Invoke(portada);Check(BookLibrary.SingleCover(entry),"No cambiar agrupación durante repaginación");Property(library,"Repaginating",false);
+  menu.Invoke(menu.Options.ToList().FindIndex(x=>x.Text=="Listo"));
   menu.Select(MenuCategory.Ajustes);
   Check(menu.Options.Last().Text.StartsWith("Modo diagnóstico:"),"Diagnóstico al final");
   menu.Invoke(menu.Options.Count-1);Check(ReadingDiagnostics.Enabled,"Diagnóstico activado");
@@ -41,6 +48,11 @@ class UiTest {
   Call(menu,"OpenReadingList",1);library.CancelContents();Field(library,"_contents",new List<ContentsEntry>{new ContentsEntry{title="Capítulo",page=23}});Call(menu,"RebuildOptions");
   menu.Invoke(menu.Options.ToList().FindIndex(x=>x.Text.StartsWith("Capítulo")));Check(book.Destination==23,"Salto a pagina del indice");
   json="{\"positions\":[6]}";Call(library,"LoadBookmarks");Check(library.NamedBookmarks.Count==1&&library.NamedBookmarks[0].position==6,"Compatibilidad JSON anterior");
+  library.GoToBookmark(3);Check(book.Destination==3,"Marcador conserva página impar");
+  Property(library,"Repaginating",true);Field(library,"_repaginateId",entry.id);Field(library,"_awaitingPagination",true);Field(library,"_paginationReady",true);Field(library,"_epubProgress",.6f);
+  Call(library,"OnSpreadShown",0,6);
+  Check((int)typeof(BookLibrary).GetField("_relocatePage",BindingFlags.NonPublic|BindingFlags.Instance).GetValue(library)==3,"Repaginación no redondea antes de GoToPage");
+  Call(library,"Update");Check(book.Destination==3,"Reubicación entrega destino real");
   var wifi=JsonUtility.FromJson<WifiStatus>("{\"copied\":4294967297,\"total\":8589934592}");Check(wifi.copied==4294967297L&&wifi.total==8589934592L,"Progreso Wi-Fi de 64 bits");
   Console.WriteLine("OK: "+checks+" comprobaciones C# de biblioteca/menu con stubs");
  }

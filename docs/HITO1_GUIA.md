@@ -305,6 +305,8 @@ En el visor: **Biblioteca → Orígenes desconocidos → Folio XR**.
 | Encargo 15 · Caché y memoria | Leer muchas parejas: `folio-paginas/folio-fxr1` permanece ≤192 MiB. Al acercarse al presupuesto se reduce resolución y no se precarga; páginas extremas u OOM se reintentan a menor resolución |
 | Encargo 15 · Medidas reales | Registrar primera página, apertura fría/caliente, cambios precargados/no precargados, saltos con índice/marcadores, PSS, gráficos estimados y FPS. Metas pendientes: <3 s, <100 ms y 72 FPS; completar tabla de [RENDIMIENTO.md](RENDIMIENTO.md) |
 
+| Encargo 8 · Portada sola | Biblioteca → «Editar libro» → «Portada sola: sí» (por defecto no). Ver página 0 sola a la derecha, con papel vacío a la izquierda; en manga al revés. Avanzar a (1,2), (3,4)… y volver a portada. Probar libros de 1 página y totales pares/impares, reabrir, saltar por marcador/índice/búsqueda y cambiar letra: el destino debe quedar visible y la preferencia conservarse |
+
 El entorno de prueba ya está en `fase-1/preparacion`; consulta [instalación, presupuesto y comprobaciones pendientes](ENTORNOS.md). El eje vertical del stick izquierdo conserva el ajuste de nitidez del Hito 1.2 también dentro de la casa.
 
 ### Actualizar a una versión nueva del código (por ejemplo, el Hito 1.2)
