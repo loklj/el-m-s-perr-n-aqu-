@@ -782,6 +782,9 @@ namespace FolioXR.Reading
 
         private IEnumerator ShowSpread(int leftIndex)
         {
+            float spreadStart = Time.realtimeSinceStartup;
+            int previousLeft = _leftIndex;
+            bool hadSpread = _spreadReady;
             _busy = true;
             SetStatus(string.Empty);
 
@@ -815,6 +818,8 @@ namespace FolioXR.Reading
                 yield break;
             }
 
+            ReadingDiagnostics.Record(!hadSpread ? "first_spread_ms" : System.Math.Abs((long)leftIndex - previousLeft) > 2 ? "random_spread_ms" : "spread_ready_ms",
+                (Time.realtimeSinceStartup - spreadStart) * 1000.0);
             bool turning = _spreadReady && leftIndex != _leftIndex && _leftTexture != null;
             bool forward = leftIndex > _leftIndex;
             _leftIndex = leftIndex;

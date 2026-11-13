@@ -50,7 +50,20 @@ Archivos de 5 GB, verificados el mismo día: el PDF de 5.659 páginas (5,37 GB) 
 
 Las páginas de `pdf-gb` y `cbz-gb` son ruido de colores con el número de página encima. Es a propósito: el ruido no se puede comprimir, así que el archivo realmente pesa lo que se pide.
 
-**No incluido:** RAR sólido (necesita la herramienta propietaria `rar`). Para CBR, comprimir a mano una carpeta de imágenes con `rar a -s`.
+**RAR sólido opcional:** `--solo rar-solido --cbz-imagenes 3000 --rar-command /ruta/a/rar`. Necesita RAR externo con licencia/evaluación vigente; no se distribuye con la app. Usa RAR5 sólido real, verificado con RAR 7.23; la app mantiene su diagnóstico «RAR5 aún no compatible». El generador limita el tamaño del proceso externo y vigila el espacio libre. Mismo contenido/semilla y versión del compresor producen el mismo archivo.
+
+## Encargo 15: cómics escaneados
+
+```bash
+python3 tools/test-data/gigantes.py --solo pdf-escaneado --gb 4.1 --limite-gb 4.8
+python3 tools/test-data/gigantes.py --solo pdf-escaneado --gb 8 --limite-gb 10
+```
+
+`--scan-width` vale 4096 por defecto (64–8192); alto = ancho × 1,414. Son cientos de imágenes grandes en vez de miles pequeñas. El primer comando generó 208 páginas / 4.423.496.009 bytes, validado sin reparación y con dibujo del principio, medio y final en Linux. No acredita rendimiento Quest. Detalle en [RENDIMIENTO.md](../../docs/RENDIMIENTO.md).
+
+El límite de espacio ahora se aplica también durante cada escritura, con 1 GiB libre de reserva, no solo sobre una estimación inicial. Una salida interrumpida es parcial y no se usa para validar el lector. Los EPUB grandes se construyen directamente dentro del ZIP por párrafos; la semilla controla su contenido. No se reserva el capítulo entero en memoria. `--gb` usa GiB y `--limite-gb` GB decimales, como en la versión anterior; el manifiesto guarda los bytes exactos.
+
+Pruebas: `tests/rendimiento/generador_test.py`. No subir las salidas generadas; el repositorio solo conserva programas y evidencia pequeña.
 
 Para copiar un archivo al visor:
 

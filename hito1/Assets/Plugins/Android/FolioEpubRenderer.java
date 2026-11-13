@@ -67,6 +67,7 @@ public final class FolioEpubRenderer {
                 String result = job.run(generation);
                 check(generation, key); STATUS.replace(key, result);
             } catch (Throwable e) {
+                if (e instanceof OutOfMemoryError) FolioPerformance.memoryFailure();
                 String kind = e instanceof FolioEpubContainer.DrmException ? "DRM" :
                     e instanceof OutOfMemoryError ? "MEMORY" : e instanceof TimeoutException ? "TIMEOUT" : "IO";
                 STATUS.replace(key, "ERROR:" + kind + ":" + e.getMessage());
@@ -80,6 +81,12 @@ public final class FolioEpubRenderer {
     private static <T> T ui(Callable<T> action) throws Exception {
         FutureTask<T> task = new FutureTask<>(action); UI.post(task);
         try { return task.get(20, TimeUnit.SECONDS); }
+        catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof Error) throw (Error)cause;
+            if (cause instanceof Exception) throw (Exception)cause;
+            throw e;
+        }
         catch (Exception e) { task.cancel(false); throw e; }
     }
     private static void open(String file, int generation) throws Exception {
@@ -226,6 +233,7 @@ public final class FolioEpubRenderer {
     }
     private static byte[] page(int index, int width, int generation) throws Exception {
         check(generation, null);
+        if (FolioPerformance.pressure() > 0) { CACHE.clear(); cacheBytes = 0; }
         String cacheKey = index + ":" + width;
         byte[] cached = CACHE.get(cacheKey); if (cached != null) return cached;
         int chapter = 0, local = index;
@@ -239,6 +247,9 @@ public final class FolioEpubRenderer {
         }); return null; });
         visual.get(20, TimeUnit.SECONDS);
         long start = SystemClock.elapsedRealtime();
+        long reservation = 12L * width * Math.round(width * HEIGHT / (float)WIDTH);
+        if (!FolioRenderPolicy.acquire(reservation)) throw new OutOfMemoryError("Presupuesto global de capturas");
+        try {
         Bitmap bitmap = ui(() -> {
             Bitmap b = Bitmap.createBitmap(width, Math.round(width * HEIGHT / (float)WIDTH), Bitmap.Config.ARGB_8888);
             b.eraseColor(Color.WHITE);
@@ -256,11 +267,12 @@ public final class FolioEpubRenderer {
         }
         if (bytes.length <= CACHE_LIMIT) { CACHE.put(cacheKey, bytes); cacheBytes += bytes.length; }
         return bytes;
+        } finally { FolioRenderPolicy.release(reservation); }
     }
     public static void requestRenderPage(String file, int index, int targetWidth, String output, String key) {
         submit(key, generation -> {
             open(file, generation);
-            int width = Math.max(64, Math.min(3072, targetWidth));
+            int width = FolioRenderPolicy.dimensions(targetWidth, WIDTH, HEIGHT, FolioRenderPolicy.pixels(FolioPerformance.pressure()))[0];
             byte[] bytes = page(index, width, generation); check(generation, key);
             File out = new File(output), tmp = new File(output + ".tmp");
             try {
@@ -271,11 +283,13 @@ public final class FolioEpubRenderer {
                 if (!tmp.renameTo(out)) throw new IOException("No se pudo publicar pagina");
             } finally { tmp.delete(); }
             // Precarga en la misma cola; nunca mantiene bitmaps de varias paginas.
-            if ((index & 1) == 1) WORK.execute(() -> {
+            if ((index & 1) == 1 && FolioPerformance.pressure() == 0) WORK.execute(() -> {
                 try {
                     int total = 0; for (int n : counts) total += n;
-                    for (int i = index + 1; i <= index + 2 && i < total; i++) page(i, width, generation);
-                } catch (Exception ignored) { }
+                    for (int i = index + 1; i <= index + 2 && i < total && FolioPerformance.pressure() == 0; i++) page(i, width, generation);
+                } catch (Throwable ignored) {
+                    if (ignored instanceof OutOfMemoryError) { FolioPerformance.memoryFailure(); CACHE.clear(); cacheBytes = 0; }
+                }
             });
             return "OK:" + width + "x" + Math.round(width * HEIGHT / (float)WIDTH);
         });

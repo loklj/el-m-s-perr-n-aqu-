@@ -6,6 +6,7 @@
 using System;
 using System.Collections;
 using System.IO;
+using System.Threading.Tasks;
 using UnityEngine;
 
 namespace FolioXR.Reading
@@ -45,7 +46,7 @@ namespace FolioXR.Reading
         public static string DrmFailurePath { get; private set; }
         public static event Action<string> PageCounted;
         public static event Action<string> RenderFailed;
-        private const float TimeoutSeconds = 30f;
+        private const float TimeoutSeconds = 300f; // Apertura PDF grande cancelable; no truncar trabajos a los 30 s.
 
         private readonly string _pdfPath;
         private readonly string _cacheDir;
@@ -53,6 +54,11 @@ namespace FolioXR.Reading
         private string _contentsKey;
         private string _searchKey;
         public static bool IsSearchable(string path) => IsReflow(path);
+        private readonly float _openedAt = Time.realtimeSinceStartup;
+        private bool _firstPage = true, _lastCacheHit;
+        private readonly string _instanceKey = Guid.NewGuid().ToString("N");
+        private bool _disposed;
+        private static Task _cleanup;
 
 #if UNITY_ANDROID && !UNITY_EDITOR
         private AndroidJavaClass _java;
@@ -63,6 +69,15 @@ namespace FolioXR.Reading
             _pdfPath = pdfPath;
             _cacheDir = Path.Combine(Application.temporaryCachePath, "folio-paginas");
             Directory.CreateDirectory(_cacheDir);
+            if (_cleanup == null)
+            {
+                string folder = _cacheDir;
+                _cleanup = Task.Run(() =>
+                {
+                    foreach (string pattern in new[] { "folio-*", "precarga-*" })
+                        foreach (string stale in Directory.EnumerateFiles(folder, pattern)) TryDelete(stale);
+                });
+            }
 #if UNITY_ANDROID && !UNITY_EDITOR
             _java = new AndroidJavaClass(IsEpub(pdfPath) ? "com.loklj.folioxr.FolioEpubRenderer" :
                 IsReflow(pdfPath) ? "com.loklj.folioxr.FolioTextRenderer" :
@@ -101,6 +116,7 @@ namespace FolioXR.Reading
         public IEnumerator GetPageCount(Action<int, PdfResult> done)
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
+            if (_disposed) { done(0, Fail("CANCEL", "Lectura cancelada")); yield break; }
             string key = NextKey("count");
             _java.CallStatic("requestPageCount", _pdfPath, key);
             PdfResult result = null;
@@ -129,6 +145,9 @@ namespace FolioXR.Reading
         public IEnumerator RenderPage(int pageIndex, int widthPixels, Action<Texture2D, PdfResult> done)
         {
 #if UNITY_ANDROID && !UNITY_EDITOR
+            while (!_cleanup.IsCompleted) yield return null;
+            if (_disposed) { done(null, Fail("CANCEL", "Lectura cancelada")); yield break; }
+            float renderStart = Time.realtimeSinceStartup;
             string key = NextKey("page" + pageIndex);
             string pngPath = Path.Combine(_cacheDir, key + ".png");
             _java.CallStatic("requestRenderPage", _pdfPath, pageIndex, widthPixels, pngPath, key);
@@ -141,15 +160,20 @@ namespace FolioXR.Reading
                 yield break;
             }
 
+            // Disco fuera del hilo de Unity; solo se trae una página acotada, nunca el libro.
+            Task<byte[]> readPage = Task.Run(() => ReadPageImage(pngPath));
+            while (!readPage.IsCompleted) yield return null;
             Texture2D texture = null;
             try
             {
+                byte[] image = readPage.GetAwaiter().GetResult();
+                if (_disposed) throw new IOException("Lectura cancelada");
                 bool night = PageTheme.NeedsRemap(_pdfPath);
-                texture = LoadRaw(pngPath, night);
+                texture = LoadRawBytes(image, night);
                 if (texture == null)
                 {
                     // PNG (EPUB) o JPEG (cómics).
-                    byte[] png = File.ReadAllBytes(pngPath);
+                    byte[] png = image;
                     texture = new Texture2D(2, 2, TextureFormat.RGBA32, true);
                     // Las páginas solo se muestrean en GPU; evitar la copia CPU a 4096 px
                     // salvo en modo noche, que necesita leer los píxeles una vez.
@@ -178,7 +202,12 @@ namespace FolioXR.Reading
             }
 
             if (!result.Ok) RenderFailed?.Invoke(_pdfPath);
-            if (texture != null) ConfigureTexture(texture);
+            if (texture != null)
+            {
+                ConfigureTexture(texture); ReadingDiagnostics.Track(texture);
+                ReadingDiagnostics.Record(_lastCacheHit ? "page_precached_ms" : "page_uncached_ms", (Time.realtimeSinceStartup - renderStart) * 1000.0);
+                if (_firstPage) { ReadingDiagnostics.Record("first_page_ms", (Time.realtimeSinceStartup - _openedAt) * 1000.0); _firstPage = false; }
+            }
             done(texture, result);
 #else
             yield return null;
@@ -256,6 +285,7 @@ namespace FolioXR.Reading
 
         public void Dispose()
         {
+            _disposed = true;
             CancelContents();
             CancelSearch();
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -273,7 +303,7 @@ namespace FolioXR.Reading
         private string NextKey(string label)
         {
             _requestCounter++;
-            return "folio-" + label + "-" + _requestCounter + "-" + Time.frameCount;
+            return "folio-" + _instanceKey + "-" + label + "-" + _requestCounter + "-" + Time.frameCount;
         }
 
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -284,9 +314,12 @@ namespace FolioXR.Reading
             {
                 if (key.Contains("-contents-") && _contentsKey != key) yield break;
                 if (key.Contains("-search-") && _searchKey != key) yield break;
+                if (_disposed) { done(Fail("CANCEL", "Lectura cancelada")); yield break; }
                 string status = _java.CallStatic<string>("getStatus", key);
                 if (status != null && status != "PENDING")
                 {
+                    _lastCacheHit = !IsReflow(_pdfPath) && !IsComic(_pdfPath) && key.Contains("-page") &&
+                        _java.CallStatic<bool>("wasCached", key);
                     _java.CallStatic("clearStatus", key);
                     done(Parse(status));
                     yield break;
@@ -323,43 +356,45 @@ namespace FolioXR.Reading
 
         /// <summary>
         /// Encargo 6: píxeles crudos del PDF (cabecera "FXR1", ancho, alto, filas de abajo hacia arriba).
-        /// Se leen directo a la memoria de la textura, sin PNG y sin un arreglo intermedio de 24 MB.
+        /// Lectura acotada fuera del hilo de Unity; luego se copia a la textura sin decodificar PNG.
         /// Devuelve null si el archivo no tiene esa cabecera.
         /// </summary>
-        private static Texture2D LoadRaw(string path, bool night)
+        private static byte[] ReadPageImage(string path)
         {
             using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16))
             {
-                var header = new byte[16];
-                if (stream.Read(header, 0, 16) != 16 || header[0] != 'F' || header[1] != 'X' || header[2] != 'R' ||
-                    header[3] != '1')
-                    return null;
-                int width = BitConverter.ToInt32(header, 4), height = BitConverter.ToInt32(header, 8);
-                if (width <= 0 || height <= 0 || width > 8192 || height > 16384 ||
-                    stream.Length - 16 < (long)width * height * 4)
-                    throw new IOException("pagina cruda incompleta");
-                var texture = new Texture2D(width, height, TextureFormat.RGBA32, true);
-                try
+                if (stream.Length > (40L << 20)) throw new IOException("La imagen supera el presupuesto de memoria");
+                byte[] image = new byte[checked((int)stream.Length)];
+                int read = 0;
+                while (read < image.Length)
                 {
-                    Unity.Collections.NativeArray<byte> pixels = texture.GetPixelData<byte>(0);
-                    Span<byte> target = pixels.AsSpan();
-                    int read = 0;
-                    while (read < target.Length)
-                    {
-                        int n = stream.Read(target.Slice(read));
-                        if (n <= 0) throw new IOException("pagina cruda truncada");
-                        read += n;
-                    }
-                    if (night) PageTheme.RemapNight(target, TextureFormat.RGBA32);
-                    texture.Apply(true, true); // Mipmaps y fuera de la RAM de CPU.
-                    return texture;
+                    int n = stream.Read(image, read, image.Length - read);
+                    if (n <= 0) throw new IOException("Imagen truncada");
+                    read += n;
                 }
-                catch
-                {
-                    UnityEngine.Object.Destroy(texture);
-                    throw;
-                }
+                return image;
             }
+        }
+
+        private static Texture2D LoadRaw(string path, bool night) => LoadRawBytes(ReadPageImage(path), night);
+
+        private static Texture2D LoadRawBytes(byte[] image, bool night)
+        {
+            if (image.Length < 4 || image[0] != 'F' || image[1] != 'X' || image[2] != 'R' || image[3] != '1') return null;
+            if (image.Length < 16) throw new IOException("Cabecera FXR1 truncada");
+            int width = BitConverter.ToInt32(image, 4), height = BitConverter.ToInt32(image, 8);
+            if (width <= 0 || height <= 0 || width > 8192 || height > 8192 || (long)width * height > 8000000L ||
+                image.LongLength - 16 != (long)width * height * 4) throw new IOException("Página cruda incompleta o demasiado grande");
+            var texture = new Texture2D(width, height, TextureFormat.RGBA32, true);
+            try
+            {
+                Span<byte> target = texture.GetPixelData<byte>(0).AsSpan();
+                image.AsSpan(16).CopyTo(target);
+                if (night) PageTheme.RemapNight(target, TextureFormat.RGBA32);
+                texture.Apply(true, true);
+                return texture;
+            }
+            catch { UnityEngine.Object.Destroy(texture); throw; }
         }
 
         private static void ConfigureTexture(Texture2D texture)

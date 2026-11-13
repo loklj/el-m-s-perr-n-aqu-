@@ -1,0 +1,56 @@
+{
+  "fecha": "2026-11-12",
+  "advertencia": "Linux, lector externo PyMuPDF; no mide Android, Unity ni Quest. Archivo no incluido.",
+  "archivo": {
+    "paginas": 208,
+    "supera_4_gib": true,
+    "indice": "xref stream (PDF 1.5)",
+    "imagen_pixeles": [
+      4096,
+      5792
+    ],
+    "archivo": "pdf-4.1gb-escaneado.pdf",
+    "bytes": 4423496009,
+    "sha256": "656fdf8ae3f840d61e87357d4190aa280f3ac88974ccabdd483e8564625a2716"
+  },
+  "parametros": {
+    "semilla": 20261105,
+    "solo": [
+      "pdf-escaneado"
+    ],
+    "gb": 4.1,
+    "pdf_paginas": 100001,
+    "txt_mb": 300,
+    "txt_codificaciones": "utf-8",
+    "cbz_imagenes": 3000,
+    "epub_kb": 30000,
+    "limite_gb": 4.8,
+    "scan_width": 4096,
+    "rar_command": "rar"
+  },
+  "validacion": {
+    "pages": 208,
+    "repaired": false,
+    "results": [
+      {
+        "page": 1,
+        "ms": 351.98,
+        "width": 420,
+        "height": 595
+      },
+      {
+        "page": 104,
+        "ms": 357.28,
+        "width": 420,
+        "height": 595
+      },
+      {
+        "page": 208,
+        "ms": 429.63,
+        "width": 420,
+        "height": 595
+      }
+    ]
+  },
+  "rss_max_kib": 106820
+}

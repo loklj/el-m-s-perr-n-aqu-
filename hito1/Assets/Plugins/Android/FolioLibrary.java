@@ -27,6 +27,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
@@ -327,13 +328,16 @@ public final class FolioLibrary {
                 try {
                     JSONObject journal = new JSONObject(readSmallText(item));
                     File dest = new File(journal.getString("path"));
+                    if (!dest.getCanonicalFile().getParentFile().equals(booksDir.getCanonicalFile())) throw new IOException("Diario fuera de biblioteca");
+                    if (dest.exists()) FolioLargeFiles.verify(dest, journal.getLong("size"));
                     if (dest.exists() && !hasBook(journal.getString("id"))) {
                         insertBook(journal.getString("id"), journal.getString("title"), journal.getString("format"),
                                 dest, journal.getLong("size"));
                         recovered++;
                     }
                 } catch (Throwable t) {
-                    Log.w(TAG, "[FolioXR] Biblioteca: diario ilegible " + name, t);
+                    Log.w(TAG, "[FolioXR] Biblioteca: diario pendiente de recuperacion " + name, t);
+                    continue; // No perder el diario si falla SQLite o el archivo no coincide.
                 }
                 item.delete();
             }
@@ -615,7 +619,7 @@ public final class FolioLibrary {
             serial++;
         }
         long free = tempDir.getUsableSpace();
-        if (size > 0 && free < size + SPACE_MARGIN) {
+        if (!FolioLargeFiles.fits(free, Math.max(0, size))) {
             throw new ImportException("No hay espacio suficiente para \u00ab" + name + "\u00bb: necesita "
                     + megabytes(size) + " y quedan " + megabytes(free) + " libres.");
         }
@@ -630,23 +634,11 @@ public final class FolioLibrary {
             try {
                 FileOutputStream out = new FileOutputStream(part);
                 try {
-                    byte[] buffer = new byte[BUFFER];
-                    long lastReport = 0;
-                    int n;
-                    while ((n = in.read(buffer)) >= 0) {
-                        if (cancel) {
-                            throw new ImportException("Importaci\u00f3n cancelada.");
-                        }
-                        out.write(buffer, 0, n);
-                        written += n;
-                        long now = System.currentTimeMillis();
-                        if (now - lastReport >= 250) {
-                            lastReport = now;
-                            synchronized (STATUS_LOCK) {
-                                copied = written;
-                                serial++;
-                            }
-                        }
+                    try (FolioLargeFiles.Lease lease = FolioLargeFiles.reserve(tempDir::getUsableSpace, size)) {
+                        written = FolioLargeFiles.copy(in, out, size, lease, () -> cancel, (done, expected) -> {
+                            synchronized (STATUS_LOCK) { copied = done; serial++; }
+                        });
+                        if (size >= 0 && in.read() != -1) throw new ImportException("El proveedor SAF cambio el tamano del archivo.");
                     }
                     out.flush();
                     out.getFD().sync();
@@ -675,7 +667,8 @@ public final class FolioLibrary {
      * Ultimo tramo de toda importacion (selector o Wi-Fi): formato, id estable, diario, renombrado,
      * ficha y portada. Devuelve false si el libro ya estaba. El llamador borra "part" si sigue existiendo.
      */
-    static boolean ingest(File part, String name, long written) throws Exception {
+    static synchronized boolean ingest(File part, String name, long written) throws Exception {
+        FolioLargeFiles.verify(part, written);
         String format = detectFormat(part, name);
         if ("acsm".equals(format)) {
             throw new ImportException("\u00ab" + name + "\u00bb es un comprobante de compra (ACSM), no el libro."
@@ -695,7 +688,7 @@ public final class FolioLibrary {
         }
         File dest = new File(booksDir, id + "." + format);
         File journal = new File(tempDir, id + ".json");
-        writeSmallText(journal, new JSONObject().put("id", id).put("title", title).put("format", format)
+        writeSmallTextAtomic(journal, new JSONObject().put("id", id).put("title", title).put("format", format)
                 .put("size", written).put("path", dest.getAbsolutePath()).toString());
         if (dest.exists()) {
             dest.delete(); // Copia huerfana de un intento anterior sin ficha.
@@ -926,6 +919,12 @@ public final class FolioLibrary {
         } finally {
             in.close();
         }
+    }
+
+    private static void writeSmallTextAtomic(File target, String text) throws Exception {
+        File tmp = new File(target.getPath() + ".tmp");
+        try { writeSmallText(tmp, text); if (!tmp.renameTo(target)) throw new IOException("No se pudo publicar diario"); }
+        finally { tmp.delete(); }
     }
 
     private static void writeSmallText(File target, String text) throws Exception {

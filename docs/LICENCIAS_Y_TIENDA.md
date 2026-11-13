@@ -135,3 +135,7 @@ No se añade ninguna biblioteca al APK. java-mammoth 1.13.0 (BSD-2) se examinó 
 ### Fuentes del encargo 17
 
 Fuentes originales fijadas a Google Fonts `c30b221beb0c1da59d563feb91ec8656a1fa972a`, sin modificaciones. Fuentes primarias, SHA-256 del AAR, obligaciones y empaquetado reproducible en [LECTURA.md](LECTURA.md#fuentes-y-licencias); hashes de los ocho TTF en `tests/lectura/fuentes.json`. La excepción OFL viene del encargo explícito del usuario. No se añade GPL/LGPL/AGPL al APK. PyMuPDF se usó solo en desarrollo para contrastar fixtures PDF: no se incluye su biblioteca ni código en la app.
+
+### Herramientas de rendimiento del encargo 15
+
+No se añade ninguna dependencia al APK: transferencias, presupuestos, FXR1 y métricas son código propio con APIs Android/Java/Unity existentes. El generador opcional de RAR sólido invoca un ejecutable **externo del usuario**, no Junrar ni una implementación de compresión derivada de UnRAR. Se validó con **RAR 7.23**, distribución oficial [rarlab.com](https://www.rarlab.com/download.htm), licencia comercial/evaluación de hasta 40 días según su `license.txt`. No se copia su binario, código, instalador ni componentes al repositorio o la app; el usuario debe disponer de licencia/evaluación vigente. Esta herramienta no cambia la decisión de no soportar RAR5 en el lector ni introduce una dependencia Gradle. PyMuPDF y `pdfinfo` se usan solo para validar los PDF generados en desarrollo; tampoco se distribuyen. No se incorpora código GPL/LGPL/AGPL.

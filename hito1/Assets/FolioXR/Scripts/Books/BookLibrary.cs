@@ -52,6 +52,7 @@ namespace FolioXR.Books
         public bool running;
         public string url, code, message, error;
         public int received, serial;
+        public long copied, total;
     }
 
     [Serializable]
@@ -687,7 +688,9 @@ namespace FolioXR.Books
                         WifiRunning = false;
                         if (!string.IsNullOrEmpty(status.message)) Notify(status.message);
                     }
-                    else if (arrived && !first && !string.IsNullOrEmpty(status.message)) Notify(status.message);
+                    else if (!first && status.total == 0 && !string.IsNullOrEmpty(status.message)) Notify(status.message);
+                    if (status.running && status.total > 0 && status.copied < status.total)
+                        Notify("Recibiendo por Wi-Fi: " + (100.0 * status.copied / status.total).ToString("F0") + "%");
                     StateChanged?.Invoke();
                 }
             }
@@ -856,9 +859,9 @@ namespace FolioXR.Books
                     ImportLine = "Elige los archivos\nen el selector";
                     break;
                 case "copying":
-                    int percent = status.total > 0 ? Mathf.Clamp((int)(status.copied * 100L / status.total), 0, 100) : 0;
+                    int percent = status.total > 0 ? Mathf.Clamp((int)(100.0 * status.copied / status.total), 0, 100) : 0;
                     ImportLine = "Importando " + Mathf.Max(1, status.index) + " de " + Mathf.Max(1, status.count) +
-                        "\n" + percent + "%";
+                        "\n" + (status.total > 0 ? percent + "%" : (status.copied / (1024.0 * 1024)).ToString("F1") + " MiB copiados");
                     break;
                 default:
                     // Terminó: hecho, con error, cancelado o sin selector en este visor.

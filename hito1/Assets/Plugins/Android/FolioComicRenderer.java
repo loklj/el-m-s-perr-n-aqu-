@@ -66,7 +66,9 @@ public final class FolioComicRenderer {
             @Override
             public void run() {
                 Bitmap decoded = null, scaled = null;
+                long reservation = 0;
                 try {
+                    if (!STATUS.containsKey(key)) return;
                     ensureOpen(path);
                     if (pageIndex < 0 || pageIndex >= pages.size()) {
                         STATUS.put(key, "ERROR:PAGE:pagina fuera de rango " + pageIndex);
@@ -85,13 +87,18 @@ public final class FolioComicRenderer {
                         STATUS.put(key, "ERROR:IO:imagen ilegible " + entry.getName() + " (corrupted)");
                         return;
                     }
-                    int width = Math.max(64, targetWidth);
+                    int[] size = FolioRenderPolicy.dimensions(targetWidth, bounds.outWidth, bounds.outHeight, FolioRenderPolicy.pixels(FolioPerformance.pressure()));
+                    int width = size[0];
                     BitmapFactory.Options options = new BitmapFactory.Options();
                     options.inPreferredConfig = Bitmap.Config.ARGB_8888;
                     options.inSampleSize = 1;
-                    while (bounds.outWidth / (options.inSampleSize * 2) >= width) {
+                    while ((bounds.outWidth / options.inSampleSize > width * 2L ||
+                            ((long)bounds.outWidth / options.inSampleSize) * (bounds.outHeight / options.inSampleSize) > FolioRenderPolicy.pixels(FolioPerformance.pressure())) && options.inSampleSize < (1 << 29)) {
                         options.inSampleSize *= 2;
                     }
+                    reservation = 4L * ((bounds.outWidth + (long) options.inSampleSize - 1) / options.inSampleSize) *
+                        ((bounds.outHeight + (long) options.inSampleSize - 1) / options.inSampleSize) + 4L * size[0] * size[1];
+                    if (!FolioRenderPolicy.acquire(reservation)) { reservation = 0; throw new OutOfMemoryError("Presupuesto global de capturas"); }
                     in = openZip.getInputStream(entry);
                     try {
                         decoded = BitmapFactory.decodeStream(in, null, options);
@@ -102,7 +109,7 @@ public final class FolioComicRenderer {
                         STATUS.put(key, "ERROR:IO:no se pudo decodificar " + entry.getName() + " (corrupted)");
                         return;
                     }
-                    int height = Math.max(64, Math.round(decoded.getHeight() * (width / (float) decoded.getWidth())));
+                    int height = size[1];
                     scaled = decoded.getWidth() == width ? decoded : Bitmap.createScaledBitmap(decoded, width, height, true);
 
                     File out = new File(outPath);
@@ -124,10 +131,12 @@ public final class FolioComicRenderer {
                         STATUS.put(key, "ERROR:IO:no se pudo escribir la pagina");
                         return;
                     }
-                    STATUS.put(key, "OK:" + width + "x" + height);
+                    if (!STATUS.containsKey(key)) out.delete();
+                    STATUS.replace(key, "OK:" + width + "x" + height);
                 } catch (Throwable t) {
                     STATUS.put(key, describeError(t));
                 } finally {
+                    FolioRenderPolicy.release(reservation);
                     if (scaled != null && scaled != decoded) {
                         scaled.recycle();
                     }
@@ -241,6 +250,7 @@ public final class FolioComicRenderer {
         String detail = t.getClass().getSimpleName() + ": " + t.getMessage();
         Log.w(TAG, "[FolioXR] Comic: " + detail);
         if (t instanceof OutOfMemoryError) {
+            FolioPerformance.memoryFailure();
             return "ERROR:MEMORY:" + detail;
         }
         if (t instanceof java.util.zip.ZipException) {

@@ -40,7 +40,7 @@ Responde siempre en español. Repositorio: https://github.com/loklj/el-m-s-perr-
 | 13 | Nubes: Google Drive, Dropbox y MEGA | `fase3/nubes` | Pendiente; Drive con `drive.file` y Picker (decidido) |
 | 14 | OPDS (Calibre-Web, Kavita, Komga) | `fase-1/preparacion` | Escrito por Claude el 11 de noviembre de 2026 (sin búsqueda: no hay teclado en el visor; los catálogos se agregan desde la página del PC) |
 | | 🧪 Prueba en el visor: formatos e importación | | |
-| 15 | Archivos gigantes y rendimiento | `fase4/rendimiento` | Pendiente |
+| 15 | Archivos gigantes y rendimiento | `fase4/rendimiento` | Partes 1/2/3 implementadas por Codex el 12 nov 2026: transferencias de 64 bits, diario, FXR1 con cuota, presupuestos y diagnóstico CSV; PDF real de 4,42 GB y pruebas dispersas hasta 8 GiB. Pendientes revisión y medidas Quest; ver [RENDIMIENTO.md](RENDIMIENTO.md) |
 | 16 | Los otros 19 entornos | `entornos/19-temas` | Pendiente |
 | 17 | Pulido de lectura: modo noche, sepia, fuentes, búsqueda e índice | `fase5/lectura` | Parte 1 integrada por Claude. Partes 2/4/5 implementadas por Codex el 12 nov 2026: fuentes OFL, interlineado/márgenes, TOC y marcadores con nombre; rebase sobre `c29434d`, pendientes revisión y visor. Partes 3 y 6 pendientes |
 | 18 | Estantería 3D, carpetas y accesibilidad | `fase-1/preparacion` | Hecho por Claude el 12 nov 2026 (sin probar en el visor): estantería 3D en la casa y en passthrough, colecciones, orden y filtro, accesibilidad y licencias |

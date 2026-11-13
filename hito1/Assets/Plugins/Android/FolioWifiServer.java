@@ -41,6 +41,9 @@ public final class FolioWifiServer {
     private static String code = "", url = "", lastMessage = "";
     private static int received, badCodes, serial;
     private static volatile boolean running;
+    private static final java.util.Set<Socket> ACTIVE = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<Socket, Boolean>());
+    private static final java.util.concurrent.Semaphore UPLOAD = new java.util.concurrent.Semaphore(1);
+    private static long uploadCopied, uploadTotal;
 
     private FolioWifiServer() {
     }
@@ -51,11 +54,11 @@ public final class FolioWifiServer {
             stopLocked();
             try {
                 if (!FolioLibrary.ready()) {
-                    return "{\"error\":\"La biblioteca no está lista.\"}";
+                    return "{\"error\":\"La biblioteca no est\u00e1 lista.\"}";
                 }
                 String address = localAddress();
                 if (address == null) {
-                    return "{\"error\":\"El visor no está conectado a una red Wi-Fi.\"}";
+                    return "{\"error\":\"El visor no est\u00e1 conectado a una red Wi-Fi.\"}";
                 }
                 ServerSocket socket = null;
                 for (int port = FIRST_PORT; port <= LAST_PORT && socket == null; port++) {
@@ -71,7 +74,7 @@ public final class FolioWifiServer {
                 server = socket;
                 code = String.format(Locale.US, "%06d", new SecureRandom().nextInt(1000000));
                 url = "http://" + address + ":" + socket.getLocalPort();
-                received = badCodes = 0;
+                received = badCodes = 0; uploadCopied = uploadTotal = 0;
                 lastMessage = "";
                 running = true;
                 serial++;
@@ -102,6 +105,7 @@ public final class FolioWifiServer {
 
     private static void stopLocked() {
         running = false;
+        for (Socket client : ACTIVE) try { client.close(); } catch (Exception ignored) { }
         if (server != null) {
             try {
                 server.close();
@@ -118,7 +122,7 @@ public final class FolioWifiServer {
         synchronized (LOCK) {
             try {
                 return new JSONObject().put("running", running).put("url", url).put("code", code)
-                        .put("received", received).put("message", lastMessage).put("serial", serial).toString();
+                        .put("copied", uploadCopied).put("total", uploadTotal).put("received", received).put("message", lastMessage).put("serial", serial).toString();
             } catch (Throwable t) {
                 return "{\"running\":false}";
             }
@@ -152,6 +156,8 @@ public final class FolioWifiServer {
                     client.close(); // Solo red local.
                     continue;
                 }
+                if (ACTIVE.size() >= 3) { client.close(); continue; }
+                ACTIVE.add(client);
                 CLIENTS.execute(new Runnable() {
                     @Override
                     public void run() {
@@ -162,6 +168,7 @@ public final class FolioWifiServer {
                             Log.w(TAG, "[FolioXR] Wi-Fi: conexion interrumpida (" + t + ")");
                         } finally {
                             try {
+                                ACTIVE.remove(client);
                                 client.close();
                             } catch (Throwable ignored) {
                                 // Ya cerrada.
@@ -203,13 +210,19 @@ public final class FolioWifiServer {
         }
         String[] parts = request.split(" ");
         long length = -1;
-        String header;
+        String header; int headerBytes = 0; boolean transferEncoding = false;
         while ((header = readLine(in)) != null && header.length() > 0) {
+            headerBytes += header.length(); if (headerBytes > 32768) { respond(out, 431, "text/plain", "Cabeceras demasiado grandes"); return; }
             int colon = header.indexOf(':');
+            if (colon > 0 && header.substring(0, colon).trim().equalsIgnoreCase("Transfer-Encoding")) transferEncoding = true;
             if (colon > 0 && header.substring(0, colon).trim().equalsIgnoreCase("Content-Length")) {
-                length = Long.parseLong(header.substring(colon + 1).trim());
+                try {
+                    if (length >= 0) throw new java.io.IOException("Content-Length duplicado");
+                    length = FolioLargeFiles.contentLength(header.substring(colon + 1).trim());
+                } catch (java.io.IOException e) { respond(out, 400, "text/plain", e.getMessage()); return; }
             }
         }
+        if (transferEncoding) { respond(out, 400, "text/plain", "Use Content-Length, sin Transfer-Encoding"); return; }
         if (parts.length < 2) {
             respond(out, 400, "text/plain", "Solicitud no valida");
             return;
@@ -224,7 +237,8 @@ public final class FolioWifiServer {
         if ("GET".equals(method) && "/".equals(path)) {
             respond(out, 200, "text/html; charset=utf-8", PAGE);
         } else if ("PUT".equals(method) && "/upload".equals(path)) {
-            upload(in, out, query, length);
+            if (!UPLOAD.tryAcquire()) { respond(out, 409, "text/plain", "Otra subida en curso"); return; }
+            try { upload(in, out, query, length); } finally { UPLOAD.release(); }
         } else if ("POST".equals(method) && "/opds".equals(path)) {
             addOpds(in, out, length);
         } else {
@@ -264,11 +278,11 @@ public final class FolioWifiServer {
                 badCodes++;
                 close = badCodes >= MAX_BAD_CODES;
                 if (close) {
-                    lastMessage = "Se cerró la carga por Wi-Fi: demasiados códigos incorrectos.";
+                    lastMessage = "Se cerr\u00f3 la carga por Wi-Fi: demasiados c\u00f3digos incorrectos.";
                     stopLocked();
                 }
             }
-            respond(out, 403, "text/plain; charset=utf-8", "Código incorrecto. Míralo en el visor.");
+            respond(out, 403, "text/plain; charset=utf-8", "C\u00f3digo incorrecto. M\u00edralo en el visor.");
             return;
         }
         String name = new File(param(query, "name")).getName(); // Sin rutas: solo el nombre.
@@ -276,11 +290,11 @@ public final class FolioWifiServer {
             name = "libro";
         }
         if (length <= 0) {
-            respond(out, 411, "text/plain; charset=utf-8", "Falta el tamaño del archivo.");
+            respond(out, 411, "text/plain; charset=utf-8", "Falta el tama\u00f1o del archivo.");
             return;
         }
         long free = FolioLibrary.freeSpace();
-        if (free < length + FolioLibrary.SPACE_MARGIN) {
+        if (!FolioLargeFiles.fits(free, length)) {
             respond(out, 507, "text/plain; charset=utf-8", "No hay espacio suficiente en el visor: necesita "
                     + FolioLibrary.megabytesText(length) + " y quedan " + FolioLibrary.megabytesText(free) + ".");
             return;
@@ -292,17 +306,11 @@ public final class FolioWifiServer {
             long written = 0;
             FileOutputStream file = new FileOutputStream(part);
             try {
-                byte[] buffer = new byte[1 << 20];
-                while (written < length) {
-                    if (!running) {
-                        throw new Exception("servidor cerrado");
-                    }
-                    int n = in.read(buffer, 0, (int) Math.min(buffer.length, length - written));
-                    if (n < 0) {
-                        break;
-                    }
-                    file.write(buffer, 0, n);
-                    written += n;
+                synchronized (LOCK) { uploadCopied = 0; uploadTotal = length; }
+                try (FolioLargeFiles.Lease lease = FolioLargeFiles.reserve(FolioLibrary::freeSpace, length)) {
+                    written = FolioLargeFiles.copy(in, file, length, lease, () -> !running, (done, expected) -> {
+                        synchronized (LOCK) { uploadCopied = done; uploadTotal = expected; serial++; }
+                    });
                 }
                 file.flush();
                 file.getFD().sync();
@@ -310,11 +318,11 @@ public final class FolioWifiServer {
                 file.close();
             }
             if (written != length) {
-                throw new FolioLibrary.ImportException("La subida de «" + name + "» quedó incompleta.");
+                throw new FolioLibrary.ImportException("La subida de \u00ab" + name + "\u00bb qued\u00f3 incompleta.");
             }
             boolean added = FolioLibrary.ingest(part, name, written);
-            result = added ? "Listo: «" + name + "» ya está en la biblioteca."
-                    : "«" + name + "» ya estaba en la biblioteca.";
+            result = added ? "Listo: \u00ab" + name + "\u00bb ya est\u00e1 en la biblioteca."
+                    : "\u00ab" + name + "\u00bb ya estaba en la biblioteca.";
             synchronized (LOCK) {
                 if (added) {
                     received++;
@@ -328,13 +336,14 @@ public final class FolioWifiServer {
             result = e.getMessage();
         } catch (Throwable t) {
             status = 500;
-            result = "No se pudo guardar «" + name + "».";
+            result = t instanceof java.io.IOException ? t.getMessage() : "No se pudo guardar el archivo.";
             Log.w(TAG, "[FolioXR] Wi-Fi: fallo al recibir " + name, t);
         } finally {
             if (part.exists()) {
                 part.delete();
             }
         }
+        synchronized (LOCK) { lastMessage = result; uploadTotal = 0; serial++; }
         respond(out, status, "text/plain; charset=utf-8", result);
     }
 
@@ -395,9 +404,9 @@ public final class FolioWifiServer {
             + "border:1px solid #47608f;background:#17223a;color:#e8eefc}button{background:#2b6fe0;border:0;"
             + "cursor:pointer}#code{width:7em;letter-spacing:.2em;text-align:center}.row{margin:16px 0}"
             + ".item{margin:10px 0;padding:10px;background:#17223a;border-radius:8px}progress{width:100%}"
-            + "</style></head><body><h1>Folio XR</h1><p>Escribe el código de 6 dígitos que muestra el visor"
+            + "</style></head><body><h1>Folio XR</h1><p>Escribe el c\u00f3digo de 6 d\u00edgitos que muestra el visor"
             + " y elige tus libros. Se copian solo al visor, por tu red local.</p>"
-            + "<div class=\"row\"><input id=\"code\" maxlength=\"6\" inputmode=\"numeric\" placeholder=\"código\"></div>"
+            + "<div class=\"row\"><input id=\"code\" maxlength=\"6\" inputmode=\"numeric\" placeholder=\"c\u00f3digo\"></div>"
             + "<div class=\"row\"><input id=\"files\" type=\"file\" multiple></div>"
             + "<div class=\"row\"><button id=\"go\">Enviar al visor</button></div><div id=\"list\"></div>"
             + "<script>const $=i=>document.getElementById(i);$('go').onclick=async()=>{const c=$('code').value.trim();"
@@ -407,7 +416,7 @@ public final class FolioWifiServer {
             + "x.open('PUT','/upload?code='+encodeURIComponent(c)+'&name='+encodeURIComponent(f.name));"
             + "x.upload.onprogress=e=>{if(e.lengthComputable)p.value=e.loaded/e.total};"
             + "x.onload=()=>{t.textContent=x.responseText;p.value=x.status==200?1:0;r()};"
-            + "x.onerror=()=>{t.textContent='Se cortó la conexión con el visor: '+f.name;r()};x.send(f)})}};"
+            + "x.onerror=()=>{t.textContent='Se cort\u00f3 la conexi\u00f3n con el visor: '+f.name;r()};x.send(f)})}};"
             + "</script>"
             + "<h2>Agregar un cat\u00e1logo (OPDS)</h2><p>Calibre-Web, Kavita, Komga u otro servidor OPDS."
             + " El usuario y la contrase\u00f1a son opcionales y se guardan cifrados en el visor.</p>"

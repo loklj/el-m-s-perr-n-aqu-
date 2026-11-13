@@ -5,352 +5,142 @@ import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.pdf.PdfRenderer;
 import android.os.ParcelFileDescriptor;
-import android.os.SystemClock;
 import android.util.Log;
-
-import java.io.File;
-import java.io.FileOutputStream;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
+import java.io.*;
+import java.nio.*;
 import java.nio.channels.FileChannel;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * Folio XR - Paginas de PDF con el PdfRenderer de Android.
- *
- * Todo el trabajo ocurre en UN hilo propio (PdfRenderer no es seguro entre hilos), para no bloquear
- * el hilo principal de Unity ni el render del visor.
- *
- * Unity pide un trabajo con una "clave", y luego consulta getStatus(clave):
- *   null          -> clave desconocida
- *   "PENDING"     -> en curso
- *   "OK:<datos>"  -> terminado
- *   "ERROR:<tipo>:<detalle>" -> fallo (tipo: PASSWORD, IO, MEMORY, PAGE, OTHER)
- *
- * Encargo 6 (revision de Claude, 11 nov 2026):
- * - Pixeles crudos en vez de PNG: cabecera "FXR1" + ancho + alto (enteros little-endian) y los bytes
- *   RGBA de abajo hacia arriba, como los espera Texture2D. Sin codificar ni decodificar PNG.
- * - Precarga en disco de la doble pagina siguiente (y la anterior al retroceder), maximo 4 archivos.
- * - Pagina demasiado grande o sin memoria: se reintenta con la mitad del ancho en vez de fallar.
- * - El archivo se abre con un descriptor: PdfRenderer lee por partes, nunca el PDF entero.
- */
+/** PDF por descriptor de 64 bits; cola cancelable, FXR1 acotado y reduccion de resolucion. */
 public final class FolioPdfRenderer {
-
-    private static final String TAG = "FolioXR";
-    private static final ExecutorService WORKER = Executors.newSingleThreadExecutor();
-    private static final ConcurrentHashMap<String, String> STATUS = new ConcurrentHashMap<>();
-    private static final int HEADER = 16, MAX_PREFETCH = 4;
-    private static final long MAX_PIXELS = 3072L * 4400L;
-
-    // Solo se usan desde el hilo WORKER.
+    private static final ExecutorService WORK=Executors.newSingleThreadExecutor();
+    private static final ConcurrentHashMap<String,String> STATUS=new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String,Boolean> HITS=new ConcurrentHashMap<>();
+    private static final AtomicInteger GENERATION=new AtomicInteger(), DEMAND=new AtomicInteger();
     private static String openPath;
-    private static ParcelFileDescriptor openDescriptor;
-    private static PdfRenderer openRenderer;
-    private static int lastRequested = -1;
-    private static final LinkedHashMap<String, File> PREFETCHED = new LinkedHashMap<>(8, 0.75f, true);
-
-    private FolioPdfRenderer() {
-    }
-
-    /** Pide el numero de paginas. Resultado: "OK:<numero>". */
-    public static void requestPageCount(final String pdfPath, final String key) {
-        STATUS.put(key, "PENDING");
-        WORKER.execute(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    PdfRenderer renderer = ensureOpen(pdfPath);
-                    STATUS.put(key, "OK:" + renderer.getPageCount());
-                } catch (Throwable t) {
-                    STATUS.put(key, describeError(t));
-                }
-            }
+    private static ParcelFileDescriptor descriptor;
+    private static PdfRenderer renderer;
+    private static int last=-1;
+    private static FolioRawCache cache;
+    private static final LinkedHashMap<String,Boolean> SEEN=new LinkedHashMap<String,Boolean>(16,.75f,true){
+        protected boolean removeEldestEntry(Map.Entry<String,Boolean> e){return size()>64;}
+    };
+    private interface Job {String run() throws Exception;}
+    private static void submit(String key,Job job){
+        int generation=GENERATION.get();STATUS.put(key,"PENDING");
+        WORK.execute(()->{
+            if(generation!=GENERATION.get() || !STATUS.containsKey(key))return;
+            try{String result=job.run();if(generation==GENERATION.get())STATUS.replace(key,result);}
+            catch(Throwable t){STATUS.replace(key,error(t));}
         });
     }
-
-    /** Lectura opcional de marcadores: independiente de las paginas y del estado de PdfRenderer. */
-    public static void requestContents(final String path,final String key) {
-        STATUS.put(key,"PENDING");
-        WORKER.execute(() -> {
-            try(FolioPdfOutline reader=new FolioPdfOutline(path,()->!STATUS.containsKey(key))){
-                STATUS.replace(key,"OK:"+FolioContents.json(reader.read()));
-            }catch(Throwable e){STATUS.replace(key,"ERROR:TOC:"+e.getMessage());}
+    public static void requestPageCount(String path,String key){submit(key,()->"OK:"+ensureOpen(path).getPageCount());}
+    public static void requestContents(String path,String key){submit(key,()->{
+        try(FolioPdfOutline reader=new FolioPdfOutline(path,()->!STATUS.containsKey(key))){return "OK:"+FolioContents.json(reader.read());}
+    });}
+    public static void requestRenderPage(String path,int index,int width,String output,String key){
+        int demand=DEMAND.incrementAndGet(),generation=GENERATION.get();
+        submit(key,()->{
+            PdfRenderer pdf=ensureOpen(path);if(index<0 || index>=pdf.getPageCount())throw new IOException("Pagina fuera de rango");
+            File out=new File(output),parent=out.getParentFile();
+            if(parent==null || (!parent.isDirectory()&&!parent.mkdirs()))throw new IOException("Cache no disponible");
+            if(cache==null || !cache.folder.getParentFile().equals(parent))cache=new FolioRawCache(parent);
+            int effective=effectiveWidth(width);long start=System.nanoTime();
+            boolean hit=cache.take(cache.file(path,index,effective),out);
+            HITS.put(key,hit);
+            String size=hit?FolioRawCache.size(out):render(pdf,index,effective,out);
+            if(!STATUS.containsKey(key) || generation!=GENERATION.get()){out.delete();HITS.remove(key);return "ERROR:CANCEL:Cancelado";}
+            FolioPerformance.record(hit?"pdf_cached_ms":"pdf_render_ms",elapsed(start));
+            if(last>=0 && Math.abs((long)index-last)>2)FolioPerformance.record("pdf_random_ms",elapsed(start));
+            boolean forward=index>=last;last=index;
+            if((index%2==1 || index==pdf.getPageCount()-1) && FolioPerformance.pressure()==0){
+                int first=forward?index+1:index-3;
+                WORK.execute(()->prefetch(path,first,effective,demand,generation));
+            }
+            return "OK:"+size;
         });
     }
-
-    /**
-     * Pide dibujar una pagina (indice desde 0) con un ancho en pixeles.
-     * Escribe pixeles crudos en outPath. Resultado: "OK:<ancho>x<alto>".
-     */
-    public static void requestRenderPage(final String pdfPath, final int pageIndex,
-                                         final int targetWidth, final String outPath,
-                                         final String key) {
-        STATUS.put(key, "PENDING");
-        WORKER.execute(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    PdfRenderer renderer = ensureOpen(pdfPath);
-                    int count = renderer.getPageCount();
-                    if (pageIndex < 0 || pageIndex >= count) {
-                        STATUS.put(key, "ERROR:PAGE:pagina fuera de rango " + pageIndex);
-                        return;
-                    }
-                    File out = new File(outPath);
-                    File parent = out.getParentFile();
-                    if (parent != null && !parent.exists() && !parent.mkdirs()) {
-                        STATUS.put(key, "ERROR:IO:no se pudo crear " + parent.getPath());
-                        return;
-                    }
-                    long start = SystemClock.elapsedRealtime();
-                    String size;
-                    File cached = PREFETCHED.remove(cacheKey(pageIndex, targetWidth));
-                    if (cached != null && cached.exists() && (!out.exists() || out.delete()) && cached.renameTo(out)) {
-                        size = readSize(out);
-                    } else {
-                        size = render(renderer, pageIndex, targetWidth, out);
-                    }
-                    STATUS.put(key, "OK:" + size);
-                    Log.i(TAG, "[FolioXR] PDF: pagina " + (pageIndex + 1) + " lista en "
-                            + (SystemClock.elapsedRealtime() - start) + " ms" + (cached != null ? " (precargada)" : ""));
-                    boolean forward = pageIndex >= lastRequested;
-                    lastRequested = pageIndex;
-                    // Precarga: tras la pagina derecha de una doble pagina, las dos siguientes (o anteriores).
-                    if (pageIndex % 2 == 1 || pageIndex == count - 1) {
-                        int first = forward ? pageIndex + 1 : pageIndex - 3;
-                        schedulePrefetch(pdfPath, first, first + 1, targetWidth, parent);
-                    }
-                } catch (Throwable t) {
-                    STATUS.put(key, describeError(t));
+    private static int effectiveWidth(int width){int pressure=FolioPerformance.pressure();return Math.max(64,Math.min(width,pressure==2?832:pressure==1?1400:4096));}
+    private static void prefetch(String path,int first,int width,int demand,int generation){
+        try{
+            for(int page=Math.max(0,first);page<=first+1;page++){
+                if(demand!=DEMAND.get() || generation!=GENERATION.get() || FolioPerformance.pressure()!=0 ||
+                   renderer==null || !path.equals(openPath) || page>=renderer.getPageCount())return;
+                File file=cache.file(path,page,width);if(file.exists())continue;
+                cache.trim(32L<<20);render(renderer,page,width,file);file.setLastModified(System.currentTimeMillis());cache.trim(0);
+            }
+        }catch(Throwable e){Log.w("FolioXR","[FolioXR] Precarga PDF omitida: "+e.getClass().getSimpleName());}
+    }
+    private static String render(PdfRenderer pdf,int index,int requested,File out)throws Exception{
+        int width=effectiveWidth(requested);
+        for(int attempt=0;;attempt++){
+            Bitmap bitmap=null;PdfRenderer.Page page=null;long reservation=0;
+            try{
+                page=pdf.openPage(index);
+                int[] size=FolioRenderPolicy.dimensions(width,page.getWidth(),page.getHeight(),FolioRenderPolicy.pixels(FolioPerformance.pressure()));
+                long bytes=4L*size[0]*size[1];
+                if(!FolioRenderPolicy.acquire(bytes))throw new OutOfMemoryError("Presupuesto global de capturas");
+                reservation=bytes;
+                if(!FolioLargeFiles.fits(FolioLargeFiles.unreserved(out.getParentFile().getUsableSpace()),bytes+16))throw new IOException("Sin espacio para la pagina");
+                bitmap=Bitmap.createBitmap(size[0],size[1],Bitmap.Config.ARGB_8888);bitmap.eraseColor(Color.WHITE);
+                Matrix transform=new Matrix();transform.setScale(size[0]/(float)Math.max(1,page.getWidth()),size[1]/(float)Math.max(1,page.getHeight()));
+                page.render(bitmap,null,transform,PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
+                writeRaw(bitmap,out);return size[0]+"x"+size[1];
+            }catch(OutOfMemoryError | IllegalArgumentException e){
+                FolioPerformance.memoryFailure();
+                if(attempt>=3 || width<=128)throw e;
+                width=Math.max(64,width/2);
+                Log.w("FolioXR","[FolioXR] Pagina PDF demasiado grande; reintento a "+width+" px");
+            }finally{if(bitmap!=null)bitmap.recycle();FolioRenderPolicy.release(reservation);if(page!=null)page.close();}
+        }
+    }
+    /** Una fila auxiliar: evita duplicar el bitmap completo en un ByteBuffer directo. */
+    private static void writeRaw(Bitmap bitmap,File out)throws IOException{
+        File tmp=new File(out.getPath()+".tmp");int w=bitmap.getWidth(),h=bitmap.getHeight();
+        ByteBuffer header=ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN);
+        header.put(new byte[]{'F','X','R','1'}).putInt(w).putInt(h).putInt(0).flip();
+        int[] row=new int[w];ByteBuffer rgba=ByteBuffer.allocate(w*4);
+        try{
+            try(FileOutputStream stream=new FileOutputStream(tmp)){
+                FileChannel channel=stream.getChannel();while(header.hasRemaining())channel.write(header);
+                for(int y=h-1;y>=0;y--){
+                    bitmap.getPixels(row,0,w,0,y,w,1);rgba.clear();
+                    for(int color:row)rgba.put((byte)(color>>16)).put((byte)(color>>8)).put((byte)color).put((byte)(color>>>24));
+                    rgba.flip();while(rgba.hasRemaining())channel.write(rgba);
                 }
             }
-        });
+            if((out.exists()&&!out.delete())||!tmp.renameTo(out))throw new IOException("No se pudo publicar FXR1");
+        }finally{tmp.delete();}
     }
-
-    private static String cacheKey(int page, int width) {
-        return openPath + "#" + page + "@" + width;
+    private static PdfRenderer ensureOpen(String path)throws Exception{
+        if(renderer!=null && path.equals(openPath))return renderer;
+        closeCurrent();long start=System.nanoTime();File file=new File(path);
+        long bytes=file.length();if(bytes<=0)throw new IOException("PDF vacio o ausente");
+        ParcelFileDescriptor fd=ParcelFileDescriptor.open(file,ParcelFileDescriptor.MODE_READ_ONLY);
+        try{
+            long descriptorBytes=fd.getStatSize();
+            if(descriptorBytes>=0 && descriptorBytes!=bytes)throw new IOException("El PDF cambio mientras se abria");
+            renderer=new PdfRenderer(fd);descriptor=fd;openPath=path;last=-1;
+            boolean warm=SEEN.put(path,Boolean.TRUE)!=null;
+            FolioPerformance.record(warm?"pdf_open_warm_ms":"pdf_open_cold_ms",elapsed(start));
+            Log.i("FolioXR","[FolioXR] PDF abierto: bytes="+bytes+" paginas="+renderer.getPageCount());return renderer;
+        }catch(Throwable e){fd.close();throw e;}
     }
-
-    private static void schedulePrefetch(final String pdfPath, final int from, final int to, final int width,
-                                         final File folder) {
-        WORKER.execute(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    if (!pdfPath.equals(openPath) || openRenderer == null || folder == null) {
-                        return;
-                    }
-                    for (int page = Math.max(0, from); page <= to && page < openRenderer.getPageCount(); page++) {
-                        String id = cacheKey(page, width);
-                        if (PREFETCHED.containsKey(id)) {
-                            continue;
-                        }
-                        File file = new File(folder, "precarga-" + page + "-" + width + ".raw");
-                        render(openRenderer, page, width, file);
-                        PREFETCHED.put(id, file);
-                        trimPrefetch();
-                    }
-                } catch (Throwable t) {
-                    Log.w(TAG, "[FolioXR] PDF: precarga omitida (" + t + ")");
-                }
-            }
-        });
+    private static double elapsed(long start){return (System.nanoTime()-start)/1000000.0;}
+    public static String getStatus(String key){return STATUS.get(key);}
+    public static boolean wasCached(String key){return Boolean.TRUE.equals(HITS.get(key));}
+    public static void clearStatus(String key){HITS.remove(key);if("PENDING".equals(STATUS.remove(key)))DEMAND.incrementAndGet();}
+    public static void close(){GENERATION.incrementAndGet();DEMAND.incrementAndGet();STATUS.clear();HITS.clear();WORK.execute(FolioPdfRenderer::closeCurrent);}
+    private static void closeCurrent(){
+        if(renderer!=null)try{renderer.close();}catch(Exception ignored){}
+        if(descriptor!=null)try{descriptor.close();}catch(Exception ignored){}
+        renderer=null;descriptor=null;openPath=null;last=-1;
     }
-
-    private static void trimPrefetch() {
-        Iterator<Map.Entry<String, File>> it = PREFETCHED.entrySet().iterator();
-        while (PREFETCHED.size() > MAX_PREFETCH && it.hasNext()) {
-            File old = it.next().getValue();
-            old.delete();
-            it.remove();
-        }
-    }
-
-    private static void clearPrefetch() {
-        for (File file : PREFETCHED.values()) {
-            file.delete();
-        }
-        PREFETCHED.clear();
-    }
-
-    /** Dibuja la pagina y escribe los pixeles crudos. Si no cabe en memoria, reintenta a la mitad. */
-    private static String render(PdfRenderer renderer, int pageIndex, int targetWidth, File out) throws Exception {
-        int width = Math.max(64, targetWidth);
-        for (int attempt = 0; ; attempt++) {
-            PdfRenderer.Page page = renderer.openPage(pageIndex);
-            Bitmap bitmap = null;
-            try {
-                float scale = width / (float) Math.max(1, page.getWidth());
-                int height = Math.max(64, Math.round(page.getHeight() * scale));
-                // Paginas extremas (carteles, tiras muy largas): se limita el total de pixeles.
-                if ((long) width * height > MAX_PIXELS) {
-                    float shrink = (float) Math.sqrt(MAX_PIXELS / (double) ((long) width * height));
-                    width = Math.max(64, (int) (width * shrink));
-                    scale = width / (float) Math.max(1, page.getWidth());
-                    height = Math.max(64, Math.round(page.getHeight() * scale));
-                }
-                bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-                // PdfRenderer dibuja sobre fondo transparente: se pinta blanco antes.
-                bitmap.eraseColor(Color.WHITE);
-                Matrix transform = new Matrix();
-                transform.setScale(scale, scale);
-                page.render(bitmap, null, transform, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY);
-                writeRaw(bitmap, out);
-                return width + "x" + height;
-            } catch (OutOfMemoryError memory) {
-                if (attempt >= 2 || width <= 512) {
-                    throw memory;
-                }
-                width /= 2;
-                Log.w(TAG, "[FolioXR] PDF: sin memoria para la pagina " + (pageIndex + 1) + ", se reduce a " + width + " px");
-            } finally {
-                page.close();
-                if (bitmap != null) {
-                    bitmap.recycle();
-                }
-            }
-        }
-    }
-
-    private static void writeRaw(Bitmap bitmap, File out) throws Exception {
-        File tmp = new File(out.getPath() + ".tmp");
-        ByteBuffer header = ByteBuffer.allocate(HEADER).order(ByteOrder.LITTLE_ENDIAN);
-        header.put((byte) 'F').put((byte) 'X').put((byte) 'R').put((byte) '1');
-        header.putInt(bitmap.getWidth()).putInt(bitmap.getHeight()).putInt(0);
-        header.flip();
-        ByteBuffer pixels = ByteBuffer.allocateDirect(bitmap.getByteCount());
-        bitmap.copyPixelsToBuffer(pixels); // ARGB_8888 en memoria: bytes R, G, B, A.
-        int rowBytes = bitmap.getRowBytes(), rows = bitmap.getHeight();
-        FileOutputStream stream = new FileOutputStream(tmp);
-        try {
-            FileChannel channel = stream.getChannel();
-            while (header.hasRemaining()) {
-                channel.write(header);
-            }
-            // Filas de abajo hacia arriba: Texture2D espera la primera fila abajo.
-            for (int row = rows - 1; row >= 0; row--) {
-                pixels.limit((row + 1) * rowBytes);
-                pixels.position(row * rowBytes);
-                while (pixels.hasRemaining()) {
-                    channel.write(pixels);
-                }
-            }
-        } finally {
-            stream.close();
-        }
-        // Temporal + renombrado: Unity nunca lee un archivo a medio escribir.
-        if (out.exists() && !out.delete()) {
-            tmp.delete();
-            throw new java.io.IOException("no se pudo reemplazar " + out.getPath());
-        }
-        if (!tmp.renameTo(out)) {
-            tmp.delete();
-            throw new java.io.IOException("no se pudo renombrar " + tmp.getPath());
-        }
-    }
-
-    private static String readSize(File file) throws Exception {
-        java.io.FileInputStream in = new java.io.FileInputStream(file);
-        try {
-            byte[] head = new byte[HEADER];
-            int n = 0;
-            while (n < HEADER) {
-                int r = in.read(head, n, HEADER - n);
-                if (r < 0) {
-                    break;
-                }
-                n += r;
-            }
-            ByteBuffer buffer = ByteBuffer.wrap(head).order(ByteOrder.LITTLE_ENDIAN);
-            return buffer.getInt(4) + "x" + buffer.getInt(8);
-        } finally {
-            in.close();
-        }
-    }
-
-    /** Estado de un trabajo (ver comentario de la clase). */
-    public static String getStatus(String key) {
-        return STATUS.get(key);
-    }
-
-    /** Olvida el estado de un trabajo ya leido. */
-    public static void clearStatus(String key) {
-        STATUS.remove(key);
-    }
-
-    /** Cierra el documento abierto (por ejemplo, al cambiar de libro o salir de la escena). */
-    public static void close() {
-        WORKER.execute(new Runnable() {
-            @Override
-            public void run() {
-                closeCurrent();
-            }
-        });
-    }
-
-    // ---------------------------------------------------------------------
-    // Solo desde el hilo WORKER.
-
-    private static PdfRenderer ensureOpen(String pdfPath) throws Exception {
-        if (openRenderer != null && pdfPath.equals(openPath)) {
-            return openRenderer;
-        }
-        closeCurrent();
-        File file = new File(pdfPath);
-        if (!file.exists()) {
-            throw new java.io.FileNotFoundException("no existe " + pdfPath);
-        }
-        ParcelFileDescriptor descriptor =
-                ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY);
-        try {
-            openRenderer = new PdfRenderer(descriptor);
-        } catch (Throwable t) {
-            descriptor.close();
-            throw t;
-        }
-        openDescriptor = descriptor;
-        openPath = pdfPath;
-        lastRequested = -1;
-        Log.i(TAG, "PDF abierto: " + pdfPath + " (" + openRenderer.getPageCount() + " paginas)");
-        return openRenderer;
-    }
-
-    private static void closeCurrent() {
-        clearPrefetch();
-        if (openRenderer != null) {
-            try {
-                openRenderer.close();
-            } catch (Throwable ignored) {
-            }
-        }
-        if (openDescriptor != null) {
-            try {
-                openDescriptor.close();
-            } catch (Throwable ignored) {
-            }
-        }
-        openRenderer = null;
-        openDescriptor = null;
-        openPath = null;
-    }
-
-    private static String describeError(Throwable t) {
-        Log.e(TAG, "Error en PdfRenderer", t);
-        String detail = t.getClass().getSimpleName() + ": " + t.getMessage();
-        if (t instanceof SecurityException) {
-            return "ERROR:PASSWORD:" + detail;
-        }
-        if (t instanceof OutOfMemoryError) {
-            return "ERROR:MEMORY:" + detail;
-        }
-        if (t instanceof java.io.IOException) {
-            return "ERROR:IO:" + detail;
-        }
-        return "ERROR:OTHER:" + detail;
+    private static String error(Throwable t){
+        Log.w("FolioXR","[FolioXR] PDF: "+t.getClass().getSimpleName());
+        String kind=t instanceof SecurityException?"PASSWORD":t instanceof OutOfMemoryError?"MEMORY":t instanceof IOException?"IO":"OTHER";
+        return "ERROR:"+kind+":"+t.getClass().getSimpleName()+": "+t.getMessage();
     }
 }

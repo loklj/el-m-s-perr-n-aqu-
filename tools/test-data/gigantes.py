@@ -30,6 +30,10 @@ Contenido: texto e imágenes generados aquí, sin material de terceros.
 """
 
 import argparse
+import contextlib
+import subprocess
+import tempfile
+import math
 import hashlib
 import json
 import os
@@ -39,7 +43,7 @@ import sys
 import time
 import zipfile
 
-VERSION = "1.0"
+VERSION = "2.0"
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
 PALABRAS = (
@@ -55,6 +59,42 @@ PALABRAS = (
 
 # ---------------------------------------------------------------------------
 # Utilidades
+
+class Budget:
+    def __init__(self, limit, folder):
+        self.limit, self.folder, self.used = limit, folder, 0
+    def remaining(self):
+        return max(0, min(self.limit - self.used, shutil.disk_usage(self.folder).free - (1 << 30)))
+    def check(self, growth):
+        if growth > self.remaining():
+            raise OSError("Se alcanzó el límite de espacio; salida parcial, no apta para validar el lector")
+
+BUDGET = None
+
+class BoundedOutput:
+    def __init__(self, path):
+        self.file = open(path, "wb"); self.high = 0
+    def __getattr__(self, name):
+        return getattr(self.file, name)
+    def write(self, data):
+        growth = max(0, self.file.tell() + len(data) - self.high)
+        if BUDGET: BUDGET.check(growth)
+        n = self.file.write(data)
+        new_high = max(self.high, self.file.tell())
+        if BUDGET: BUDGET.used += new_high - self.high
+        self.high = new_high
+        return n
+    def __enter__(self): return self
+    def __exit__(self, *args): self.file.close()
+
+def output_file(path): return BoundedOutput(path)
+
+@contextlib.contextmanager
+def output_zip(path):
+    with output_file(path) as stream:
+        with zipfile.ZipFile(stream, "w", allowZip64=True) as archive:
+            yield archive
+
 
 def sha256(ruta):
     h = hashlib.sha256()
@@ -93,7 +133,7 @@ def generar_pdf(ruta, paginas, semilla):
     ancho, alto = 420, 595
 
     inicio = time.time()
-    with open(ruta, "wb") as f:
+    with output_file(ruta) as f:
         def obj(numero, cuerpo):
             offsets[numero] = f.tell()
             f.write(f"{numero} 0 obj\n".encode("ascii"))
@@ -153,7 +193,7 @@ def generar_txt(ruta, megas, codificacion, semilla):
     bom = {"utf-16": b"\xff\xfe"}.get(codificacion, b"")
     codec = {"utf-16": "utf-16-le"}.get(codificacion, codificacion)
     salto = "\r\n" if codificacion == "cp1252" else "\n"
-    with open(ruta, "wb") as f:
+    with output_file(ruta) as f:
         f.write(bom)
         escritos += len(bom)
         while escritos < objetivo:
@@ -181,7 +221,7 @@ def generar_cbz(ruta, imagenes, semilla):
     import io
     rnd = random.Random(semilla)
     inicio = time.time()
-    with zipfile.ZipFile(ruta, "w", allowZip64=True) as z:
+    with output_zip(ruta) as z:
         for n in range(1, imagenes + 1):
             color = (rnd.randint(30, 200), rnd.randint(30, 200), rnd.randint(30, 200))
             img = Image.new("RGB", (900, 1350), (250, 248, 242))
@@ -243,13 +283,13 @@ def _escribir_xref_stream(f, offsets, total_objetos):
     f.write(f"\nendstream\nendobj\nstartxref\n{posicion}\n%%EOF\n".encode("ascii"))
 
 
-def generar_pdf_gb(ruta, gb, semilla):
+def generar_pdf_gb(ruta, gb, semilla, scan_width=0):
     """PDF de `gb` GiB: cada página es una imagen de ~1 MB con su número encima.
 
     Comprueba que el lector use desplazamientos de 64 bits (el archivo supera 4 GiB).
     Usa un índice «xref stream» (PDF 1.5) para poder pasar de ~9,3 GiB.
     """
-    pool, iw, ih = _pool_jpeg(semilla)
+    pool, iw, ih = _pool_jpeg(semilla, cantidad=2, ancho=scan_width, alto=round(scan_width * 1.414), calidad=90) if scan_width else _pool_jpeg(semilla)
     objetivo = int(gb * 1024 ** 3)
     media = sum(len(j) for j in pool) / len(pool)
     paginas = max(1, int(objetivo / (media + 700)) + 1)
@@ -261,7 +301,7 @@ def generar_pdf_gb(ruta, gb, semilla):
     ancho, alto = 420, 595
 
     inicio = time.time()
-    with open(ruta, "wb") as f:
+    with output_file(ruta) as f:
         def obj(numero, *partes):
             offsets[numero] = f.tell()
             f.write(f"{numero} 0 obj\n".encode("ascii"))
@@ -299,7 +339,7 @@ def generar_pdf_gb(ruta, gb, semilla):
         _escribir_xref_stream(f, offsets, total_objetos)
     print()
     return {"paginas": paginas, "supera_4_gib": os.path.getsize(ruta) > 4 * 1024 ** 3,
-            "indice": "xref stream (PDF 1.5)"}
+            "indice": "xref stream (PDF 1.5)", "imagen_pixeles": [iw, ih]}
 
 
 def generar_cbz_gb(ruta, gb, semilla):
@@ -308,7 +348,7 @@ def generar_cbz_gb(ruta, gb, semilla):
     objetivo = int(gb * 1024 ** 3)
     escritos, n = 0, 0
     inicio = time.time()
-    with zipfile.ZipFile(ruta, "w", allowZip64=True) as z:
+    with output_zip(ruta) as z:
         while escritos < objetivo:
             n += 1
             datos = pool[n % len(pool)]
@@ -326,12 +366,55 @@ def generar_cbz_gb(ruta, gb, semilla):
 # ---------------------------------------------------------------------------
 # EPUB con un capítulo enorme
 
-def generar_epub(ruta, kb):
-    sys.path.insert(0, AQUI)
-    import fixtures  # mismo directorio
-    fixtures.generar_epub(ruta, "Capítulo enorme", "urn:uuid:5f0c1e2a-7d1b-4c3e-9a51-0f0110c1a0ff",
-                          capitulo_gigante_kb=kb)
+def generar_epub(ruta, kb, semilla=20261105):
+    """Un capítulo por tramos; no construye un string del tamaño del libro."""
+    rnd = random.Random(semilla)
+    with output_zip(ruta) as z:
+        def put(name, content, stored=False):
+            info = zipfile.ZipInfo(name, (2026, 11, 5, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_STORED if stored else zipfile.ZIP_DEFLATED
+            z.writestr(info, content)
+        put("mimetype", "application/epub+zip", True)
+        put("META-INF/container.xml", '<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>')
+        put("content.opf", '<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">urn:folio:estres</dc:identifier><dc:title>Capítulo enorme</dc:title><dc:language>es</dc:language><meta property="dcterms:modified">2026-11-05T00:00:00Z</meta></metadata><manifest><item id="cap" href="cap.xhtml" media-type="application/xhtml+xml"/><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/></manifest><spine><itemref idref="cap"/></spine></package>')
+        put("nav.xhtml", '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Índice</title></head><body><nav epub:type="toc"><h1>Índice</h1><ol><li><a href="cap.xhtml">Capítulo enorme</a></li></ol></nav></body></html>')
+        info = zipfile.ZipInfo("cap.xhtml", (2026, 11, 5, 0, 0, 0)); info.compress_type = zipfile.ZIP_DEFLATED
+        with z.open(info, "w", force_zip64=True) as out:
+            head = b'<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Texto</title></head><body><h1>Texto</h1>'
+            out.write(head); written = len(head)
+            while written < kb * 1024:
+                paragraph = ('<p>' + ' '.join(rnd.choice(PALABRAS) for _ in range(100)) + '.</p>\n').encode('utf-8')
+                out.write(paragraph); written += len(paragraph)
+            out.write(b'</body></html>')
     return {"capitulo_enorme_kb": kb}
+
+
+def generar_rar_solido(ruta, imagenes, semilla, executable):
+    """RAR5 sólido real con la herramienta del usuario. No se redistribuye su código."""
+    command = shutil.which(executable)
+    if not command:
+        raise RuntimeError("RAR sólido requiere 'rar' con licencia del usuario; indica --rar-command. No se generó un sustituto ZIP.")
+    import resource
+    with tempfile.TemporaryDirectory(dir=os.path.dirname(ruta), prefix='rar-fuentes-') as directory:
+        pool, _, _ = _pool_jpeg(semilla, cantidad=2, ancho=256, alto=362)
+        for i in range(imagenes):
+            image_path = os.path.join(directory, f'{i:06d}.jpg')
+            with output_file(image_path) as out:
+                out.write(pool[i % len(pool)])
+            os.utime(image_path, (1793836800, 1793836800))
+        maximum = BUDGET.remaining()
+        def limits():
+            resource.setrlimit(resource.RLIMIT_FSIZE, (maximum, maximum))
+        if os.path.exists(ruta): os.remove(ruta)
+        process = subprocess.Popen([command, 'a', '-ma5', '-s', '-m3', '-ep', '-idq', '-ts-', '-o+',
+                                 os.path.abspath(ruta), '*.jpg'], cwd=directory, preexec_fn=limits)
+        while process.poll() is None:
+            if shutil.disk_usage(directory).free < (1 << 30):
+                process.terminate(); process.wait(); raise OSError("Espacio insuficiente durante RAR")
+            time.sleep(.1)
+        if process.returncode: raise subprocess.CalledProcessError(process.returncode, command)
+        BUDGET.used += os.path.getsize(ruta)
+    return {"imagenes": imagenes, "rar": "RAR5 sólido", "herramienta_externa": os.path.basename(command)}
 
 
 # ---------------------------------------------------------------------------
@@ -340,7 +423,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--salida", default=os.path.join(AQUI, "salida"))
     p.add_argument("--semilla", type=int, default=20261105)
-    p.add_argument("--solo", choices=["pdf", "txt", "cbz", "epub", "pdf-gb", "cbz-gb"], action="append",
+    p.add_argument("--solo", choices=["pdf", "txt", "cbz", "epub", "pdf-gb", "cbz-gb", "pdf-escaneado", "rar-solido"], action="append",
                    help="Generar solo estos tipos (se puede repetir). pdf-gb y cbz-gb solo se generan si se piden.")
     p.add_argument("--gb", type=float, default=5, help="Tamaño en GiB de pdf-gb y cbz-gb.")
     p.add_argument("--pdf-paginas", type=int, default=100_001)
@@ -351,7 +434,12 @@ def main():
     p.add_argument("--epub-kb", type=int, default=30_000, help="Tamaño del capítulo enorme en KiB.")
     p.add_argument("--limite-gb", type=float, default=12.0,
                    help="No generar si el total estimado supera este límite.")
+    p.add_argument("--scan-width", type=int, default=4096, help="Ancho de cada imagen del PDF escaneado (64..8192).")
+    p.add_argument("--rar-command", default="rar", help="Compresor RAR licenciado del usuario, solo desarrollo.")
     a = p.parse_args()
+    for value in (a.gb, a.txt_mb, a.limite_gb, a.pdf_paginas, a.cbz_imagenes, a.epub_kb):
+        if not math.isfinite(value) or value <= 0: p.error("Los tamaños deben ser positivos y finitos")
+    if not 64 <= a.scan_width <= 8192: p.error("--scan-width debe estar entre 64 y 8192")
 
     tipos = a.solo or ["pdf", "txt", "cbz", "epub"]
     codificaciones = [c.strip() for c in a.txt_codificaciones.split(",") if c.strip()]
@@ -368,8 +456,11 @@ def main():
     if "cbz" in tipos:
         estimado += a.cbz_imagenes * 90_000
     if "epub" in tipos:
-        estimado += a.epub_kb * 1024 // 3
-    for grande in ("pdf-gb", "cbz-gb"):
+        estimado += a.epub_kb * 1024
+    if "rar-solido" in tipos:
+        if not shutil.which(a.rar_command): p.error("RAR sólido requiere rar con licencia del usuario (--rar-command)")
+        estimado += a.cbz_imagenes * 200_000
+    for grande in ("pdf-gb", "cbz-gb", "pdf-escaneado"):
         if grande in tipos:
             estimado += int(a.gb * 1024 ** 3 * 1.01)
     os.makedirs(a.salida, exist_ok=True)
@@ -380,6 +471,8 @@ def main():
     if estimado + 1e9 > libre:
         sys.exit("No hay espacio suficiente (se deja 1 GB de margen).")
 
+    global BUDGET
+    BUDGET = Budget(int(a.limite_gb * 1e9), a.salida)
     archivos = []
 
     def registrar(nombre, datos):
@@ -400,7 +493,7 @@ def main():
         registrar(nombre, generar_cbz(os.path.join(a.salida, nombre), a.cbz_imagenes, a.semilla))
     if "epub" in tipos:
         nombre = f"epub-capitulo-{a.epub_kb}kb.epub"
-        registrar(nombre, generar_epub(os.path.join(a.salida, nombre), a.epub_kb))
+        registrar(nombre, generar_epub(os.path.join(a.salida, nombre), a.epub_kb, a.semilla))
     if "pdf-gb" in tipos:
         nombre = f"pdf-{a.gb:g}gb-imagenes.pdf"
         registrar(nombre, generar_pdf_gb(os.path.join(a.salida, nombre), a.gb, a.semilla))
@@ -408,13 +501,20 @@ def main():
         nombre = f"cbz-{a.gb:g}gb.cbz"
         registrar(nombre, generar_cbz_gb(os.path.join(a.salida, nombre), a.gb, a.semilla))
 
+    if "pdf-escaneado" in tipos:
+        nombre = f"pdf-{a.gb:g}gb-escaneado.pdf"
+        registrar(nombre, generar_pdf_gb(os.path.join(a.salida, nombre), a.gb, a.semilla, a.scan_width))
+    if "rar-solido" in tipos:
+        nombre = f"rar-{a.cbz_imagenes}-solido.cbr"
+        registrar(nombre, generar_rar_solido(os.path.join(a.salida, nombre), a.cbz_imagenes, a.semilla, a.rar_command))
+
     manifiesto = {
         "generador": "tools/test-data/gigantes.py",
         "version": VERSION,
         "semilla": a.semilla,
         "parametros": {k: v for k, v in vars(a).items() if k not in ("salida",)},
         "archivos": archivos,
-        "nota": "RAR sólido no incluido: requiere la herramienta propietaria 'rar'.",
+        "nota": "RAR sólido solo con el compresor licenciado del usuario; no se distribuye en la app. Los hashes dependen de su versión.",
     }
     with open(os.path.join(a.salida, "manifiesto.json"), "w", encoding="utf-8") as f:
         json.dump(manifiesto, f, ensure_ascii=False, indent=2)

@@ -739,6 +739,8 @@ namespace FolioXR.Menu
                             int group = g + 1;
                             options.Add(new MenuOption(groups[g], () => { _settingsGroup = group; RebuildOptions(); }));
                         }
+                        options.Add(new MenuOption("Modo diagnóstico: " + (ReadingDiagnostics.Enabled ? "sí" : "no"),
+                            () => { ReadingDiagnostics.Toggle(); RebuildOptions(); }));
                         break;
                     }
                     options.Add(new MenuOption("Volver", () =>
