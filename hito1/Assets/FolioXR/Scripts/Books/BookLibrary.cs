@@ -733,6 +733,16 @@ namespace FolioXR.Books
             ApplyIfCurrent(entry);
         }
 
+        /// <summary>Tapa: 0 automática (cómics blanda; libros de 150 páginas o más, dura), 1 dura, 2 blanda.</summary>
+        public static int Binding(BookEntry entry) => entry == null ? 0 : FolioXR.Reading.BookBody.BindingFor(entry.id);
+
+        public void SetBinding(BookEntry entry, int value)
+        {
+            if (entry == null) return;
+            PlayerPrefs.SetInt(FolioXR.Reading.BookBody.BindingPrefsPrefix + entry.id, Mathf.Clamp(value, 0, 2));
+            ApplyIfCurrent(entry);
+        }
+
         public static bool SingleCover(BookEntry entry) => entry != null && FolioBook.GetSingleCover(entry.id);
 
         public void SetSingleCover(BookEntry entry, bool value)

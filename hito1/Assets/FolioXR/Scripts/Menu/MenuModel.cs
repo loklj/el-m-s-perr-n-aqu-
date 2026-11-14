@@ -258,6 +258,11 @@ namespace FolioXR.Menu
                 options.Add(new MenuOption("Cuero: " + BookCover.LeatherNames[leather],
                     () => { library.SetLeather(entry, (leather + 1) % BookCover.LeatherNames.Length); RebuildOptions(); }));
             }
+            // Tapa blanda (se dobla con las hojas, como un cómic) o dura (cartón rígido, como un libro empastado).
+            int binding = BookLibrary.Binding(entry);
+            string[] bindings = { "automática", "dura", "blanda" };
+            options.Add(new MenuOption("Tapa: " + bindings[Mathf.Clamp(binding, 0, 2)],
+                () => { library.SetBinding(entry, (binding + 1) % 3); RebuildOptions(); }));
             string folder = BookCollections.CollectionOf(entry.id);
             options.Add(new MenuOption("Colección:\n" + (folder.Length == 0 ? "ninguna" : Shorten(folder, 22)),
                 () => { BookCollections.Assign(entry.id, BookCollections.NextFor(entry.id)); RebuildOptions(); },

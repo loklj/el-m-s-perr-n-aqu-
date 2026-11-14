@@ -15,7 +15,8 @@ namespace FolioXR.Accessibility {public static class FolioAccessibility {public 
 namespace FolioXR.Reading {
  public class PdfResult {public bool Ok;}
  public class PdfPageRenderer {public string PdfPath="test.pdf";public static bool IsRealRendererAvailable=true;public List<int> Requests=new List<int>();public int Fail=-1;public Action DuringRender;public IEnumerator RenderPage(int page,int width,Action<UnityEngine.Texture2D,PdfResult> done){Requests.Add(page);var once=DuringRender;DuringRender=null;once?.Invoke();done(page==Fail?null:new UnityEngine.Texture2D{Page=page},new PdfResult{Ok=page!=Fail});yield break;}}
- public class PageTurnEffect {public static int Turns;public static PageTurnEffect Create(UnityEngine.Renderer r)=>new PageTurnEffect();public IEnumerator Play(bool left,UnityEngine.Texture2D first,UnityEngine.Texture2D second,float w,float h,float gutter){Turns++;yield break;}}
+ public class PageTurnEffect {public static int Turns;public static PageTurnEffect Create(UnityEngine.Renderer r)=>new PageTurnEffect();public IEnumerator Play(bool left,UnityEngine.Texture2D first,UnityEngine.Texture2D second,float w,float h,float gutter,float tilt=0f){Turns++;yield break;}}
+ public class BookBody {public float TiltRadians=>0.157f;}
  public class BookCover {public void SetRightToLeft(bool b){}}
  public static class ReadingDiagnostics {public static void Record(string key,double value){}}
  public static class PageTheme {public static bool Night;public static bool NeedsRemap(string p)=>Night;public static UnityEngine.Color Tint(string p)=>new UnityEngine.Color(1,1,1);}
@@ -25,7 +26,7 @@ namespace FolioXR.Reading {
   private BookSpread _shownSpread;private bool _spreadReady,_spreadLayoutDirty,_busy,_resolutionDirty;
   private int _leftIndex,_pageCount,_renderedWidth;private float _aspectHeightOverWidth,gutter;
   private string _lastPageStatus;private UnityEngine.Texture2D _leftTexture,_rightTexture;private PageTurnEffect _turn;
-  public bool Closed;public void OpenBook(){Closed=false;}public void CloseBook(){Closed=true;}private const string ClosedStatus="";
+  public BookBody Body;  public bool Closed;public void OpenBook(){Closed=false;}public void CloseBook(){Closed=true;}private const string ClosedStatus="";
   public float BookScale=1;public BookCover Cover;private PdfPageRenderer _renderer=new PdfPageRenderer();
   public UnityEngine.Renderer leftPage=new UnityEngine.Renderer(),rightPage=new UnityEngine.Renderer();
   public event Action<int,int> SpreadShown;public int Progress=-1;public List<int> Requests=>_renderer.Requests;

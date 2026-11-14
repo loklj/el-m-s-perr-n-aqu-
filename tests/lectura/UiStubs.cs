@@ -15,6 +15,7 @@ namespace UnityEngine {
 }
 namespace FolioXR.Reading {
  public class BookCover{public static string[] LeatherNames={"a","b","c","d","e","f","g"};public void Apply(bool a,int b,string c,bool d){} }
+ public class BookBody{public const string BindingPrefsPrefix="folioxr.book.binding.";public static int BindingFor(string id)=>string.IsNullOrEmpty(id)?0:UnityEngine.PlayerPrefs.GetInt(BindingPrefsPrefix+id,0);}
  public class FolioBook:UnityEngine.MonoBehaviour{
   public const string UserPdfName="libro.pdf",BundledPdfName="demo.pdf";public const float MinRenderScale=1.4f,MaxRenderScale=2f,RenderScaleStep=.1f;
   public static bool LyingMode;public static void SetLyingMode(bool v){LyingMode=v;}public float RenderScale=1.4f;public bool RightToLeft,RealisticPhysics=true;public string DocumentId;public int Destination=-1,Reloads;public BookCover Cover=new BookCover();

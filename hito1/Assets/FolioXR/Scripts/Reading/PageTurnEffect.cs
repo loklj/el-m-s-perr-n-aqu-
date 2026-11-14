@@ -88,7 +88,9 @@ namespace FolioXR.Reading
 
         /// <param name="towardLeft">La hoja sale de la derecha y cae a la izquierda.</param>
         /// <param name="inner">Distancia del lomo al borde interior de la página (medio margen central).</param>
-        internal IEnumerator Play(bool towardLeft, Texture first, Texture second, float width, float height, float inner)
+        /// <param name="tilt">Inclinación de cada mitad del libro abierto (radianes): la hoja sale y llega en esa V.</param>
+        internal IEnumerator Play(bool towardLeft, Texture first, Texture second, float width, float height, float inner,
+                                  float tilt = 0f)
         {
             _renderer.enabled = true;
             if (_audio != null && _clip != null) _audio.PlayOneShot(_clip);
@@ -97,7 +99,8 @@ namespace FolioXR.Reading
             {
                 elapsed += Time.deltaTime;
                 float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / Seconds));
-                float angle = (towardLeft ? t : 1f - t) * Mathf.PI; // 0 = sobre la derecha, π = sobre la izquierda.
+                // tilt = sobre la mitad derecha, π - tilt = sobre la izquierda (el libro abre en V).
+                float angle = Mathf.Lerp(tilt, Mathf.PI - tilt, towardLeft ? t : 1f - t);
                 bool onLeft = angle > Mathf.PI * 0.5f;
                 bool secondHalf = towardLeft == onLeft;
                 Texture texture = secondHalf ? second : first;
@@ -121,6 +124,7 @@ namespace FolioXR.Reading
             {
                 _vertices[i * 2] = new Vector3(x, -half, -0.0015f - lift);
                 _vertices[i * 2 + 1] = new Vector3(x, half, -0.0015f - lift);
+                // La hoja se curva más en el medio del giro y queda apoyada al llegar a cada lado.
                 float a = Mathf.Clamp(angle + lag * (i + 0.5f) / Columns, 0f, Mathf.PI);
                 x += Mathf.Cos(a) * segment;
                 lift += Mathf.Sin(a) * segment;

@@ -6,9 +6,10 @@ namespace FolioXR.Reading
 {
     /// <summary>
     /// Pedido del usuario (11 nov 2026): tapas de cuero del color elegido con el título en la portada y
-    /// en el lomo, o las tapas propias del libro (primera y última página) si las tiene.
+    /// en el lomo, o las tapas propias del libro (primera y última página) si las tiene. Con tapas propias
+    /// (14 nov 2026) el arte va de borde a borde y la tapa toma el color del borde de la portada.
     /// El libro está abierto: las tapas se ven por fuera (+Z local). Libro normal: la portada queda detrás
-    /// de las páginas izquierdas; en manga, detrás de las derechas.
+    /// de las páginas izquierdas; en manga, detrás de las derechas. La forma y la ubicación las pone BookBody.
     /// </summary>
     public sealed class BookCover : MonoBehaviour
     {
@@ -29,6 +30,8 @@ namespace FolioXR.Reading
         private Material _frontMaterial, _backMaterial;
         private Texture2D _frontTexture, _backTexture;
         private bool _own, _rtl;
+        private int _leatherIndex;
+        private Color? _artColor;
         private string _titleText = string.Empty;
         private Font _font;
         private Material _textMaterial;
@@ -135,28 +138,84 @@ namespace FolioXR.Reading
         {
             _own = ownCovers;
             _rtl = rightToLeft;
+            _leatherIndex = leatherIndex;
             _titleText = string.IsNullOrEmpty(title) ? "Folio XR" : title;
-            Color color = LeatherColors[Mathf.Clamp(leatherIndex, 0, LeatherColors.Length - 1)];
-            if (_coverRenderer != null)
-            {
-                Material material = _coverRenderer.material;
-                material.mainTexture = _leather;
-                material.mainTextureScale = new Vector2(3f, 3f);
-                material.color = color;
-            }
+            UpdateMaterial();
             _title.gameObject.SetActive(!ownCovers);
             _spine.gameObject.SetActive(!ownCovers);
             _frontImage.enabled = ownCovers && _frontTexture != null;
             _backImage.enabled = ownCovers && _backTexture != null;
             Layout();
-            if (_book.Body != null) _book.Body.Layout();
             if (ownCovers) _book.RequestCoverPages(this);
+        }
+
+        /// <summary>
+        /// Cuero del color elegido, o (con tapas propias) el color del borde de la portada: así los cantos de la
+        /// tapa y el lomo combinan con el arte, como en un cómic de papel.
+        /// </summary>
+        private void UpdateMaterial()
+        {
+            if (_coverRenderer == null) return;
+            Material material = _coverRenderer.material;
+            material.mainTexture = _leather;
+            if (_own)
+            {
+                material.mainTextureScale = new Vector2(8f, 8f);
+                material.color = _artColor ?? new Color(0.22f, 0.21f, 0.2f);
+            }
+            else
+            {
+                material.mainTextureScale = new Vector2(3f, 3f);
+                material.color = LeatherColors[Mathf.Clamp(_leatherIndex, 0, LeatherColors.Length - 1)];
+            }
+        }
+
+        /// <summary>Color promedio del borde de una imagen (en la GPU: las páginas no se pueden leer desde la CPU).</summary>
+        private static Color? EdgeColor(Texture texture)
+        {
+            if (texture == null) return null;
+            const int n = 32, band = 3;
+            RenderTexture rt = null;
+            Texture2D small = null;
+            RenderTexture previous = RenderTexture.active;
+            try
+            {
+                rt = RenderTexture.GetTemporary(n, n, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+                Graphics.Blit(texture, rt);
+                RenderTexture.active = rt;
+                small = new Texture2D(n, n, TextureFormat.RGBA32, false, false);
+                small.ReadPixels(new Rect(0, 0, n, n), 0, 0, false);
+                small.Apply(false, false);
+                Color32[] pixels = small.GetPixels32();
+                long r = 0, g = 0, b = 0;
+                int count = 0;
+                for (int y = 0; y < n; y++)
+                    for (int x = 0; x < n; x++)
+                    {
+                        if (x >= band && x < n - band && y >= band && y < n - band) continue;
+                        Color32 p = pixels[y * n + x];
+                        r += p.r; g += p.g; b += p.b; count++;
+                    }
+                if (count == 0) return null;
+                // Un poco más oscuro: el canto de la tapa recibe menos luz que la cara.
+                const float shade = 0.9f / 255f;
+                return new Color(r * shade / count, g * shade / count, b * shade / count, 1f);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[FolioXR] Tapa: no se pudo tomar el color de la portada: " + e.Message);
+                return null;
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+                if (rt != null) RenderTexture.ReleaseTemporary(rt);
+                if (small != null) Destroy(small);
+            }
         }
 
         // BookBody: la portada cuelga de la mitad que se pliega y la contraportada de la que queda quieta.
         private Transform _frontHalf, _backHalf;
-        private bool _spineShut;
-        private int _spineRest = 1;
 
         internal void AttachFront(Transform frontHalf, Transform backHalf)
         {
@@ -165,35 +224,58 @@ namespace FolioXR.Reading
             _frontImage.transform.SetParent(frontHalf, false);
             _title.transform.SetParent(frontHalf, false);
             _backImage.transform.SetParent(backHalf, false);
-            Layout();
         }
 
         internal bool Owns(Transform item) => item == _title.transform || item == _spine.transform ||
             item == _frontImage.transform || item == _backImage.transform;
 
-        /// <summary>Título del lomo: detrás del pliegue con el libro abierto, en el canto con el libro cerrado.</summary>
-        internal void PlaceSpine(bool shut, int rest)
+        /// <summary>Mallas del arte (de borde a borde, con esquinas redondeadas) que arma BookBody.</summary>
+        internal void SetArtMeshes(Mesh front, Mesh back)
         {
-            _spineShut = shut; _spineRest = rest;
-            float outside = BookBody.BackFace + 0.0004f;
-            if (!shut)
-            {
-                _spine.transform.localPosition = new Vector3(0f, 0f, outside + BookBody.SpineBulge);
-                _spine.transform.localRotation = Quaternion.Euler(0f, 180f, 0f) * Quaternion.Euler(0f, 0f, -90f);
-            }
-            else
-            {
-                float x = _book.gutter * 0.5f + 0.0015f - BookBody.Board - 0.0016f;
-                _spine.transform.localPosition = new Vector3(rest > 0 ? x : -x, 0f, 0f);
-                _spine.transform.localRotation = Quaternion.Euler(0f, rest > 0 ? 90f : -90f, 0f) * Quaternion.Euler(0f, 0f, -90f);
-            }
+            SetMesh(_frontImage, front);
+            SetMesh(_backImage, back);
+        }
+
+        private static void SetMesh(Renderer renderer, Mesh mesh)
+        {
+            MeshFilter filter = renderer.GetComponent<MeshFilter>();
+            if (filter != null && filter.sharedMesh != mesh) filter.sharedMesh = mesh;
+            renderer.transform.localPosition = Vector3.zero;
+            renderer.transform.localRotation = Quaternion.identity;
+            renderer.transform.localScale = Vector3.one;
+        }
+
+        /// <summary>Título de la portada, sobre la cara de afuera de la tapa (espacio de su mitad).</summary>
+        internal void PlaceTitle(Vector3 center, float width, float height)
+        {
+            if (_textMaterial != null && _font != null) _textMaterial.mainTexture = _font.material.mainTexture;
+            string text = Wrap(_titleText, 16, 3);
+            if (_title.text != text) _title.text = text;
+            _title.transform.localPosition = center + new Vector3(0f, height * 0.12f, 0.0004f);
+            _title.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+            _title.characterSize = Fit(_title.text, width * 0.8f, height * 0.35f);
+        }
+
+        /// <summary>
+        /// Título del lomo, de arriba hacia abajo como en los libros en español. Con el libro abierto queda
+        /// detrás; cerrado, en el canto. En libros muy finos (cómics) no hay lomo donde escribir.
+        /// </summary>
+        internal void PlaceSpineLabel(Vector3 position, Vector3 outward, float length, float thickness)
+        {
+            string text = Wrap(_titleText, 40, 1);
+            if (_spine.text != text) _spine.text = text;
+            bool visible = !_own && thickness >= 0.004f;
+            if (_spine.gameObject.activeSelf != visible) _spine.gameObject.SetActive(visible);
+            if (!visible) return;
+            _spine.transform.localPosition = position;
+            _spine.transform.localRotation = Quaternion.LookRotation(-outward, Vector3.up) * Quaternion.Euler(0f, 0f, -90f);
+            _spine.characterSize = Fit(_spine.text, length, thickness * 0.7f);
         }
 
         internal void SetRightToLeft(bool value)
         {
             _rtl = value;
             Layout();
-            if (_book.Body != null) _book.Body.Layout();
         }
 
         internal void SetCoverPages(Texture2D front, Texture2D back)
@@ -204,41 +286,17 @@ namespace FolioXR.Reading
             _backTexture = back;
             if (_frontMaterial != null) _frontMaterial.mainTexture = front;
             if (_backMaterial != null) _backMaterial.mainTexture = back;
+            _artColor = EdgeColor(front);
+            UpdateMaterial();
             _frontImage.enabled = _own && front != null;
             _backImage.enabled = _own && back != null;
             Layout();
         }
 
-        /// <summary>Recoloca títulos e imágenes según el tamaño actual de las páginas.</summary>
+        /// <summary>Recoloca títulos e imágenes: la forma del libro (y dónde va cada cosa) la decide BookBody.</summary>
         internal void Layout()
         {
-            if (_book == null || _book.leftPage == null) return;
-            Vector3 page = _book.leftPage.transform.localScale;
-            float width = page.x, height = page.y;
-            float half = width * 0.5f + _book.gutter * 0.5f;
-            float outside = BookBody.BackFace + 0.0004f; // Cara exterior de las tapas duras (BookBody).
-            // Visto desde fuera (+Z) la izquierda y la derecha se invierten: la portada de un libro normal
-            // (detrás de las páginas izquierdas, x < 0) queda a la derecha de quien mira por fuera.
-            float front = _rtl ? half : -half;
-            Quaternion facingOut = Quaternion.Euler(0f, 180f, 0f);
-
-            _frontImage.transform.localPosition = new Vector3(front, 0f, outside);
-            _frontImage.transform.localRotation = facingOut;
-            _frontImage.transform.localScale = new Vector3(width, height, 1f);
-            _backImage.transform.localPosition = new Vector3(-front, 0f, outside);
-            _backImage.transform.localRotation = facingOut;
-            _backImage.transform.localScale = new Vector3(width, height, 1f);
-
-            if (_textMaterial != null && _font != null) _textMaterial.mainTexture = _font.material.mainTexture;
-            _title.text = Wrap(_titleText, 16, 3);
-            _title.transform.localPosition = new Vector3(front, height * 0.12f, outside);
-            _title.transform.localRotation = facingOut;
-            _title.characterSize = Fit(_title.text, width * 0.8f, height * 0.35f);
-
-            _spine.text = Wrap(_titleText, 40, 1);
-            // Lomo: el texto corre de arriba hacia abajo, como en los libros en español.
-            PlaceSpine(_spineShut, _spineRest);
-            _spine.characterSize = Fit(_spine.text, height * 0.85f, Mathf.Max(0.006f, _book.gutter + 0.014f));
+            if (_book != null && _book.Body != null) _book.Body.Layout();
         }
 
         private float Fit(string text, float maxWidth, float maxHeight)

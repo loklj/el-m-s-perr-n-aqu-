@@ -19,7 +19,7 @@ namespace FolioXR.Reading
         private readonly OVRHand[] _hands = new OVRHand[2];
         private readonly OVRSkeleton[] _skeletons = new OVRSkeleton[2];
         private readonly int[] _side = new int[2];        // Hoja donde empezó el gesto (-1, +1) o 0.
-        private readonly float[] _startX = new float[2];
+        private readonly float[] _startX = new float[2];   // f donde empezó el gesto.
         private float _nextFind, _nextTurn;
 
         private void Awake() { _book = GetComponent<FolioBook>(); }
@@ -37,32 +37,44 @@ namespace FolioXR.Reading
             }
         }
 
+        /// <summary>
+        /// Sigue el dedo sobre una hoja. Las mitades del libro abren en V y las hojas se curvan hacia el lomo
+        /// (BookBody), así que todo se mide en el espacio de cada página: f = distancia al lomo (0 en el lomo,
+        /// 1 en el borde libre) y la distancia a la hoja ya curvada.
+        /// </summary>
         private void Track(int i, Vector3 world)
         {
-            Transform root = _book.leftPage.transform.parent != null ? _book.leftPage.transform.parent : _book.transform;
-            Vector3 p = root.InverseTransformPoint(world);
-            float scale = Mathf.Max(0.0001f, root.lossyScale.x);
-            Vector3 page = _book.leftPage.transform.localScale;
-            float w = page.x, h = page.y, g = _book.gutter * 0.5f;
             bool closed = _book.Closed;
-            // Libro cerrado: la tapa queda más cerca de quien lee, sobre la mitad que no se mueve.
-            float surface = closed ? -BookBody.BackFace : 0f;
-            bool touching = Mathf.Abs(p.y) < h * 0.5f + 0.02f / scale && Mathf.Abs(p.z - surface) < Touch / scale &&
-                            Mathf.Abs(p.x) < g + w + 0.03f / scale;
-            if (!touching) { _side[i] = 0; return; }
-            int side = p.x >= 0f ? 1 : -1;
+            int side = 0;
+            float f = 0f;
+            if (closed)
+            {
+                // Libro cerrado: la portada queda delante de la hoja de la mitad que no se movió.
+                int rest = _book.Body != null ? _book.Body.RestSide : 1;
+                if (OnPage(rest, world, _book.Body != null ? -_book.Body.CoverOuterDepth : 0f, out f)) side = rest;
+            }
+            else
+            {
+                for (int s = -1; s <= 1 && side == 0; s += 2)
+                    if (OnPage(s, world, float.NaN, out float fs)) { side = s; f = fs; }
+            }
+            if (side == 0)
+            {
+                _side[i] = 0;
+                return;
+            }
             if (_side[i] == 0)
             {
                 // Empieza solo en la mitad exterior de una hoja (el borde libre), no junto al lomo.
-                if (Mathf.Abs(p.x) < g + w * 0.5f) return;
-                if (closed && side != _book.Body.RestSide) return;
+                if (f < 0.5f) return;
                 _side[i] = side;
-                _startX[i] = p.x;
+                _startX[i] = f;
                 return;
             }
-            float moved = (_startX[i] - p.x) * _side[i];   // Positivo = hacia el lomo.
-            if (moved < -0.02f / scale) { _startX[i] = p.x; return; }   // Se alejó: el gesto vuelve a empezar ahí.
-            if (moved < w * Travel) return;
+            // Hacia el lomo = f baja; si el dedo ya cruzó a la otra hoja, se suma lo recorrido en ella.
+            float moved = side == _side[i] ? _startX[i] - f : _startX[i] + f;
+            if (side == _side[i] && moved < -0.06f) { _startX[i] = f; return; }   // Se alejó: el gesto vuelve a empezar ahí.
+            if (moved < Travel) return;
             int from = _side[i];
             _side[i] = 0;
             _nextTurn = Time.time + Cooldown;
@@ -71,6 +83,26 @@ namespace FolioXR.Reading
             bool forward = (from > 0) != _book.RightToLeft;
             Debug.Log("[FolioXR] Libro: hoja " + (from > 0 ? "derecha" : "izquierda") + " pasada con el dedo.");
             if (forward) _book.NextSpread(); else _book.PreviousSpread();
+        }
+
+        /// <summary>
+        /// ¿El dedo toca la hoja de ese lado? surface: profundidad fija (libro cerrado) o NaN para la hoja curva.
+        /// Devuelve f = distancia al lomo en fracciones del ancho de página.
+        /// </summary>
+        private bool OnPage(int side, Vector3 world, float surface, out float f)
+        {
+            f = 0f;
+            Renderer page = side < 0 ? _book.leftPage : _book.rightPage;
+            if (page == null) return false;
+            Transform t = page.transform;
+            Vector3 p = t.InverseTransformPoint(world);       // x, y en fracciones de la página; z en metros a escala 1.
+            Vector3 scale = t.lossyScale;
+            float meters = Mathf.Max(1e-4f, Mathf.Abs(scale.z));
+            float marginX = 0.03f / Mathf.Max(1e-4f, Mathf.Abs(scale.x)), marginY = 0.02f / Mathf.Max(1e-4f, Mathf.Abs(scale.y));
+            if (Mathf.Abs(p.y) > 0.5f + marginY || p.x < -0.5f - marginX || p.x > 0.5f + marginX) return false;
+            f = side < 0 ? 0.5f - p.x : p.x + 0.5f;
+            float depth = float.IsNaN(surface) ? (_book.Body != null ? _book.Body.PageSurface(side, Mathf.Clamp01(f)) : 0f) : surface;
+            return Mathf.Abs((p.z - depth) * meters) < Touch;
         }
 
         private bool Tip(int i, out Vector3 position)

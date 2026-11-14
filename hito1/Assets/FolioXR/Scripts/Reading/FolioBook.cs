@@ -88,6 +88,8 @@ namespace FolioXR.Reading
         public int LeftPageIndex => _spreadReady ? _leftIndex : -1;
         public bool RightPageVisible => RightSlotPage >= 0 && rightPage != null && rightPage.enabled;
         public int PageCount => _pageCount;
+        /// <summary>Archivo abierto (para saber si es cómic: tapa blanda).</summary>
+        public string DocumentPath => _renderer != null ? _renderer.PdfPath : null;
 
         // ── Encargos 8 y 9 (Claude, 11 nov 2026): manga, animación, modo acostado ──
         public const string LyingPrefsKey = "folioxr.lying";
@@ -914,7 +916,7 @@ namespace FolioXR.Reading
                     else ShowPage(leftPage, newLeft);
                     float pageWidth = rightPage.transform.localScale.x;
                     yield return _turn.Play(towardLeft, lifted, towardLeft ? newLeft : newRight, pageWidth,
-                        rightPage.transform.localScale.y, gutter * 0.5f);
+                        rightPage.transform.localScale.y, gutter * 0.5f, Body != null ? Body.TiltRadians : 0f);
                 }
             }
             if (_leftTexture != null && _leftTexture != newLeft) Destroy(_leftTexture);
@@ -1028,8 +1030,9 @@ namespace FolioXR.Reading
                 statusText.transform.localPosition = new Vector3(0f, -(coverHeight * 0.5f + 0.012f), -0.002f);
                 statusText.transform.localRotation = Quaternion.identity;
             }
+            // BookCover.Layout le pide a BookBody que arme la forma (V, curva, tapas) con el tamaño nuevo.
             if (Cover != null) Cover.Layout();
-            if (Body != null) Body.Layout();
+            else if (Body != null) Body.Layout();
         }
 
         private void ShowError(PdfResult result)
