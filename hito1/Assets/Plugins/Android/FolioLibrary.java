@@ -15,9 +15,12 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.pdf.PdfRenderer;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.ParcelFileDescriptor;
 import android.provider.OpenableColumns;
+import android.provider.Settings;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -402,6 +405,109 @@ public final class FolioLibrary {
 
     // ------------------------------------------------------------------ Importacion
 
+    // ------------------------------------------------------------------ Download solo (16 nov 2026)
+    // Pedido del usuario: bajar un libro con el navegador del Quest y que aparezca solo en la estanteria.
+    // Leer la carpeta Download de otra app exige el permiso «acceso a todos los archivos», que la persona
+    // concede una vez en los ajustes del visor. Cada archivo se importa una sola vez (se recuerda por
+    // nombre, tamano y fecha); si lo quitas de la biblioteca no vuelve a entrar solo.
+
+    /** Puede leer Download? (Android 11 o superior: acceso a todos los archivos). */
+    public static boolean canWatchDownloads() {
+        try {
+            return Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager();
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /** Abre la pantalla del sistema donde se concede el acceso a los archivos. */
+    public static boolean askDownloadsAccess(final Activity activity) {
+        if (Build.VERSION.SDK_INT < 30) {
+            return false;
+        }
+        try {
+            Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:" + activity.getPackageName()));
+            activity.startActivity(intent);
+            return true;
+        } catch (Throwable first) {
+            try {
+                activity.startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+                return true;
+            } catch (Throwable t) {
+                Log.w(TAG, "[FolioXR] Download solo: el visor no abrio la pantalla de permisos", t);
+                return false;
+            }
+        }
+    }
+
+    /** Importa los libros nuevos de Download. Devuelve cuantos puso en cola (0 si no hay o no puede). */
+    public static int scanDownloads() {
+        if (app == null || !canWatchDownloads()) {
+            return 0;
+        }
+        synchronized (STATUS_LOCK) {
+            if ("copying".equals(state) || "picking".equals(state)) {
+                return 0;
+            }
+        }
+        final ArrayList<Uri> uris = new ArrayList<Uri>();
+        try {
+            File folder = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            File[] files = folder != null ? folder.listFiles() : null;
+            if (files == null) {
+                return 0;
+            }
+            android.content.SharedPreferences seen = app.getSharedPreferences("folio-download", Context.MODE_PRIVATE);
+            android.content.SharedPreferences.Editor editor = seen.edit();
+            long now = System.currentTimeMillis();
+            for (File f : files) {
+                String name = f.getName();
+                int dot = name.lastIndexOf('.');
+                if (!f.isFile() || dot < 0 || f.length() <= 0
+                        || !Arrays.asList(KNOWN).contains(name.substring(dot + 1).toLowerCase(Locale.ROOT))) {
+                    continue;
+                }
+                // Recien escrito: el navegador puede estar todavia bajandolo.
+                if (now - f.lastModified() < 4000) {
+                    continue;
+                }
+                String key = name + "|" + f.length() + "|" + f.lastModified();
+                if (seen.contains(key)) {
+                    continue;
+                }
+                editor.putBoolean(key, true);
+                uris.add(Uri.fromFile(f));
+                if (uris.size() >= 20) {
+                    break;
+                }
+            }
+            editor.apply();
+        } catch (Throwable t) {
+            Log.w(TAG, "[FolioXR] Download solo: no se pudo revisar la carpeta", t);
+            return 0;
+        }
+        if (uris.isEmpty()) {
+            return 0;
+        }
+        Log.i(TAG, "[FolioXR] Download solo: " + uris.size() + " archivo(s) nuevo(s)");
+        cancel = false;
+        synchronized (STATUS_LOCK) {
+            index = 0;
+            count = uris.size();
+            imported = 0;
+            copied = total = 0;
+            setStatus("copying", "", "");
+        }
+        IMPORT_WORKER.execute(new Runnable() {
+            @Override
+            public void run() {
+                importAll(uris);
+            }
+        });
+        return uris.size();
+    }
+
     /** Abre el selector del sistema. El resultado llega al Fragment y la copia corre en otro hilo. */
     public static void pickAndImport(final Activity activity) {
         synchronized (STATUS_LOCK) {
@@ -595,8 +701,16 @@ public final class FolioLibrary {
         ContentResolver resolver = app.getContentResolver();
         String name = null;
         long size = -1;
-        Cursor c = resolver.query(uri, new String[]{OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE},
-                null, null, null);
+        Cursor c = null;
+        if ("file".equals(uri.getScheme()) && uri.getPath() != null) {
+            // Archivo de Download (scanDownloads): nombre y tamano directos.
+            File direct = new File(uri.getPath());
+            name = direct.getName();
+            size = direct.length();
+        } else {
+            c = resolver.query(uri, new String[]{OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE},
+                    null, null, null);
+        }
         if (c != null) {
             try {
                 if (c.moveToFirst()) {

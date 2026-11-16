@@ -5,7 +5,9 @@ namespace FolioXR.Reading
 {
     /// <summary>
     /// Controles sobre el propio libro (pedido del usuario, 16 nov 2026):
-    ///  · una barra de avance sobre el borde de arriba, de un extremo al otro del libro abierto;
+    ///  · una barra de avance sobre el borde de arriba, de un extremo al otro del libro abierto, con un 0 en
+    ///    un extremo, la última página en el otro y un círculo dorado en la página actual con su número
+    ///    encima; el círculo se agarra y se lleva a la página que uno quiera;
     ///  · una X en la esquina de arriba, que guarda el libro en la estantería;
     ///  · un círculo a cada lado: se agarra (pellizco, gatillo o agarre) y, con el movimiento de cerrar un
     ///    libro, la tapa sigue a la mano. Con el libro cerrado, el mismo círculo lo abre.
@@ -26,6 +28,13 @@ namespace FolioXR.Reading
         private Material _goldMaterial, _darkMaterial, _redMaterial, _lightMaterial;
         private readonly Transform[] _track = new Transform[2], _fill = new Transform[2], _circle = new Transform[2];
         private Transform _close;
+        // Barra: círculo de la página actual, su número y los números de los extremos.
+        private Transform _knob;
+        private TextMesh _knobLabel, _startLabel, _endLabel;
+        private Font _font;
+        private Material _textMaterial;
+        private int _barHand = -1, _barPage, _goTo = -1;
+        private float _barLost;
         private bool _built;
         private readonly bool[] _was = new bool[2];
         // Tapa en la mano.
@@ -37,7 +46,8 @@ namespace FolioXR.Reading
         private void OnDestroy()
         {
             if (_instance == this) _instance = null;
-            foreach (Object o in new Object[] { _quad, _disc, _goldMaterial, _darkMaterial, _redMaterial, _lightMaterial })
+            Font.textureRebuilt -= OnFontRebuilt;
+            foreach (Object o in new Object[] { _quad, _disc, _goldMaterial, _darkMaterial, _redMaterial, _lightMaterial, _textMaterial })
                 if (o != null) Destroy(o);
         }
 
@@ -46,7 +56,8 @@ namespace FolioXR.Reading
         {
             BookControls c = _instance;
             if (c == null || !c._built || !c.isActiveAndEnabled) return false;
-            if (c._dragHand >= 0) return true;
+            if (c._dragHand >= 0 || c._barHand >= 0) return true;
+            if (c.OnBar(point, 0.008f, out _)) return true;
             // Con algo de margen: el punto del pellizco de BookGrab no es exactamente la punta del índice.
             return c.Near(c._close, point, 0.015f) || c.Near(c._circle[0], point, 0.015f) || c.Near(c._circle[1], point, 0.015f);
         }
@@ -107,8 +118,75 @@ namespace FolioXR.Reading
                 bar.localRotation = Quaternion.Euler(0f, 0f, k == 0 ? 45f : -45f);
                 bar.localPosition = new Vector3(0f, 0f, -0.03f - k * 0.02f);
             }
+            // Círculo de la página actual (dorado con borde oscuro) y números.
+            _knob = Part("Página actual", _disc, _darkMaterial, body.Half(1));
+            Transform gold = Part("Centro", _disc, _goldMaterial, _knob);
+            gold.localScale = new Vector3(0.78f, 0.78f, 1f);
+            gold.localPosition = new Vector3(0f, 0f, -0.04f);
+            _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            Shader text = Resources.Load<Shader>("FolioXRText3D");
+            if (_font != null)
+            {
+                _textMaterial = text != null && text.isSupported
+                    ? new Material(text) { name = "FolioXR números de la barra", mainTexture = _font.material.mainTexture }
+                    : new Material(_font.material);
+                Font.textureRebuilt += OnFontRebuilt;
+                _knobLabel = Label("Número de página", TextAnchor.LowerCenter, body.Half(1));
+                _startLabel = Label("Inicio", TextAnchor.LowerLeft, body.Half(-1));
+                _endLabel = Label("Final", TextAnchor.LowerRight, body.Half(1));
+            }
             _built = true;
         }
+
+        // La textura de la fuente se rehace al pedir letras nuevas: el material propio tiene que seguirla.
+        private void OnFontRebuilt(Font font)
+        {
+            if (font == _font && _textMaterial != null) _textMaterial.mainTexture = _font.material.mainTexture;
+        }
+
+        private TextMesh Label(string name, TextAnchor anchor, Transform parent)
+        {
+            var item = new GameObject(name);
+            item.transform.SetParent(parent, false);
+            var label = item.AddComponent<TextMesh>();
+            label.font = _font;
+            label.fontSize = 48;
+            label.characterSize = 0.0021f;                         // Cifras de cerca de 1 cm de alto.
+            label.anchor = anchor;
+            label.alignment = TextAlignment.Center;
+            label.color = new Color(0.97f, 0.9f, 0.7f);
+            var renderer = item.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = _textMaterial;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+            return label;
+        }
+
+        /// <summary>
+        /// ¿El punto está sobre la barra (libro abierto)? along: lugar a lo largo de la barra, de 0 (orilla
+        /// izquierda) a 1 (orilla derecha).
+        /// </summary>
+        private bool OnBar(Vector3 point, float extra, out float along)
+        {
+            along = 0f;
+            BookBody body = _book.Body;
+            if (body == null || !_built || _track[0] == null || !_track[0].gameObject.activeInHierarchy) return false;
+            float width = _book.rightPage.transform.localScale.x, height = _book.rightPage.transform.localScale.y;
+            float inner = _book.gutter * 0.5f, top = height * 0.5f + Above;
+            Transform root = _book.rightPage.transform.parent;
+            int side = root.InverseTransformPoint(point).x < 0f ? -1 : 1;
+            Vector3 local = body.Half(side).InverseTransformPoint(point);
+            float flat = Mathf.Clamp((local.x - side * inner) * side, 0f, width);   // Del lomo hacia afuera.
+            along = 0.5f + side * flat / (2f * width);
+            return Mathf.Abs(local.y - top) < 0.022f + extra && Mathf.Abs(local.z) < 0.04f + extra &&
+                   (local.x - side * inner) * side > -0.02f && (local.x - side * inner) * side < width + 0.02f;
+        }
+
+        /// <summary>Lugar de la barra (0 a 1, de izquierda a derecha) que le toca a una página (1…N).</summary>
+        private float AlongOf(int page, int pages) => _book.RightToLeft ? 1f - page / (float)pages : page / (float)pages;
+
+        private int PageAt(float along, int pages) =>
+            Mathf.Clamp(Mathf.RoundToInt((_book.RightToLeft ? 1f - along : along) * pages), 1, pages);
 
         private static Material Flat(Material source, Color color, string name)
         {
@@ -131,7 +209,7 @@ namespace FolioXR.Reading
 
         private void LateUpdate()
         {
-            if (_book == null || _book.Empty) { _dragHand = -1; return; }
+            if (_book == null || _book.Empty) { _dragHand = _barHand = _goTo = -1; return; }
             if (!_built) { Build(); if (!_built) return; }
             Place();
             Interact();
@@ -147,7 +225,9 @@ namespace FolioXR.Reading
             float fold = body.FoldAmount;
             bool open = fold < 0.02f, closed = fold > 0.98f;
             int pages = Mathf.Max(1, _book.PageCount);
-            float progress = _book.PageCount > 0 ? Mathf.Clamp01((_book.LeftPageIndex + 2f) / pages) : 0f;
+            // Página que marca el círculo: la que se está leyendo o, mientras se arrastra, la elegida.
+            int page = _barHand >= 0 ? _barPage : Mathf.Clamp(_book.LeftPageIndex + 1, 1, pages);
+            float progress = _book.PageCount > 0 ? Mathf.Clamp01(page / (float)pages) : 0f;
             float top = height * 0.5f + Above;
             const float thick = 0.0055f, front = -0.0015f;
             for (int i = 0; i < 2; i++)
@@ -171,11 +251,39 @@ namespace FolioXR.Reading
                 _circle[i].localPosition = new Vector3(side * (inner + width + Outside), 0f, lift);
                 _circle[i].localScale = Vector3.one * 0.026f;
             }
+            // Círculo en la página actual, con su número encima; en los extremos, 0 y la última página.
+            float spot = AlongOf(page, pages);                       // 0 = orilla izquierda, 1 = orilla derecha.
+            int knobSide = spot < 0.5f ? -1 : 1;
+            float knobX = knobSide * (inner + Mathf.Abs(spot - 0.5f) * 2f * width);
+            Transform knobHome = body.Half(knobSide);
+            if (_knob.parent != knobHome) _knob.SetParent(knobHome, false);
+            _knob.gameObject.SetActive(open && _book.PageCount > 0);
+            _knob.localPosition = new Vector3(knobX, top, front - 0.001f);
+            _knob.localRotation = Quaternion.identity;
+            _knob.localScale = Vector3.one * (_barHand >= 0 ? 0.02f : 0.015f);
+            if (_knobLabel != null)
+            {
+                if (_knobLabel.transform.parent != knobHome) _knobLabel.transform.SetParent(knobHome, false);
+                _knobLabel.gameObject.SetActive(open && _book.PageCount > 0);
+                _knobLabel.transform.localPosition = new Vector3(knobX, top + 0.012f, front);
+                _knobLabel.transform.localRotation = Quaternion.identity;
+                string number = page.ToString();
+                if (_knobLabel.text != number) _knobLabel.text = number;
+                // Los números de los extremos se esconden cuando el círculo les queda encima.
+                bool nearStart = spot < 0.12f, nearEnd = spot > 0.88f;
+                _startLabel.gameObject.SetActive(open && !nearStart);
+                _endLabel.gameObject.SetActive(open && !nearEnd);
+                _startLabel.transform.localPosition = new Vector3(-(inner + width), top + 0.006f, front);
+                _endLabel.transform.localPosition = new Vector3(inner + width, top + 0.006f, front);
+                string first = rtl ? pages.ToString() : "0", last = rtl ? "0" : pages.ToString();
+                if (_startLabel.text != first) _startLabel.text = first;
+                if (_endLabel.text != last) _endLabel.text = last;
+            }
             // La X va en la mitad que no se mueve al cerrar, arriba y afuera.
             Transform home = body.Half(body.RestSide);
             if (_close.parent != home) _close.SetParent(home, false);
             _close.gameObject.SetActive(!_book.Empty && (open || closed));
-            _close.localPosition = new Vector3(body.RestSide * (inner + width + Outside), top + 0.012f,
+            _close.localPosition = new Vector3(body.RestSide * (inner + width + Outside + 0.006f), top + 0.016f,
                                                closed ? -body.CoverOuterDepth - 0.002f : front);
             _close.localRotation = Quaternion.identity;
             _close.localScale = Vector3.one * 0.028f;
@@ -186,6 +294,8 @@ namespace FolioXR.Reading
             BookBody body = _book.Body;
             if (_hands == null) _hands = GetComponent<BookHands>();
             if (_hands == null || body == null) return;
+            if (_goTo >= 0 && _book.GoToPage(_goTo)) _goTo = -1;      // Página elegida en la barra (espera si el libro está ocupado).
+            if (_barHand >= 0) { FollowBar(); return; }
             if (_dragHand >= 0) { Follow(body); return; }
             bool idle = _book.InputPaused || _book.HandTurning;
             for (int i = 0; i < 2; i++)
@@ -204,6 +314,13 @@ namespace FolioXR.Reading
                     else _book.PutAway();                            // Libro de muestra: solo se guarda.
                     return;
                 }
+                if (!Near(_circle[0], point) && !Near(_circle[1], point) && _book.PageCount > 1 && OnBar(point, 0f, out float along))
+                {
+                    _barHand = i;
+                    _barPage = PageAt(along, _book.PageCount);
+                    _barLost = -1f;
+                    return;
+                }
                 for (int c = 0; c < 2; c++)
                 {
                     if (!Near(_circle[c], point) || body.Folding) continue;
@@ -220,6 +337,32 @@ namespace FolioXR.Reading
                     return;
                 }
             }
+        }
+
+        /// <summary>El círculo de la barra sigue a la mano; al soltar, el libro va a esa página.</summary>
+        private void FollowBar()
+        {
+            bool have = _hands.Pointer(_barHand, out Vector3 world, out bool pressed) && !_book.InputPaused;
+            if (!have)
+            {
+                if (_barLost < 0f) _barLost = Time.unscaledTime;
+                if (Time.unscaledTime - _barLost < 0.3f) return;
+                _was[_barHand] = false;
+                _barHand = -1;                                       // Mano perdida: no se cambia de página.
+                return;
+            }
+            _barLost = -1f;
+            int pages = Mathf.Max(1, _book.PageCount);
+            // Alejar mucho la mano de la barra antes de soltar cancela.
+            bool on = OnBar(world, 0.08f, out float along);
+            if (pressed) { if (on) _barPage = PageAt(along, pages); return; }
+            if (on && _barPage != Mathf.Clamp(_book.LeftPageIndex + 1, 1, pages))
+            {
+                Debug.Log("[FolioXR] Libro: barra, ir a la página " + _barPage + ".");
+                _goTo = _barPage - 1;
+            }
+            _was[_barHand] = false;
+            _barHand = -1;
         }
 
         private void Hover(Vector3 point)

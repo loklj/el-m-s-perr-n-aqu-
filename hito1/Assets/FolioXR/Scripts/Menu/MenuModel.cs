@@ -207,6 +207,12 @@ namespace FolioXR.Menu
                 library.Import();
                 RebuildOptions();
             }, () => !library.Importing));
+            // Lo que se baja con el navegador del visor entra solo a la biblioteca y a la estantería.
+            bool auto = library.AutoDownload;
+            options.Add(new MenuOption("Download solo:\n" + (auto ? "sí" : "no"),
+                () => { library.SetAutoDownload(!auto); RebuildOptions(); }, marked: () => library.AutoDownload));
+            if (auto && !library.DownloadAccess)
+                options.Add(new MenuOption("Falta el permiso\n(tocar para darlo)", library.AskDownloadAccess));
             if (!library.WifiRunning)
                 options.Add(new MenuOption("Desde el PC\npor Wi-Fi", library.StartWifi));
             else

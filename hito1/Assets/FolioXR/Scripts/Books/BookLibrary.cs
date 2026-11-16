@@ -585,6 +585,63 @@ namespace FolioXR.Books
             if (generation == _contentsGeneration) _contentsRoutine = null;
         }
 
+        // ───────────── Download solo (pedido del usuario, 16 nov 2026) ─────────────
+        // Los libros que la persona baja con el navegador del visor entran solos a la biblioteca (y a la
+        // estantería). Necesita el permiso de archivos del visor, que se pide al activar la opción.
+        public const string AutoDownloadPrefsKey = "folioxr.library.autoDownload";
+        public bool AutoDownload => PlayerPrefs.GetInt(AutoDownloadPrefsKey, 0) != 0;
+        private float _nextDownloadScan;
+
+        /// <summary>¿El visor ya concedió el acceso a Download?</summary>
+        public bool DownloadAccess
+        {
+            get
+            {
+#if UNITY_ANDROID && !UNITY_EDITOR
+                try { return Available && _java.CallStatic<bool>("canWatchDownloads"); }
+                catch (Exception) { return false; }
+#else
+                return false;
+#endif
+            }
+        }
+
+        public void SetAutoDownload(bool on)
+        {
+            PlayerPrefs.SetInt(AutoDownloadPrefsKey, on ? 1 : 0);
+            PlayerPrefs.Save();
+            _nextDownloadScan = 0f;
+            if (on && !DownloadAccess) AskDownloadAccess();
+            StateChanged?.Invoke();
+        }
+
+        public void AskDownloadAccess()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                if (!Available || !_java.CallStatic<bool>("askDownloadsAccess", _activity))
+                    Notify("Este visor no abrió la pantalla de permisos.\nUsa «Desde el visor» para elegir los archivos.");
+            }
+            catch (Exception e) { Debug.LogWarning("[FolioXR] Download solo: " + e.Message); }
+#endif
+        }
+
+        private void ScanDownloads()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                int found = _java.CallStatic<int>("scanDownloads");
+                if (found <= 0) return;
+                _polling = true;
+                _nextPoll = 0f;
+                Debug.Log("[FolioXR] Download solo: entran " + found + " libro(s)");
+            }
+            catch (Exception e) { Debug.LogWarning("[FolioXR] Download solo: " + e.Message); }
+#endif
+        }
+
         public void Import()
         {
             if (!Available || Importing) return;
@@ -852,6 +909,11 @@ namespace FolioXR.Books
             {
                 _nextWifiPoll = Time.unscaledTime + 1f;
                 PollWifi();
+            }
+            if (Available && !Importing && Time.unscaledTime >= _nextDownloadScan && AutoDownload)
+            {
+                _nextDownloadScan = Time.unscaledTime + 6f;
+                ScanDownloads();
             }
             if (_polling && Time.unscaledTime >= _nextPoll)
             {
