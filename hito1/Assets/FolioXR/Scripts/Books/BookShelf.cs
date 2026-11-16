@@ -39,7 +39,7 @@ namespace FolioXR.Books
             public int Row;             // Fila donde quedó.
             public float Along;         // Distancia desde el inicio de la fila hasta el centro del lomo.
             public int Leather;         // Color de la tapa (columna del atlas).
-            public Transform Cover;     // Portada de frente (si el libro ya tiene miniatura).
+            public Transform Cover;     // Portada sobre la tapa (si el libro ya tiene miniatura).
             public Material CoverMaterial;
         }
 
@@ -396,10 +396,10 @@ namespace FolioXR.Books
                     if (current != null && item.Id == current) continue;   // Hueco del libro abierto: su lugar lo espera.
                     BookEntry entry = byId[item.Id];
                     float height = SpineHeight(entry);
-                    // De frente: la tapa queda en el plano de la fila y el grosor va hacia el fondo del estante.
+                    // El lomo queda en el plano de la fila; el libro se extiende hacia el fondo del estante.
                     Vector3 center = line.Left + along * (item.X + item.Width * 0.5f) + Vector3.up * (height * 0.5f + 0.0005f);
                     _block = r + 1;
-                    AddBook(entry, center, rotation, new Vector3(item.Width, height, SpineWidth(entry)), r, item.X + item.Width * 0.5f);
+                    AddBook(entry, center, rotation, new Vector3(item.Width, height, SpineDepth(entry)), r, item.X + item.Width * 0.5f);
                 }
             }
             _mesh.Clear();
@@ -433,7 +433,7 @@ namespace FolioXR.Books
                 // Lugares de libros que ya no están, de filas que no existen o repetidos: se olvidan.
                 if (place == null || place.id == null || !byId.ContainsKey(place.id) || place.row < 0 ||
                     place.row >= _rows.Count || !seated.Add(place.id)) continue;
-                _rows[place.row].Add(new ShelfLayout.Item { Id = place.id, X = place.x, Width = FaceWidth(byId[place.id]) });
+                _rows[place.row].Add(new ShelfLayout.Item { Id = place.id, X = place.x, Width = SpineWidth(byId[place.id]) });
             }
             for (int r = 0; r < _rows.Count; r++)
             {
@@ -449,7 +449,7 @@ namespace FolioXR.Books
             foreach (BookEntry entry in books)
             {
                 if (entry == null || entry.id == null || seated.Contains(entry.id)) continue;
-                float width = FaceWidth(entry);
+                float width = SpineWidth(entry);
                 bool found = false;
                 for (int r = 0; r < _rows.Count && !found; r++)
                 {
@@ -475,14 +475,14 @@ namespace FolioXR.Books
         }
 
         /// <summary>
-        /// Ancho del libro puesto de frente (pedido del usuario, 16 nov 2026: «que se vea la portada»): el de su
-        /// portada si ya tiene miniatura; si no, el de una hoja corriente.
+        /// Fondo del libro parado en el estante: el ancho de su portada si ya tiene miniatura (CoverThumbs);
+        /// si no, el de una hoja corriente.
         /// </summary>
-        private static float FaceWidth(BookEntry entry)
+        private static float SpineDepth(BookEntry entry)
         {
             Texture2D cover = CoverThumbs.Get(entry.id);
-            float aspect = cover != null && cover.height > 0 ? Mathf.Clamp(cover.width / (float)cover.height, 0.5f, 1.1f) : 0.68f;
-            return SpineHeight(entry) * aspect;
+            float aspect = cover != null && cover.height > 0 ? Mathf.Clamp(cover.width / (float)cover.height, 0.5f, 0.8f) : 0.68f;
+            return Mathf.Min(0.2f, SpineHeight(entry) * aspect);
         }
 
         private static float SpineHeight(BookEntry entry)
@@ -496,17 +496,33 @@ namespace FolioXR.Books
         {
             int leather = Mathf.Clamp(BookLibrary.Leather(entry), 0, BookCover.LeatherColors.Length - 1);
             int first = _vertices.Count;
-            // Tapa (frente), lomo y contratapa en cuero; arriba se ve el canto de las hojas.
+            // Lomo (frente) y tapas en cuero; arriba se ve el canto de las hojas.
             Box(center - rotation * Vector3.forward * (size.z * 0.5f), rotation, size, leather, 8);
             var slot = new Slot { Entry = entry, Center = center, Rotation = rotation, Size = size, FirstVertex = first, Row = row, Along = along, Leather = leather };
+            // Título a lo largo del lomo, de abajo hacia arriba.
+            var go = new GameObject("Lomo · " + entry.title);
+            go.transform.SetParent(_titles, false);
+            var text = go.AddComponent<TextMesh>();
+            text.font = _font;
+            text.fontSize = 48;
+            // Un píxel de la fuente mide characterSize / 10 m: letras de ~65 % del ancho del lomo.
+            text.characterSize = Mathf.Clamp(size.x * 0.65f * 10f / 48f, 0.0018f, 0.003f);
+            text.anchor = TextAnchor.MiddleCenter;
+            text.alignment = TextAlignment.Center;
+            text.color = TitleColor(leather, _block);
+            text.text = Spine(entry.title, size.y);
+            var r = go.GetComponent<MeshRenderer>();
+            r.sharedMaterial = _textMaterial;
+            r.shadowCastingMode = ShadowCastingMode.Off;
+            slot.Title = text;
             Texture2D cover = CoverThumbs.Get(entry.id);
             if (cover != null)
             {
-                // Portada del libro sobre la tapa, mirando a la sala.
+                // Portada sobre la tapa de adelante (a la derecha del lomo, como en un libro de verdad): se ve
+                // al sacar el libro, que en la mano gira para mostrarla (SetBox).
                 var art = new GameObject("Portada · " + entry.title);
                 art.transform.SetParent(_titles, false);
-                art.transform.SetPositionAndRotation(center + rotation * Vector3.forward * CoverGap, rotation * Quaternion.Euler(0f, 180f, 0f));
-                art.transform.localScale = new Vector3(size.x, size.y, 1f);
+                art.transform.localScale = new Vector3(size.z, size.y, 1f);
                 art.AddComponent<MeshFilter>().sharedMesh = _coverQuad;
                 var renderer = art.AddComponent<MeshRenderer>();
                 slot.CoverMaterial = new Material(_material) { name = "FolioXR portada en estantería", mainTexture = cover, color = BlockLight(_block) };
@@ -515,46 +531,24 @@ namespace FolioXR.Books
                 renderer.receiveShadows = false;
                 slot.Cover = art.transform;
             }
-            else
-            {
-                // Sin miniatura todavía (el libro nunca se abrió): tapa de cuero con el título.
-                var go = new GameObject("Tapa · " + entry.title);
-                go.transform.SetParent(_titles, false);
-                go.transform.SetPositionAndRotation(center + rotation * (Vector3.forward * TitleGap + Vector3.up * size.y * 0.12f),
-                    rotation * Quaternion.Euler(0f, 180f, 0f));
-                var text = go.AddComponent<TextMesh>();
-                text.font = _font;
-                text.fontSize = 48;
-                text.text = Front(entry.title, out int longest);
-                // Un píxel de la fuente mide characterSize / 10 m y una letra ocupa cerca de medio cuadratín.
-                text.characterSize = Mathf.Clamp(size.x * 0.82f / (longest * 0.52f * 4.8f), 0.0016f, 0.0045f);
-                text.anchor = TextAnchor.MiddleCenter;
-                text.alignment = TextAlignment.Center;
-                text.color = TitleColor(leather, _block);
-                var r = go.GetComponent<MeshRenderer>();
-                r.sharedMaterial = _textMaterial;
-                r.shadowCastingMode = ShadowCastingMode.Off;
-                slot.Title = text;
-            }
             _slots.Add(slot);
+            PlaceLabels(slot, center - rotation * Vector3.forward * (size.z * 0.5f), rotation);
         }
 
-        /// <summary>Título partido en renglones cortos para la tapa; longest: letras del renglón más largo.</summary>
-        private static string Front(string title, out int longest)
+        /// <summary>Lleva el título del lomo y la portada a su lugar sobre la caja del libro.</summary>
+        private static void PlaceLabels(Slot s, Vector3 boxCenter, Quaternion r)
+        {
+            if (s.Title != null)
+                s.Title.transform.SetPositionAndRotation(boxCenter + r * Vector3.forward * (s.Size.z * 0.5f + TitleGap), r * Quaternion.Euler(0f, 180f, 90f));
+            if (s.Cover != null)
+                s.Cover.SetPositionAndRotation(boxCenter - r * Vector3.right * (s.Size.x * 0.5f + CoverGap), r * Quaternion.Euler(0f, 90f, 0f));
+        }
+
+        private static string Spine(string title, float height)
         {
             title = string.IsNullOrWhiteSpace(title) ? "Sin título" : title.Trim();
-            var lines = new List<string>();
-            string line = string.Empty;
-            foreach (string word in title.Split(' '))
-            {
-                if (line.Length > 0 && line.Length + 1 + word.Length > 13) { lines.Add(line); line = word; }
-                else line = line.Length == 0 ? word : line + " " + word;
-            }
-            if (line.Length > 0) lines.Add(line);
-            if (lines.Count > 5) { lines.RemoveRange(5, lines.Count - 5); lines[4] += "…"; }
-            longest = 6;
-            foreach (string l in lines) longest = Mathf.Max(longest, l.Length);
-            return string.Join("\n", lines);
+            int max = Mathf.Max(8, Mathf.RoundToInt(height * 95f));
+            return title.Length <= max ? title : title.Substring(0, max - 1).TrimEnd() + "…";
         }
 
         /// <summary>Caja centrada en center con la cara «frente» hacia +Z local.</summary>
@@ -691,7 +685,7 @@ namespace FolioXR.Books
             bool onShelf = DropTarget(center, s.Entry.id, s.Size.x, out int row, out Vector3 markerAt, out Quaternion markerRotation);
             if (pressed)
             {
-                Move(_held, center);
+                Move(_held, center, true);
                 if (_marker != null)
                 {
                     _marker.SetActive(onShelf);
@@ -723,7 +717,7 @@ namespace FolioXR.Books
             _bookWasGrabbed = grabbed;
             if (grabbed && library.Current != null)
             {
-                bool over = DropTarget(_book.transform.position, library.Current.id, FaceWidth(library.Current), out _, out Vector3 at, out Quaternion rotation);
+                bool over = DropTarget(_book.transform.position, library.Current.id, SpineWidth(library.Current), out _, out Vector3 at, out Quaternion rotation);
                 if (_marker != null)
                 {
                     _marker.SetActive(over);
@@ -733,7 +727,7 @@ namespace FolioXR.Books
             }
             if (!released || library.Current == null) return false;
             if (_marker != null) _marker.SetActive(false);
-            if (!DropTarget(_book.transform.position, library.Current.id, FaceWidth(library.Current), out int row, out _, out _)) return false;
+            if (!DropTarget(_book.transform.position, library.Current.id, SpineWidth(library.Current), out int row, out _, out _)) return false;
             Debug.Log("[FolioXR] Estantería: «" + library.Current.title + "» cerrado y guardado en la fila " + (row + 1) + ".");
             Settle(library.Current.id, row);
             library.CloseCurrent();
@@ -787,7 +781,7 @@ namespace FolioXR.Books
             _dirty = true;
         }
 
-        private void Move(int index, Vector3 center) => SetBox(index, center);
+        private void Move(int index, Vector3 center, bool turned = false) => SetBox(index, center, turned);
 
         private GameObject MarkerObject()
         {
@@ -826,25 +820,24 @@ namespace FolioXR.Books
         /// <summary>Saca el libro «amount» metros del estante (hacia la sala).</summary>
         private void Pull(int index, float amount) => SetBox(index, _slots[index].Center + _slots[index].Rotation * Vector3.forward * amount);
 
-        /// <summary>Lleva el libro (caja y título) a un centro de lomo nuevo, con la misma orientación.</summary>
-        private void SetBox(int index, Vector3 spineCenter)
+        /// <summary>
+        /// Lleva el libro (caja, título y portada) a un centro de lomo nuevo. turned: en la mano, girado un
+        /// cuarto de vuelta y centrado en ese punto, con la portada hacia quien lo sacó.
+        /// </summary>
+        private void SetBox(int index, Vector3 spineCenter, bool turned = false)
         {
             Slot s = _slots[index];
-            Vector3 offset = spineCenter - s.Center;
-            int count = 24; // Seis caras de cuatro vértices.
-            Vector3 boxCenter = s.Center - s.Rotation * Vector3.forward * (s.Size.z * 0.5f);
-            var vertices = new List<Vector3>(count);
+            Quaternion r = turned ? s.Rotation * Quaternion.Euler(0f, 90f, 0f) : s.Rotation;
+            Vector3 b = turned ? spineCenter : spineCenter - r * Vector3.forward * (s.Size.z * 0.5f);
             Vector3 h = s.Size * 0.5f;
-            Quaternion r = s.Rotation;
             Vector3 X = r * Vector3.right * h.x, Y = r * Vector3.up * h.y, Z = r * Vector3.forward * h.z;
-            void F(Vector3 c, Vector3 u, Vector3 v) { vertices.Add(c - u - v); vertices.Add(c + u - v); vertices.Add(c + u + v); vertices.Add(c - u + v); }
-            Vector3 b = boxCenter + offset;
+            int k = s.FirstVertex;
+            void F(Vector3 c, Vector3 u, Vector3 v) { _vertices[k++] = c - u - v; _vertices[k++] = c + u - v; _vertices[k++] = c + u + v; _vertices[k++] = c - u + v; }
+            // Mismo orden de caras que Box.
             F(b + Z, X, Y); F(b - Z, -X, Y); F(b + X, -Z, Y); F(b - X, Z, Y); F(b + Y, X, -Z); F(b - Y, X, Z);
-            for (int i = 0; i < count; i++) _vertices[s.FirstVertex + i] = vertices[i];
             _mesh.SetVertices(_vertices);
             _mesh.RecalculateBounds();
-            if (s.Title != null) s.Title.transform.position = s.Center + offset + r * (Vector3.forward * TitleGap + Vector3.up * s.Size.y * 0.12f);
-            if (s.Cover != null) s.Cover.position = s.Center + offset + r * Vector3.forward * CoverGap;
+            PlaceLabels(s, b, r);
         }
 
         private int Nearest(Vector3 point, float reach, out float distance)

@@ -10,6 +10,7 @@ import argparse
 import json
 import math
 import os
+import struct
 import sys
 import time
 
@@ -780,29 +781,33 @@ def _leer_malla(path):
     return pos, uv, idx
 
 
-def malla_de_agua(P, path, radio=147.0):
-    """Superficie del agua (lago, mar) desde la orilla hasta el cielo panorámico, en coordenadas de Unity.
-    El panorama solo es exacto mirado desde su centro: desde el balcón o el muelle, donde debía verse agua
-    se veía el suelo cercano. Unity pinta esta malla con el mismo panorama, proyectado desde su centro.
+def malla_de_agua(P, path, radio=147.0, cerca=36.0):
+    """Superficie del agua (lago, mar) en coordenadas de Unity. El panorama solo es exacto mirado desde su
+    centro: desde el balcón o caminando, donde debía verse agua se veía el fondo. Es un plano a la altura
+    del agua; cerca de la casa cubre todo lo que pueda quedar bajo el agua (el terreno, que sí tiene
+    relieve, lo tapa donde asoma: la orilla sale sola) y más lejos, donde la tierra solo está pintada en el
+    panorama, llega hasta la orilla. Unity lo pinta con reflejo del cielo (FolioXRWater.shader).
     Devuelve los triángulos escritos (0 si el tema no tiene agua)."""
     if not P.con_agua: return 0
-    radios = [5.0]
-    while radios[-1] < radio: radios.append(min(radio, radios[-1] * 1.07 + 0.05))
+    radios = [3.0]
+    while radios[-1] < radio: radios.append(min(radio, radios[-1] + max(0.8, radios[-1] * 0.03)))
     radios = np.array(radios)
-    ang = np.linspace(0, 2 * math.pi, 181)
+    ang = np.linspace(0, 2 * math.pi, 361)
     R, A = np.meshgrid(radios, ang, indexing='ij')
     x, z = np.cos(A) * R, np.sin(A) * R
-    bajo = P.altura(x, z) < paisaje.AGUA + 0.08          # Con un margen: el agua entra un poco bajo la orilla.
+    alto = P.altura(x, z)
+    rm, am = (radios[:-1] + radios[1:]) * 0.5, (ang[:-1] + ang[1:]) * 0.5
+    Rm, Am = np.meshgrid(rm, am, indexing='ij')
+    centro = P.altura(np.cos(Am) * Rm, np.sin(Am) * Rm)
+    minimo = np.minimum(np.minimum(alto[:-1, :-1], alto[:-1, 1:]), np.minimum(alto[1:, :-1], alto[1:, 1:]))
+    # Cerca: con margen (el terreno tapa lo que sobre). Lejos: solo donde de verdad hay agua.
+    pone = np.where(Rm < cerca, np.minimum(minimo, centro) < paisaje.AGUA + 0.3, centro < paisaje.AGUA - 0.02)
     pos = np.stack([x, np.full_like(x, paisaje.GY + paisaje.AGUA), z], -1).reshape(-1, 3)
     m = len(ang)
-    tri = []
-    for i in range(len(radios) - 1):
-        for j in range(m - 1):
-            if not (bajo[i, j] or bajo[i, j + 1] or bajo[i + 1, j] or bajo[i + 1, j + 1]): continue
-            a = i * m + j
-            tri += [(a, a + 1, a + m + 1), (a, a + m + 1, a + m)]
-    if not tri: return 0
-    tri = np.array(tri, np.uint32)
+    ii, jj = np.nonzero(pone)
+    if not len(ii): return 0
+    a = ii * m + jj
+    tri = np.concatenate([np.stack([a, a + 1, a + m + 1], 1), np.stack([a, a + m + 1, a + m], 1)]).astype(np.uint32)
     usados, inv = np.unique(tri, return_inverse=True)
     pos = pos[usados]
     with open(path, 'wb') as f:
@@ -811,6 +816,100 @@ def malla_de_agua(P, path, radio=147.0):
         f.write(pos.astype(np.float32).tobytes()); f.write(np.zeros((len(pos), 2), np.float32).tobytes())
         f.write(inv.astype(np.uint32).tobytes())
     return len(tri)
+
+
+def P_tiene_agua(ctx):
+    return bool(ctx['P'].con_agua)
+
+
+def contrahuellas(malla):
+    """Repone las contrahuellas que le faltan a la escalera. El horneado original quitaba las de la mitad
+    de arriba (remove_hidden las daba por tapadas por el peldaño anterior) y se veía a través de la
+    escalera. Cada una toma el color de la última contrahuella que sí está. Devuelve cuántas agregó."""
+    with open(malla, 'rb') as f: d = f.read()
+    nv, ni = struct.unpack('<II', d[4:12])
+    pos = np.frombuffer(d, '<f4', nv * 3, 12).reshape(-1, 3).copy()
+    uv = np.frombuffer(d, '<f4', nv * 2, 12 + nv * 12).reshape(-1, 2).copy()
+    idx = np.frombuffer(d, '<u4', ni, 12 + nv * 20).reshape(-1, 3).copy()
+    T = pos[idx]
+    n = np.cross(T[:, 1] - T[:, 0], T[:, 2] - T[:, 0])
+    n /= np.linalg.norm(n, axis=1)[:, None] + 1e-12
+    ex, ey, ez = (np.ptp(T[..., k], axis=1) for k in range(3))
+    c = T.mean(1)
+    # Huellas: caras hacia arriba, anchas y de un paso de fondo.
+    h = (n[:, 1] > 0.99) & (ex > 1.2) & (ex < 2.6) & (ez > 0.2) & (ez < 0.45) & (c[:, 1] > 0.1)
+    pasos = {}
+    for k in np.nonzero(h)[0]:
+        y = round(float(c[k, 1]), 2)
+        p = pasos.setdefault(y, [1e9, -1e9, 1e9, -1e9])
+        p[0] = min(p[0], T[k, :, 0].min()); p[1] = max(p[1], T[k, :, 0].max())
+        p[2] = min(p[2], T[k, :, 2].min()); p[3] = max(p[3], T[k, :, 2].max())
+    ys = sorted(pasos)
+    # La escalera es la cadena más larga de huellas que suben de a un paso y avanzan hacia +Z.
+    mejor, actual = [], []
+    for y in ys:
+        if actual and 0.1 < y - actual[-1] < 0.24 and abs(pasos[y][0] - pasos[actual[-1]][0]) < 0.02 \
+                and 0.2 < pasos[y][2] - pasos[actual[-1]][2] < 0.45:
+            actual.append(y)
+        else:
+            if len(actual) > len(mejor): mejor = actual
+            actual = [y]
+    if len(actual) > len(mejor): mejor = actual
+    if len(mejor) < 8: return 0
+    frente = np.nonzero(n[:, 2] < -0.99)[0]
+
+    def cubre(p):
+        """Triángulo que mira a −Z y contiene el punto p (o −1)."""
+        t = T[frente]
+        cerca_ = np.abs(t[:, 0, 2] - p[2]) < 0.004
+        v0, v1, v2 = t[:, 1] - t[:, 0], t[:, 2] - t[:, 0], p - t[:, 0]
+        d00, d01, d11 = (v0 * v0).sum(1), (v0 * v1).sum(1), (v1 * v1).sum(1)
+        d20, d21 = (v2 * v0).sum(1), (v2 * v1).sum(1)
+        den = d00 * d11 - d01 * d01 + 1e-20
+        b, g = (d11 * d20 - d01 * d21) / den, (d00 * d21 - d01 * d20) / den
+        ok = np.nonzero(cerca_ & (b >= -1e-4) & (g >= -1e-4) & (b + g <= 1 + 1e-4))[0]
+        return int(frente[ok[0]]) if len(ok) else -1
+
+    def uv_en(k, p):
+        """UV del punto p según el triángulo k (la cara es plana y su UV, afín)."""
+        t = pos[idx[k]]; u = uv[idx[k]]
+        v0, v1, v2 = t[1] - t[0], t[2] - t[0], p - t[0]
+        d00, d01, d11, d20, d21 = v0 @ v0, v0 @ v1, v1 @ v1, v2 @ v0, v2 @ v1
+        den = d00 * d11 - d01 * d01
+        b, g = (d11 * d20 - d01 * d21) / den, (d00 * d21 - d01 * d20) / den
+        return u[0] * (1 - b - g) + u[1] * b + u[2] * g
+
+    nuevos_p, nuevos_uv, nuevos_i = [], [], []
+    ref = None                                                       # (triángulo, y de arriba, z) de la última que está.
+    for a, b in zip(mejor[:-1], mejor[1:]):
+        x0, x1, z = pasos[b][0], pasos[b][1], pasos[b][2]
+        k = cubre(np.array([(x0 + x1) * 0.5, b - 0.05, z], np.float32))
+        if k >= 0:
+            ref = (k, b, z)
+            continue
+        if ref is None: continue
+        base = len(pos) + len(nuevos_p)
+        esquinas = [(x0, a), (x1, a), (x1, b), (x0, b)]
+        for x, y in esquinas:
+            nuevos_p.append((x, y, z))
+            # La misma franja (los centímetros de arriba) de la contrahuella de referencia.
+            q = np.array([min(max(x, x0 + 0.01), x1 - 0.01), ref[1] - min(max(b - y, 0.006), b - a - 0.006), ref[2]], np.float32)
+            nuevos_uv.append(uv_en(ref[0], q))
+        tri = [(base, base + 2, base + 1), (base, base + 3, base + 2)]
+        # Que miren a −Z, con el mismo sentido de giro que el resto de la malla.
+        e = [np.array([x, y, z]) for x, y in esquinas]
+        if np.cross(e[2] - e[0], e[1] - e[0])[2] > 0: tri = [(q[0], q[2], q[1]) for q in tri]
+        nuevos_i += tri
+    if not nuevos_p: return 0
+    pos = np.concatenate([pos, np.array(nuevos_p, np.float32)])
+    uv = np.concatenate([uv, np.array(nuevos_uv, np.float32)])
+    idx = np.concatenate([idx, np.array(nuevos_i, np.uint32)])
+    with open(malla, 'wb') as f:
+        f.write(b'FXM1')
+        f.write(np.array([len(pos), idx.size], np.uint32).tobytes())
+        f.write(pos.astype(np.float32).tobytes()); f.write(uv.astype(np.float32).tobytes())
+        f.write(idx.astype(np.uint32).tobytes())
+    return len(nuevos_p) // 4
 
 
 def aclarar_hojas(malla, atlas_jpg, tam):
@@ -870,6 +969,10 @@ def retocar(t, a):
     out = os.path.join(SALIDA, slug)
     datos = json.load(open(f'{out}/datos.json'))
     tam = int(datos['atlas'])
+    if a.solo == 'escalera':
+        n = contrahuellas(f'{out}/casa_malla.bytes')
+        log(f'{slug}: {n} contrahuellas repuestas en la escalera')
+        return
     if a.solo == 'hojas':
         for parte in ('casa', 'cerca'):
             if datos.get('hojas_' + parte): continue                     # Ya aclaradas: repetirlo las iría lavando.
@@ -879,6 +982,7 @@ def retocar(t, a):
     else:
         ctx = escena(t, lejos=False)
         n = malla_de_agua(ctx['P'], f'{out}/agua_malla.bytes')
+        if n and t.get('agua') is not None: datos['agua'] = [round(float(v), 4) for v in t['agua'][:3]]
         log(f'{slug}: agua cercana, {n} triángulos')
     with open(f'{out}/datos.json', 'w') as f: json.dump(datos, f, indent=1)
 
@@ -936,6 +1040,8 @@ def todo(t, a):
     # Retoques que no dependen del horneado: hojas que quedaron a oscuras y agua desde la orilla.
     for parte in ('casa', 'cerca'):
         datos['hojas_' + parte] = aclarar_hojas(f'{out}/{parte}_malla.bytes', f'{out}/{parte}_luz.jpg', a.tam) + 1
+    contrahuellas(f'{out}/casa_malla.bytes')
+    if t.get('agua') is not None and P_tiene_agua(ctx): datos['agua'] = [round(float(v), 4) for v in t['agua'][:3]]
     if not malla_de_agua(ctx['P'], f'{out}/agua_malla.bytes') and os.path.exists(f'{out}/agua_malla.bytes'):
         os.remove(f'{out}/agua_malla.bytes')
     with open(f'{out}/datos.json', 'w') as f: json.dump(datos, f, indent=1)
@@ -950,7 +1056,7 @@ if __name__ == '__main__':
     ap.add_argument('tema')
     ap.add_argument('--vista', default='sofa,terraza,cama,jardin')
     ap.add_argument('--todo', action='store_true')
-    ap.add_argument('--solo', choices=['casa', 'cerca', 'pano', 'estantes', 'hojas', 'agua'],
+    ap.add_argument('--solo', choices=['casa', 'cerca', 'pano', 'estantes', 'hojas', 'agua', 'escalera'],
                     help='hornea solo ese atlas y termina (se guarda en caché); pano rehace el cielo; estantes vacía '
                          'las estanterías de un tema ya horneado')
     ap.add_argument('--tam', type=int, default=4096)
@@ -962,7 +1068,7 @@ if __name__ == '__main__':
     a = ap.parse_args()
     os.makedirs(CACHE, exist_ok=True)
     tema = temas.POR_SLUG[a.tema]
-    if a.solo in ('hojas', 'agua'): retocar(tema, a)
+    if a.solo in ('hojas', 'agua', 'escalera'): retocar(tema, a)
     elif a.solo == 'estantes': vaciar_estantes(tema, a)
     elif a.todo or a.solo: todo(tema, a)
     else:

@@ -22,6 +22,7 @@ namespace FolioXR.Environments
             public int atlas = 4096;
             public float texels_casa = 70f;
             public float texels_cerca = 60f;
+            public float[] agua;           // Color del agua (sRGB) en los temas que tienen.
             public float[] luz_estantes;   // Por estantería y fila (desde abajo): rojo, verde y azul.
         }
 
@@ -84,18 +85,19 @@ namespace FolioXR.Environments
                 Bounds b = near.bounds;
                 float radius = Mathf.Max(Mathf.Max(-b.min.x, b.max.x), Mathf.Max(-b.min.z, b.max.z));
                 // Con MSAA el borde se reparte en la cobertura; sin MSAA (z = 1), descartando píxeles.
-                nearMaterial.SetVector("_Fade", new Vector4(radius - 7.5f, radius - 0.3f, QualitySettings.antiAliasing > 1 ? 0f : 1f, 0f));
+                nearMaterial.SetVector("_Fade", new Vector4(radius - 2.5f, radius - 0.2f, QualitySettings.antiAliasing > 1 ? 0f : 1f, 0f));
             }
             Part(result, "Terreno cercano", near, nearMaterial, Vector3.zero);
             Vector3 eye = data.ojo != null && data.ojo.Length == 3 ? new Vector3(data.ojo[0], data.ojo[1], data.ojo[2]) : Vector3.up * 1.6f;
-            // Agua desde la orilla (lago, playa, isla): el panorama proyectado sobre una malla plana.
+            // Agua (lago, playa, isla): un plano a su altura que refleja el cielo; el terreno lo tapa en la orilla.
             TextAsset water = Resources.Load<TextAsset>(path + "agua_malla");
-            Shader pano = Resources.Load<Shader>("FolioXRPano");
-            if (water != null && pano != null && pano.isSupported)
+            Shader waterShader = Resources.Load<Shader>("FolioXRWater");
+            if (water != null && waterShader != null && waterShader.isSupported)
             {
-                var waterMaterial = result.Own(new Material(pano) { name = "FolioXR agua cercana" });
+                var waterMaterial = result.Own(new Material(waterShader) { name = "FolioXR agua" });
                 waterMaterial.SetTexture("_MainTex", sky);
-                waterMaterial.SetVector("_Eye", eye);
+                if (data.agua != null && data.agua.Length >= 3)
+                    waterMaterial.SetColor("_Color", new Color(data.agua[0], data.agua[1], data.agua[2], 1f));
                 Part(result, "Agua cercana", ReadMesh(water, "FolioXR agua"), waterMaterial, Vector3.zero);
             }
             Part(result, "Cielo panorámico", SkySphere(HouseGenerator.SkyRadius),

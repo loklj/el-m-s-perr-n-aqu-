@@ -44,12 +44,15 @@ Guarda los archivos originales en `/tmp/bl/cache/original/<tema>/` y se puede re
 ```bash
 python3 generar.py casa-del-lago --solo agua
 python3 generar.py casa-del-lago --solo hojas
+python3 generar.py casa-del-lago --solo escalera
 ```
 
-- `--solo agua` crea `agua_malla.bytes`: una malla plana a la altura del agua, desde la orilla hasta 147 m, donde el terreno queda bajo el agua. Unity la pinta con el panorama proyectado desde su centro (`FolioXRPano.shader`), así el agua se ve en su lugar desde cualquier punto de la casa. Solo hace falta en los temas con agua (lago, playa, isla); en los demás no escribe nada.
+- `--solo agua` crea `agua_malla.bytes`: un plano a la altura del agua. Hasta 36 m cubre todo lo que pueda quedar bajo el agua (el terreno lo tapa donde asoma, así la orilla sale sola); más lejos llega hasta la orilla pintada en el panorama. Unity lo pinta con reflejo del cielo y ondas (`FolioXRWater.shader`) y con el color `agua` que este paso deja en `datos.json`. Solo en los temas con agua (lago, playa, isla); en los demás no escribe nada.
 - `--solo hojas` corrige `casa_luz.jpg` y `cerca_luz.jpg`: las hojas se hornean por una cara y se muestran por las dos, así que la mitad salía negra. Las celdas oscuras de hojas toman un tono de sombra del color de las hojas iluminadas del mismo arbusto. Deja una marca en `datos.json` (`hojas_casa`, `hojas_cerca`) para no repetirlo.
 
-Un horneado completo hace los dos pasos al final.
+- `--solo escalera` repone en `casa_malla.bytes` las contrahuellas que el horneado quita por error de la mitad de la escalera hacia arriba; cada una toma el color de la última que sí está. Se puede repetir (no agrega dos veces).
+
+Un horneado completo hace los tres pasos al final.
 
 ## Qué produce
 
@@ -60,7 +63,7 @@ En `hito1/Assets/FolioXR/Resources/Entornos/<tema>/`:
 | `casa_malla.bytes` y `casa_luz.jpg` | Casa y muebles, con su atlas de color y luz |
 | `cerca_malla.bytes` y `cerca_luz.jpg` | Terreno hasta 34 m, árboles, arbustos, rocas y pasto |
 | `cielo.jpg` | Panorama de 360° con el cielo y todo el paisaje lejano |
-| `agua_malla.bytes` | Solo en temas con agua: superficie del agua desde la orilla, sin atlas (usa el panorama) |
+| `agua_malla.bytes` | Solo en temas con agua: superficie del agua, sin atlas (refleja el panorama) |
 | `datos.json` | Exposición, centro del panorama, densidad de texels y luz de cada fila de las estanterías |
 
 Además deja en `/tmp/bl/cache/final_<tema>_<vista>.jpg` imágenes «como en Unity» (mallas con su textura, sin luz, y el panorama de fondo) para revisar el resultado sin el visor.
