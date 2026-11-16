@@ -12,7 +12,7 @@ class UiTest {
  static void Property(object target,string name,object value)=>target.GetType().GetProperty(name).SetValue(target,value);
  static void Field(object target,string name,object value)=>target.GetType().GetField(name,BindingFlags.Instance|BindingFlags.NonPublic).SetValue(target,value);
  static object Call(object target,string name,params object[] args)=>target.GetType().GetMethod(name,BindingFlags.Instance|BindingFlags.NonPublic|BindingFlags.Public).Invoke(target,args);
- static void Main(){
+ static void Main(string[] argv){
   var library=new BookLibrary();typeof(BookLibrary).GetProperty("Instance").SetValue(null,library);Property(library,"Available",true);
   var entry=new BookEntry{id="uno",format="epub",path="uno.epub",title="Uno",pages=100,position=10};
   Property(library,"Current",entry);Field(library,"_books",new List<BookEntry>{entry});Field(library,"_java",new AndroidJavaClass("library"));
@@ -54,6 +54,22 @@ class UiTest {
   Check((int)typeof(BookLibrary).GetField("_relocatePage",BindingFlags.NonPublic|BindingFlags.Instance).GetValue(library)==3,"Repaginación no redondea antes de GoToPage");
   Call(library,"Update");Check(book.Destination==3,"Reubicación entrega destino real");
   var wifi=JsonUtility.FromJson<WifiStatus>("{\"copied\":4294967297,\"total\":8589934592}");Check(wifi.copied==4294967297L&&wifi.total==8589934592L,"Progreso Wi-Fi de 64 bits");
+  // Idiomas (16 nov 2026): tabla real, detección y textos compuestos.
+  Resources.IdiomasPath=argv[0];
+  Check(Loc.Current=="es"&&Loc.Menu("Marcar pág. 12")=="Marcar pág. 12","Español sin tocar");
+  Loc.Set("en");
+  Check(Loc.Menu("Volver")=="Back"&&Loc.T("Biblioteca")=="Library","Frase exacta");
+  Check(Loc.Menu("Cuero: negro")=="Leather: black"&&Loc.Menu("Colección:\nninguna")=="Collection:\nnone","Antes y después de los dos puntos");
+  Check(Loc.Menu("Marcar pág. 12")=="Bookmark p. 12"&&Loc.Menu("Más libros\n2 de 5")=="More books\n2 / 5","Frase con dato");
+  Check(Loc.Menu("El principito\n40 %")=="El principito\n40 %"&&Loc.Menu("Libro de arena")=="Libro de arena","Los títulos no se traducen");
+  Check(Loc.Menu("Guardar el libro\n(sin ninguno abierto)")=="Put the\nbook away","Dos renglones parejos");
+  Check(Loc.Menu("Nombre:\nDune: Mesías")=="Name:\nDune: Mesías","Título con dos puntos intacto");
+  Loc.Set("ja");Check(Loc.Menu("Ajustes")=="設定"&&Loc.Menu("Lectura: manga")=="読み方: マンガ","Japonés");
+  menu.Select(MenuCategory.Ajustes);Check(menu.Options.Any(x=>x.Text.StartsWith("言語")),"Opción de idioma en el menú");
+  Check(MenuModel.CategoryNames[1]=="ライブラリ","Categorías traducidas");
+  Loc.Set("");Application.systemLanguage=SystemLanguage.German;Loc.Set("");Check(Loc.Current=="de","Idioma del visor");
+  Application.systemLanguage=SystemLanguage.Unknown;Loc.Set("");Check(Loc.Current=="en","Idioma desconocido: inglés");
+  Application.systemLanguage=SystemLanguage.Spanish;Loc.Set("");
   Console.WriteLine("OK: "+checks+" comprobaciones C# de biblioteca/menu con stubs");
  }
 }

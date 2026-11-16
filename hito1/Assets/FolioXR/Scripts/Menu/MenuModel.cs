@@ -37,7 +37,7 @@ namespace FolioXR.Menu
 
         public MenuOption(string text, Action action = null, Func<bool> enabled = null, Func<bool> marked = null)
         {
-            Text = text;
+            Text = Loc.Menu(text);
             Action = action;
             Enabled = enabled ?? (() => action != null);
             Marked = marked ?? (() => false);
@@ -46,8 +46,18 @@ namespace FolioXR.Menu
 
     public sealed class MenuModel
     {
-        public static readonly IReadOnlyList<string> CategoryNames = Array.AsReadOnly(new[]
-            { "Libro", "Biblioteca", "Entornos", "Herramientas", "Ajustes" });
+        private static readonly string[] CategoryKeys = { "Libro", "Biblioteca", "Entornos", "Herramientas", "Ajustes" };
+        /// <summary>Nombres de las categorías en el idioma del menú.</summary>
+        public static IReadOnlyList<string> CategoryNames
+        {
+            get
+            {
+                var names = new string[CategoryKeys.Length];
+                for (int i = 0; i < names.Length; i++) names[i] = Loc.T(CategoryKeys[i]);
+                return names;
+            }
+        }
+        private int _languagePage; // Ajustes → Idioma: página de la lista.
         public MenuCategory SelectedCategory { get; private set; }
         public IReadOnlyList<MenuOption> Options => _options;
         public int TimerMinutes { get; private set; }
@@ -188,13 +198,13 @@ namespace FolioXR.Menu
         }
 
         // ── «+ Agregar libro» y configuración de un libro (pedido del usuario, 11 nov 2026) ──
-        private int _libraryMode; // 0 = lista, 1 = de dónde agregar, 2 = ordenar y colecciones, 3 = catálogos OPDS, 4 = estantería.
+        private int _libraryMode; // 0 = lista, 1 = de dónde agregar, 2 = ordenar y colecciones, 3 = catálogos OPDS, 4 = estantería, 5 = navegador.
         private int _bookGroup;   // Categoría Libro: 0 = principal, 1 = página, letra y tamaño.
         /// <summary>Las opciones son renglones largos (catálogos OPDS): el menú simple las dibuja anchas.</summary>
         public bool WideOptions => SelectedCategory == MenuCategory.Biblioteca &&
             (_libraryMode == 3 || (OpdsBrowser.Instance != null && OpdsBrowser.Instance.Browsing));
         private float _arrangeShelfUntil;
-        private int _settingsGroup; // 0 = grupos; 2 libro y física, 3 movimiento, 4 menú y accesibilidad, 5 acerca de.
+        private int _settingsGroup; // 0 = grupos; 2 libro y física, 3 movimiento, 4 menú y accesibilidad, 5 acerca de, 6 idioma.
         private string _keyboardCollection; // "" = nueva colección; otro = renombrar esa colección.
         private float _deleteCollectionUntil;
         private string _setupId;
@@ -220,6 +230,8 @@ namespace FolioXR.Menu
                 () => { library.SetAutoDownload(!auto); RebuildOptions(); }, marked: () => library.AutoDownload));
             if (auto && !library.DownloadAccess)
                 options.Add(new MenuOption("Falta el permiso\n(tocar para darlo)", library.AskDownloadAccess));
+            // Abre el navegador del visor para bajar libros (con «Download solo» entran sin más pasos).
+            options.Add(new MenuOption("Bajar con el\nnavegador", () => { _libraryMode = 5; RebuildOptions(); }));
             if (!library.WifiRunning)
                 options.Add(new MenuOption("Desde el PC\npor Wi-Fi", library.StartWifi));
             else
@@ -773,6 +785,18 @@ namespace FolioXR.Menu
                     }
                     if (_libraryMode == 1) { AddBookSources(options, library); break; }
                     if (_libraryMode == 2 || _libraryMode == 4) { AddOrganizeOptions(options, _libraryMode == 4); break; }
+                    if (_libraryMode == 5)
+                    {
+                        options.Add(new MenuOption("Volver", () => { _libraryMode = 1; RebuildOptions(); }));
+                        options.Add(new MenuOption("Abrir el buscador", () => Application.OpenURL("https://www.google.com")));
+                        options.Add(new MenuOption("Abrir Google Drive", () => Application.OpenURL("https://drive.google.com")));
+                        options.Add(new MenuOption("Abrir Dropbox", () => Application.OpenURL("https://www.dropbox.com/home")));
+                        options.Add(new MenuOption("Abrir MEGA", () => Application.OpenURL("https://mega.nz")));
+                        bool watch = library.AutoDownload;
+                        options.Add(new MenuOption("Download solo:\n" + (watch ? "sí" : "no"),
+                            () => { library.SetAutoDownload(!watch); RebuildOptions(); }, marked: () => library.AutoDownload));
+                        break;
+                    }
                     if (_libraryMode == 3)
                     {
                         options.Add(new MenuOption("Volver", () => { _libraryMode = 1; RebuildOptions(); }));
@@ -869,8 +893,30 @@ namespace FolioXR.Menu
                             int group = g + 2;
                             options.Add(new MenuOption(groups[g], () => { _settingsGroup = group; RebuildOptions(); }));
                         }
+                        options.Add(new MenuOption("Idioma:\n" + (Loc.Choice.Length == 0 ? "automático" : Loc.NameOf(Loc.Current)),
+                            () => { _settingsGroup = 6; RebuildOptions(); }));
                         options.Add(new MenuOption("Modo diagnóstico: " + (ReadingDiagnostics.Enabled ? "sí" : "no"),
                             () => { ReadingDiagnostics.Toggle(); RebuildOptions(); }));
+                        break;
+                    }
+                    if (_settingsGroup == 6)
+                    {
+                        // Idioma del menú: el del visor o uno fijo (pedido del usuario, 16 nov 2026).
+                        options.Add(new MenuOption("Volver", () => { _settingsGroup = 0; _languagePage = 0; RebuildOptions(); }));
+                        const int perPage = 6;
+                        int languagePages = (Loc.Codes.Length + perPage - 1) / perPage;
+                        _languagePage = Mathf.Clamp(_languagePage, 0, languagePages - 1);
+                        if (_languagePage == 0)
+                            options.Add(new MenuOption("automático", () => { Loc.Set(string.Empty); RebuildOptions(); },
+                                marked: () => Loc.Choice.Length == 0));
+                        for (int i = _languagePage * perPage; i < Mathf.Min(Loc.Codes.Length, (_languagePage + 1) * perPage); i++)
+                        {
+                            string language = Loc.Codes[i];
+                            options.Add(new MenuOption(Loc.NameOf(language), () => { Loc.Set(language); RebuildOptions(); },
+                                marked: () => Loc.Choice == language));
+                        }
+                        if (_languagePage == languagePages - 1) options.Add(new MenuOption("Hindi, árabe, bengalí\ny urdu: pronto"));
+                        options.Add(new MenuOption("Más idiomas", () => { _languagePage = (_languagePage + 1) % languagePages; RebuildOptions(); }));
                         break;
                     }
                     options.Add(new MenuOption("Volver", () =>

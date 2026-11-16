@@ -1,0 +1,204 @@
+# Textos del menú de Folio XR (Claude, 16 nov 2026). Una frase por renglón; columnas separadas por « | ».
+# La primera columna es el texto en español tal como está en el código (los saltos de renglón van como espacio).
+# Las frases con «:» se traducen por partes (antes y después de los dos puntos). Renglones con # no cuentan.
+es | en | zh | fr | pt | ru | id | de | ja | tr | vi
+Libro | Book | 书 | Livre | Livro | Книга | Buku | Buch | 本 | Kitap | Sách
+Biblioteca | Library | 书库 | Bibliothèque | Biblioteca | Библиотека | Pustaka | Bibliothek | ライブラリ | Kitaplık | Thư viện
+Entornos | Places | 环境 | Décors | Ambientes | Места | Suasana | Umgebungen | 環境 | Ortamlar | Không gian
+Herramientas | Tools | 工具 | Outils | Ferramentas | Инструменты | Alat | Werkzeuge | ツール | Araçlar | Công cụ
+Ajustes | Settings | 设置 | Réglages | Ajustes | Настройки | Setelan | Einstellungen | 設定 | Ayarlar | Cài đặt
+(sin título) | (untitled) | （无标题） | (sans titre) | (sem título) | (без названия) | (tanpa judul) | (ohne Titel) | （無題） | (başlıksız) | (không tên)
+Volver | Back | 返回 | Retour | Voltar | Назад | Kembali | Zurück | 戻る | Geri | Quay lại
+sí | yes | 是 | oui | sim | да | ya | ja | はい | evet | có
+no | no | 否 | non | não | нет | tidak | nein | いいえ | hayır | không
+Desde el visor (archivos del Quest) | From the headset (Quest files) | 从头显（Quest 文件） | Depuis le casque (fichiers du Quest) | Do headset (arquivos do Quest) | Из шлема (файлы Quest) | Dari headset (file Quest) | Vom Headset (Quest-Dateien) | ヘッドセットから（Questのファイル） | Başlıktan (Quest dosyaları) | Từ kính (tệp trên Quest)
+Download solo | Auto-import Downloads | 自动导入下载 | Import auto Download | Importar Download sozinho | Автоимпорт загрузок | Impor unduhan otomatis | Downloads automatisch | ダウンロード自動取込 | İndirilenleri otomatik al | Tự nhập mục Tải về
+Falta el permiso (tocar para darlo) | Permission needed (tap to grant) | 需要权限（点按授予） | Permission requise (toucher) | Falta a permissão (toque) | Нужно разрешение (нажмите) | Perlu izin (ketuk) | Erlaubnis fehlt (antippen) | 権限が必要（タップ） | İzin gerekli (dokun) | Cần cấp quyền (chạm)
+Bajar con el navegador | Get with the browser | 用浏览器下载 | Télécharger via le navigateur | Baixar com o navegador | Скачать в браузере | Unduh lewat browser | Mit dem Browser laden | ブラウザで入手 | Tarayıcıyla indir | Tải bằng trình duyệt
+Abrir el buscador | Open web search | 打开搜索 | Ouvrir la recherche | Abrir a busca | Открыть поиск | Buka pencarian | Suche öffnen | 検索を開く | Aramayı aç | Mở tìm kiếm
+Abrir Google Drive | Open Google Drive | 打开 Google Drive | Ouvrir Google Drive | Abrir Google Drive | Открыть Google Drive | Buka Google Drive | Google Drive öffnen | Google Drive を開く | Google Drive'ı aç | Mở Google Drive
+Abrir Dropbox | Open Dropbox | 打开 Dropbox | Ouvrir Dropbox | Abrir Dropbox | Открыть Dropbox | Buka Dropbox | Dropbox öffnen | Dropbox を開く | Dropbox'ı aç | Mở Dropbox
+Abrir MEGA | Open MEGA | 打开 MEGA | Ouvrir MEGA | Abrir MEGA | Открыть MEGA | Buka MEGA | MEGA öffnen | MEGA を開く | MEGA'yı aç | Mở MEGA
+Desde el PC por Wi-Fi | From a PC over Wi-Fi | 通过 Wi-Fi 从电脑 | Depuis le PC en Wi-Fi | Do PC por Wi-Fi | С ПК по Wi-Fi | Dari PC lewat Wi-Fi | Vom PC über WLAN | PCからWi-Fiで | PC'den Wi-Fi ile | Từ PC qua Wi-Fi
+En el PC abre | On the PC open | 在电脑上打开 | Sur le PC, ouvrez | No PC abra | На ПК откройте | Di PC buka | Am PC öffnen | PCで開く | PC'de aç | Trên PC mở
+Código | Code | 代码 | Code | Código | Код | Kode | Code | コード | Kod | Mã
+Cerrar la carga por Wi-Fi | Stop Wi-Fi upload | 关闭 Wi-Fi 传输 | Fermer l'envoi Wi-Fi | Fechar envio por Wi-Fi | Закрыть Wi-Fi загрузку | Tutup unggah Wi-Fi | WLAN-Upload beenden | Wi-Fi転送を終了 | Wi-Fi aktarımını kapat | Tắt tải qua Wi-Fi
+Desde un catálogo (OPDS) | From a catalog (OPDS) | 从目录（OPDS） | Depuis un catalogue (OPDS) | De um catálogo (OPDS) | Из каталога (OPDS) | Dari katalog (OPDS) | Aus einem Katalog (OPDS) | カタログから（OPDS） | Katalogdan (OPDS) | Từ danh mục (OPDS)
+Editar libro | Edit book | 编辑书籍 | Modifier le livre | Editar livro | Изменить книгу | Edit buku | Buch bearbeiten | 本を編集 | Kitabı düzenle | Sửa sách
+Libro nuevo | New book | 新书 | Nouveau livre | Livro novo | Новая книга | Buku baru | Neues Buch | 新しい本 | Yeni kitap | Sách mới
+Nombre | Name | 名称 | Nom | Nome | Название | Nama | Name | 名前 | Ad | Tên
+Lectura | Reading | 阅读方向 | Lecture | Leitura | Чтение | Baca | Lesen | 読み方 | Okuma | Kiểu đọc
+manga | manga | 漫画 | manga | mangá | манга | manga | Manga | マンガ | manga | manga
+normal | normal | 普通 | normale | normal | обычное | biasa | normal | 通常 | normal | thường
+El archivo trae portada | File has a cover | 文件含封面 | Le fichier a une couverture | O arquivo tem capa | В файле есть обложка | File punya sampul | Datei hat Cover | ファイルに表紙あり | Dosyada kapak var | Tệp có bìa
+Portada sola | Cover alone | 封面单页 | Couverture seule | Capa sozinha | Обложка отдельно | Sampul sendiri | Cover einzeln | 表紙を単独表示 | Kapak tek sayfa | Bìa đứng riêng
+Tapas | Covers | 书封 | Couvertures | Capas | Обложки | Sampul | Einband | カバー | Kapaklar | Bìa
+las del archivo | from the file | 用文件的 | du fichier | as do arquivo | из файла | dari file | aus der Datei | ファイルのもの | dosyadaki | của tệp
+de cuero con el título | leather with title | 皮面加书名 | cuir avec le titre | de couro com título | кожа с названием | kulit dengan judul | Leder mit Titel | 革にタイトル | başlıklı deri | da kèm tựa
+Cuero | Leather | 皮革 | Cuir | Couro | Кожа | Kulit | Leder | 革 | Deri | Da
+marrón | brown | 棕色 | marron | marrom | коричневая | cokelat | braun | 茶 | kahverengi | nâu
+negro | black | 黑色 | noir | preto | чёрная | hitam | schwarz | 黒 | siyah | đen
+rojo vino | wine red | 酒红 | bordeaux | vinho | бордовая | merah anggur | weinrot | ワインレッド | bordo | đỏ rượu
+verde bosque | forest green | 墨绿 | vert forêt | verde floresta | тёмно-зелёная | hijau hutan | waldgrün | 深緑 | orman yeşili | xanh rừng
+azul marino | navy blue | 藏青 | bleu marine | azul-marinho | тёмно-синяя | biru laut | marineblau | 紺 | lacivert | xanh hải quân
+morado | purple | 紫色 | violet | roxo | фиолетовая | ungu | lila | 紫 | mor | tím
+miel | honey | 蜜色 | miel | mel | медовая | madu | honig | はちみつ色 | bal | mật ong
+Tapa | Binding | 装帧 | Reliure | Encadernação | Переплёт | Jilid | Bindung | 装丁 | Cilt | Kiểu bìa
+automática | automatic | 自动 | automatique | automática | авто | otomatis | automatisch | 自動 | otomatik | tự động
+dura | hard | 精装 | rigide | dura | твёрдый | keras | fest | ハード | sert | cứng
+blanda | soft | 平装 | souple | mole | мягкий | lunak | weich | ソフト | yumuşak | mềm
+Colección | Collection | 合集 | Collection | Coleção | Коллекция | Koleksi | Sammlung | コレクション | Koleksiyon | Bộ sưu tập
+ninguna | none | 无 | aucune | nenhuma | нет | tidak ada | keine | なし | yok | không có
+todas | all | 全部 | toutes | todas | все | semua | alle | すべて | tümü | tất cả
+Listo | Done | 完成 | Terminé | Pronto | Готово | Selesai | Fertig | 完了 | Tamam | Xong
+Listo: guardar | Done: save | 完成：保存 | Terminé : enregistrer | Pronto: salvar | Готово: сохранить | Selesai: simpan | Fertig: speichern | 完了：保存 | Tamam: kaydet | Xong: lưu
+Listo y abrir | Done and open | 完成并打开 | Terminer et ouvrir | Pronto e abrir | Готово и открыть | Selesai dan buka | Fertig und öffnen | 完了して開く | Tamam ve aç | Xong và mở
+Ordenar | Sort | 排序 | Trier | Ordenar | Сортировка | Urutkan | Sortieren | 並べ替え | Sırala | Sắp xếp
+recientes | recent | 最近 | récents | recentes | недавние | terbaru | zuletzt | 最近 | son okunan | gần đây
+título | title | 书名 | titre | título | название | judul | Titel | タイトル | başlık | tựa
+autor | author | 作者 | auteur | autor | автор | penulis | Autor | 著者 | yazar | tác giả
+Formato | Format | 格式 | Format | Formato | Формат | Format | Format | 形式 | Biçim | Định dạng
+todos | all | 全部 | tous | todos | все | semua | alle | すべて | tümü | tất cả
+cómics | comics | 漫画 | BD | quadrinhos | комиксы | komik | Comics | コミック | çizgi roman | truyện tranh
+libros | books | 书籍 | livres | livros | книги | buku | Bücher | 本 | kitaplar | sách
+documentos | documents | 文档 | documents | documentos | документы | dokumen | Dokumente | 文書 | belgeler | tài liệu
++ Nueva colección | + New collection | + 新建合集 | + Nouvelle collection | + Nova coleção | + Новая коллекция | + Koleksi baru | + Neue Sammlung | + 新規コレクション | + Yeni koleksiyon | + Bộ sưu tập mới
+Renombrar colección | Rename collection | 重命名合集 | Renommer la collection | Renomear coleção | Переименовать коллекцию | Ganti nama koleksi | Sammlung umbenennen | コレクション名を変更 | Koleksiyonu yeniden adlandır | Đổi tên bộ sưu tập
+¿Borrar? Toca otra vez | Delete? Tap again | 删除？再点一次 | Supprimer ? Touchez encore | Apagar? Toque de novo | Удалить? Нажмите ещё раз | Hapus? Ketuk lagi | Löschen? Nochmal tippen | 削除？もう一度タップ | Silinsin mi? Tekrar dokun | Xóa? Chạm lần nữa
+Borrar colección (no borra libros) | Delete collection (keeps books) | 删除合集（保留书籍） | Supprimer la collection (garde les livres) | Apagar coleção (mantém livros) | Удалить коллекцию (книги останутся) | Hapus koleksi (buku tetap) | Sammlung löschen (Bücher bleiben) | コレクション削除（本は残る） | Koleksiyonu sil (kitaplar kalır) | Xóa bộ sưu tập (giữ sách)
+Estantería | Bookshelf | 书架 | Étagère | Estante | Полка | Rak buku | Regal | 本棚 | Raf | Kệ sách
+en la biblioteca de la casa | in the house library | 在屋内书房 | dans la bibliothèque de la maison | na biblioteca da casa | в библиотеке дома | di perpustakaan rumah | in der Hausbibliothek | 家の書斎に | evin kitaplığında | trong thư phòng
+ocultar | hide | 隐藏 | masquer | ocultar | скрыть | sembunyikan | ausblenden | 隠す | gizle | ẩn
+mostrar | show | 显示 | afficher | mostrar | показать | tampilkan | anzeigen | 表示 | göster | hiện
+¿Acomodar? Toca otra vez | Tidy up? Tap again | 整理？再点一次 | Ranger ? Touchez encore | Arrumar? Toque de novo | Расставить? Нажмите ещё раз | Rapikan? Ketuk lagi | Ordnen? Nochmal tippen | 整理？もう一度タップ | Düzenlensin mi? Tekrar dokun | Xếp lại? Chạm lần nữa
+Acomodar la estantería | Tidy the shelf | 整理书架 | Ranger l'étagère | Arrumar a estante | Расставить полку | Rapikan rak | Regal ordnen | 本棚を整理 | Rafı düzenle | Xếp lại kệ
+Mano principal | Main hand | 惯用手 | Main principale | Mão principal | Ведущая рука | Tangan utama | Haupthand | 利き手 | Ana el | Tay thuận
+izquierda (zurdo) | left | 左手 | gauche | esquerda | левая | kiri | links | 左 | sol | trái
+derecha | right | 右手 | droite | direita | правая | kanan | rechts | 右 | sağ | phải
+Alto contraste | High contrast | 高对比度 | Contraste élevé | Alto contraste | Высокий контраст | Kontras tinggi | Hoher Kontrast | ハイコントラスト | Yüksek kontrast | Tương phản cao
+Reducir movimiento | Reduce motion | 减少动效 | Réduire les animations | Reduzir movimento | Меньше движения | Kurangi gerakan | Weniger Bewegung | 動きを減らす | Hareketi azalt | Giảm chuyển động
+Subtítulos de avisos | Notice captions | 提示字幕 | Sous-titres des avis | Legendas de avisos | Субтитры уведомлений | Teks pemberitahuan | Hinweis-Untertitel | 通知の字幕 | Bildirim altyazıları | Phụ đề thông báo
+Tamaño del menú | Menu size | 菜单大小 | Taille du menu | Tamanho do menu | Размер меню | Ukuran menu | Menügröße | メニューの大きさ | Menü boyutu | Cỡ menu
+pequeño | small | 小 | petit | pequeno | маленький | kecil | klein | 小 | küçük | nhỏ
+grande | large | 大 | grand | grande | большой | besar | groß | 大 | büyük | lớn
+muy grande | very large | 特大 | très grand | muito grande | очень большой | sangat besar | sehr groß | 特大 | çok büyük | rất lớn
+pequeña | small | 小 | petite | pequena | мелкий | kecil | klein | 小 | küçük | nhỏ
+Página siguiente | Next page | 下一页 | Page suivante | Próxima página | Следующая страница | Halaman berikut | Nächste Seite | 次のページ | Sonraki sayfa | Trang sau
+Página anterior | Previous page | 上一页 | Page précédente | Página anterior | Предыдущая страница | Halaman sebelum | Vorherige Seite | 前のページ | Önceki sayfa | Trang trước
+Cerrar licencia | Close license | 关闭许可 | Fermer la licence | Fechar licença | Закрыть лицензию | Tutup lisensi | Lizenz schließen | ライセンスを閉じる | Lisansı kapat | Đóng giấy phép
+Cargando licencias… | Loading licenses… | 正在加载许可… | Chargement des licences… | Carregando licenças… | Загрузка лицензий… | Memuat lisensi… | Lizenzen werden geladen… | ライセンス読込中… | Lisanslar yükleniyor… | Đang tải giấy phép…
+Licencia | License | 许可 | Licence | Licença | Лицензия | Lisensi | Lizenz | ライセンス | Lisans | Giấy phép
+Buscar | Search | 搜索 | Rechercher | Buscar | Поиск | Cari | Suchen | 検索 | Ara | Tìm
+Buscando… | Searching… | 搜索中… | Recherche… | Buscando… | Поиск… | Mencari… | Suche… | 検索中… | Aranıyor… | Đang tìm…
+Buscando más… | Searching more… | 继续搜索… | Recherche en cours… | Buscando mais… | Ищем ещё… | Mencari lagi… | Suche weiter… | さらに検索中… | Daha aranıyor… | Đang tìm thêm…
+Pág. | P. | 页 | P. | Pág. | Стр. | Hal. | S. | p. | S. | Tr.
+Más resultados | More results | 更多结果 | Plus de résultats | Mais resultados | Ещё результаты | Hasil lainnya | Mehr Treffer | さらに表示 | Daha fazla sonuç | Thêm kết quả
+Nueva búsqueda | New search | 新搜索 | Nouvelle recherche | Nova busca | Новый поиск | Pencarian baru | Neue Suche | 新しい検索 | Yeni arama | Tìm mới
+Buscar en el libro | Search in book | 在书中搜索 | Chercher dans le livre | Buscar no livro | Поиск в книге | Cari di buku | Im Buch suchen | 本の中を検索 | Kitapta ara | Tìm trong sách
+Buscar en el libro (no en PDF ni cómics) | Search in book (not PDF or comics) | 书内搜索（不支持 PDF 和漫画） | Chercher (pas en PDF ni BD) | Buscar no livro (não em PDF nem HQ) | Поиск (не для PDF и комиксов) | Cari di buku (bukan PDF/komik) | Suchen (nicht in PDF/Comics) | 検索（PDF・コミック不可） | Kitapta ara (PDF/çizgi roman hariç) | Tìm trong sách (trừ PDF, truyện tranh)
+Leyendo índice… | Reading contents… | 正在读取目录… | Lecture du sommaire… | Lendo índice… | Чтение оглавления… | Membaca daftar isi… | Inhalt wird gelesen… | 目次を読込中… | İçindekiler okunuyor… | Đang đọc mục lục…
+Destino no disponible | Target unavailable | 目标不可用 | Destination indisponible | Destino indisponível | Переход недоступен | Tujuan tidak tersedia | Ziel nicht verfügbar | 移動先なし | Hedef yok | Không tới được
+Actualizar índice | Refresh contents | 刷新目录 | Actualiser le sommaire | Atualizar índice | Обновить оглавление | Segarkan daftar isi | Inhalt aktualisieren | 目次を更新 | İçindekileri yenile | Làm mới mục lục
+Aún no hay marcadores | No bookmarks yet | 还没有书签 | Pas encore de signets | Ainda sem marcadores | Закладок пока нет | Belum ada penanda | Noch keine Lesezeichen | しおりはまだありません | Henüz yer imi yok | Chưa có dấu trang
+Nombrar marcador pág. | Name bookmark p. | 命名书签 页 | Nommer le signet p. | Nomear marcador pág. | Назвать закладку стр. | Namai penanda hal. | Lesezeichen benennen S. | しおりに名前 p. | Yer imini adlandır s. | Đặt tên dấu trang tr.
+Quitar marcador pág. | Remove bookmark p. | 删除书签 页 | Retirer le signet p. | Tirar marcador pág. | Убрать закладку стр. | Hapus penanda hal. | Lesezeichen entfernen S. | しおりを削除 p. | Yer imini kaldır s. | Bỏ dấu trang tr.
+Lista anterior | Previous list | 上一组 | Liste précédente | Lista anterior | Предыдущий список | Daftar sebelum | Vorherige Liste | 前のリスト | Önceki liste | Danh sách trước
+Más entradas | More entries | 更多条目 | Plus d'entrées | Mais entradas | Ещё записи | Entri lainnya | Mehr Einträge | さらに項目 | Daha fazla kayıt | Thêm mục
+¿Quitar? Toca otra vez | Remove? Tap again | 移除？再点一次 | Retirer ? Touchez encore | Tirar? Toque de novo | Убрать? Нажмите ещё раз | Hapus? Ketuk lagi | Entfernen? Nochmal tippen | 削除？もう一度タップ | Kaldırılsın mı? Tekrar dokun | Gỡ? Chạm lần nữa
+Quitar | Remove | 移除 | Retirer | Tirar | Убрать | Hapus | Entfernen | 削除 | Kaldır | Gỡ
+Catálogo | Catalog | 目录 | Catalogue | Catálogo | Каталог | Katalog | Katalog | カタログ | Katalog | Danh mục
+Elige el catálogo a quitar | Pick the catalog to remove | 选择要移除的目录 | Choisissez le catalogue à retirer | Escolha o catálogo a tirar | Выберите каталог для удаления | Pilih katalog untuk dihapus | Katalog zum Entfernen wählen | 削除するカタログを選択 | Kaldırılacak kataloğu seç | Chọn danh mục để gỡ
+Quitar un catálogo | Remove a catalog | 移除目录 | Retirer un catalogue | Tirar um catálogo | Убрать каталог | Hapus katalog | Katalog entfernen | カタログを削除 | Katalog kaldır | Gỡ một danh mục
+Agregar catálogo OPDS: desde la página del PC (Wi-Fi) | Add an OPDS catalog: from the PC page (Wi-Fi) | 添加 OPDS 目录：在电脑页面（Wi-Fi） | Ajouter un catalogue OPDS : depuis la page du PC (Wi-Fi) | Adicionar catálogo OPDS: pela página do PC (Wi-Fi) | Добавить каталог OPDS: со страницы на ПК (Wi-Fi) | Tambah katalog OPDS: dari halaman PC (Wi-Fi) | OPDS-Katalog hinzufügen: über die PC-Seite (WLAN) | OPDSカタログ追加：PCのページから（Wi-Fi） | OPDS kataloğu ekle: PC sayfasından (Wi-Fi) | Thêm danh mục OPDS: từ trang trên PC (Wi-Fi)
+Salir del catálogo | Leave catalog | 退出目录 | Quitter le catalogue | Sair do catálogo | Выйти из каталога | Keluar katalog | Katalog verlassen | カタログを出る | Katalogdan çık | Thoát danh mục
+Cargando el catálogo… | Loading catalog… | 正在加载目录… | Chargement du catalogue… | Carregando catálogo… | Загрузка каталога… | Memuat katalog… | Katalog wird geladen… | カタログ読込中… | Katalog yükleniyor… | Đang tải danh mục…
+Descargar | Download | 下载 | Télécharger | Baixar | Скачать | Unduh | Laden | ダウンロード | İndir | Tải
+Siguiente página del catálogo | Next catalog page | 目录下一页 | Page suivante du catalogue | Próxima página do catálogo | Следующая страница каталога | Halaman katalog berikut | Nächste Katalogseite | カタログの次ページ | Sonraki katalog sayfası | Trang danh mục sau
+Este catálogo está vacío | This catalog is empty | 此目录为空 | Ce catalogue est vide | Este catálogo está vazio | Каталог пуст | Katalog ini kosong | Dieser Katalog ist leer | このカタログは空です | Bu katalog boş | Danh mục trống
+Página | Page | 页面 | Page | Página | Страница | Halaman | Seite | ページ | Sayfa | Trang
+día | day | 日间 | jour | dia | день | siang | Tag | 昼 | gündüz | ngày
+sepia | sepia | 棕褐 | sépia | sépia | сепия | sepia | Sepia | セピア | sepya | nâu đỏ
+noche | night | 夜间 | nuit | noite | ночь | malam | Nacht | 夜 | gece | đêm
+Letra | Text size | 字号 | Taille du texte | Letra | Размер шрифта | Ukuran huruf | Schriftgröße | 文字サイズ | Yazı boyutu | Cỡ chữ
+Nitidez | Sharpness | 清晰度 | Netteté | Nitidez | Чёткость | Ketajaman | Schärfe | 鮮明さ | Keskinlik | Độ nét
+Tamaño normal del libro | Reset book size | 恢复书本大小 | Taille normale du livre | Tamanho normal do livro | Обычный размер книги | Ukuran buku normal | Buchgröße zurücksetzen | 本を元の大きさに | Kitap boyutunu sıfırla | Cỡ sách mặc định
+Codificación TXT | TXT encoding | TXT 编码 | Encodage TXT | Codificação TXT | Кодировка TXT | Pengodean TXT | TXT-Kodierung | TXT文字コード | TXT kodlaması | Mã hóa TXT
+Fuente | Font | 字体 | Police | Fonte | Шрифт | Fon | Schrift | フォント | Yazı tipi | Phông chữ
+Interlineado | Line spacing | 行距 | Interligne | Entrelinha | Интервал | Jarak baris | Zeilenabstand | 行間 | Satır aralığı | Giãn dòng
+Márgenes | Margins | 页边距 | Marges | Margens | Поля | Margin | Ränder | 余白 | Kenar boşlukları | Lề
+estrechos | narrow | 窄 | étroites | estreitas | узкие | sempit | schmal | 狭い | dar | hẹp
+normales | normal | 普通 | normales | normais | обычные | biasa | normal | 標準 | normal | thường
+amplios | wide | 宽 | larges | amplas | широкие | lebar | breit | 広い | geniş | rộng
+Libro abierto | Open book | 当前书籍 | Livre ouvert | Livro aberto | Открытая книга | Buku terbuka | Geöffnetes Buch | 開いている本 | Açık kitap | Sách đang mở
+La biblioteca solo funciona en el visor | The library only works in the headset | 书库仅在头显中可用 | La bibliothèque ne marche que dans le casque | A biblioteca só funciona no headset | Библиотека работает только в шлеме | Pustaka hanya berfungsi di headset | Bibliothek nur im Headset | ライブラリはヘッドセット専用 | Kitaplık yalnızca başlıkta çalışır | Thư viện chỉ chạy trên kính
+Traer libro | Bring book here | 把书拿过来 | Ramener le livre | Trazer livro | Вернуть книгу | Bawa buku ke sini | Buch herholen | 本を手元へ | Kitabı getir | Mang sách lại
+Página, letra y tamaño | Page, text and size | 页面、字体和大小 | Page, texte et taille | Página, letra e tamanho | Страница, шрифт и размер | Halaman, huruf, ukuran | Seite, Schrift, Größe | ページ・文字・大きさ | Sayfa, yazı ve boyut | Trang, chữ và cỡ
+No hay ningún libro abierto | No book is open | 没有打开的书 | Aucun livre ouvert | Nenhum livro aberto | Нет открытой книги | Tidak ada buku terbuka | Kein Buch geöffnet | 本は開いていません | Açık kitap yok | Chưa mở sách nào
+Elegir uno en la Biblioteca | Pick one in Library | 到书库选一本 | En choisir un dans la Bibliothèque | Escolher um na Biblioteca | Выбрать в библиотеке | Pilih di Pustaka | In der Bibliothek wählen | ライブラリから選ぶ | Kitaplıktan seç | Chọn trong Thư viện
+Abrir el libro | Open the book | 打开书 | Ouvrir le livre | Abrir o livro | Открыть книгу | Buka buku | Buch öffnen | 本を開く | Kitabı aç | Mở sách
+Cerrar la tapa | Close the cover | 合上书 | Fermer le livre | Fechar a capa | Закрыть книгу | Tutup sampul | Buch zuklappen | 本を閉じる | Kapağı kapat | Gấp sách
+Marcar página | Bookmark page | 添加书签 | Marquer la page | Marcar página | Закладка | Tandai halaman | Seite merken | しおりを付ける | Sayfayı işaretle | Đánh dấu trang
+Marcar pág. | Bookmark p. | 书签 页 | Marquer p. | Marcar pág. | Закладка стр. | Tandai hal. | Merken S. | しおり p. | İşaretle s. | Đánh dấu tr.
+Lista de marcadores | Bookmarks | 书签列表 | Signets | Marcadores | Закладки | Daftar penanda | Lesezeichen | しおり一覧 | Yer imleri | Dấu trang
+Índice del libro | Contents | 目录 | Sommaire | Índice | Оглавление | Daftar isi | Inhalt | 目次 | İçindekiler | Mục lục
+Guardar el libro (sin ninguno abierto) | Put the book away | 把书收起来 | Ranger le livre | Guardar o livro | Убрать книгу | Simpan buku | Buch wegstellen | 本をしまう | Kitabı kaldır | Cất sách
+Cancelar importación | Cancel import | 取消导入 | Annuler l'import | Cancelar importação | Отменить импорт | Batalkan impor | Import abbrechen | 取込を中止 | İçe aktarmayı iptal et | Hủy nhập
++ Agregar libros | + Add books | + 添加书籍 | + Ajouter des livres | + Adicionar livros | + Добавить книги | + Tambah buku | + Bücher hinzufügen | + 本を追加 | + Kitap ekle | + Thêm sách
+Ordenar y colecciones | Sort and collections | 排序与合集 | Tri et collections | Ordenar e coleções | Сортировка и коллекции | Urutan dan koleksi | Sortieren und Sammlungen | 並べ替えとコレクション | Sıralama ve koleksiyonlar | Sắp xếp và bộ sưu tập
+Elige el libro a quitar | Pick the book to remove | 选择要移除的书 | Choisissez le livre à retirer | Escolha o livro a tirar | Выберите книгу для удаления | Pilih buku untuk dihapus | Buch zum Entfernen wählen | 削除する本を選択 | Kaldırılacak kitabı seç | Chọn sách để gỡ
+Quitar de la biblioteca | Remove from library | 从书库移除 | Retirer de la bibliothèque | Tirar da biblioteca | Убрать из библиотеки | Hapus dari pustaka | Aus Bibliothek entfernen | ライブラリから削除 | Kitaplıktan kaldır | Gỡ khỏi thư viện
+Más libros | More books | 更多书籍 | Plus de livres | Mais livros | Ещё книги | Buku lainnya | Mehr Bücher | さらに本 | Daha fazla kitap | Thêm sách
+Aún no hay libros: agrega el primero | No books yet: add your first | 还没有书：添加第一本 | Pas encore de livres : ajoutez-en un | Ainda sem livros: adicione o primeiro | Книг пока нет: добавьте первую | Belum ada buku: tambahkan | Noch keine Bücher: füge eins hinzu | 本がありません：追加しましょう | Henüz kitap yok: ilkini ekle | Chưa có sách: hãy thêm
+Ningún libro con este filtro | No books match this filter | 没有符合筛选的书 | Aucun livre pour ce filtre | Nenhum livro com este filtro | Нет книг по этому фильтру | Tak ada buku untuk filter ini | Keine Bücher für diesen Filter | 該当する本なし | Bu filtreye uyan kitap yok | Không có sách phù hợp
+Passthrough | Passthrough | 透视 | Passthrough | Passthrough | Passthrough | Passthrough | Passthrough | パススルー | Passthrough | Passthrough
+Ir a | Go to | 前往 | Aller à | Ir para | Перейти | Ke | Gehe zu | 移動 | Git | Tới
+Más entornos | More places | 更多环境 | Plus de décors | Mais ambientes | Ещё места | Suasana lainnya | Mehr Umgebungen | さらに環境 | Daha fazla ortam | Thêm không gian
+Avisar en | Remind in | 提醒于 | Rappel dans | Avisar em | Напомнить через | Ingatkan dalam | Erinnern in | お知らせまで | Hatırlat: | Nhắc sau
+Sin aviso | No reminder | 不提醒 | Sans rappel | Sem aviso | Без напоминания | Tanpa pengingat | Keine Erinnerung | お知らせなし | Hatırlatma yok | Không nhắc
+Guardar herramientas | Put tools away | 收起工具 | Ranger les outils | Guardar ferramentas | Убрать инструменты | Simpan alat | Werkzeuge wegräumen | ツールをしまう | Araçları kaldır | Cất công cụ
+Borrar trazos de esta página | Erase ink on this page | 清除本页笔迹 | Effacer les traits de la page | Apagar traços desta página | Стереть записи на странице | Hapus coretan halaman ini | Striche dieser Seite löschen | このページの書込みを消す | Bu sayfadaki çizimleri sil | Xóa nét vẽ trang này
+Borrar trazos de la casa | Erase ink in the house | 清除屋内笔迹 | Effacer les traits de la maison | Apagar traços da casa | Стереть записи в доме | Hapus coretan di rumah | Striche im Haus löschen | 家の書込みを消す | Evdeki çizimleri sil | Xóa nét vẽ trong nhà
+Libro y física | Book and physics | 书本与物理 | Livre et physique | Livro e física | Книга и физика | Buku dan fisika | Buch und Physik | 本と物理 | Kitap ve fizik | Sách và vật lý
+Movimiento | Movement | 移动 | Déplacement | Movimento | Перемещение | Gerakan | Bewegung | 移動 | Hareket | Di chuyển
+Menú y accesibilidad | Menu and accessibility | 菜单与无障碍 | Menu et accessibilité | Menu e acessibilidade | Меню и доступность | Menu dan aksesibilitas | Menü und Bedienhilfen | メニューとアクセシビリティ | Menü ve erişilebilirlik | Menu và trợ năng
+Acerca de y licencias | About and licenses | 关于与许可 | À propos et licences | Sobre e licenças | О приложении и лицензии | Tentang dan lisensi | Info und Lizenzen | 情報とライセンス | Hakkında ve lisanslar | Giới thiệu và giấy phép
+Modo diagnóstico | Diagnostics | 诊断模式 | Diagnostic | Modo diagnóstico | Диагностика | Mode diagnostik | Diagnose | 診断モード | Tanılama | Chẩn đoán
+Menú | Menu | 菜单 | Menu | Menu | Меню | Menu | Menü | メニュー | Menü | Menu
+esfera | sphere | 球形 | sphère | esfera | сфера | bola | Kugel | 球 | küre | cầu
+simple | simple | 简洁 | simple | simples | простое | sederhana | einfach | シンプル | basit | đơn giản
+Paso de página | Page turn | 翻页 | Tourne-page | Virar página | Перелистывание | Balik halaman | Umblättern | ページめくり | Sayfa çevirme | Lật trang
+rápido | quick | 快速 | rapide | rápido | быстрое | cepat | schnell | 高速 | hızlı | nhanh
+sigue la mano | follows hand | 跟随手 | suit la main | segue a mão | за рукой | ikuti tangan | folgt der Hand | 手に追従 | eli izler | theo tay
+Física | Physics | 物理 | Physique | Física | Физика | Fisika | Physik | 物理 | Fizik | Vật lý
+Realista | Realistic | 真实 | Réaliste | Realista | Реальная | Realistis | Realistisch | リアル | Gerçekçi | Thực tế
+Flotante | Floating | 悬浮 | Flottante | Flutuante | Парящая | Melayang | Schwebend | 浮遊 | Havada | Lơ lửng
+Acostado | Lying down | 躺着读 | Allongé | Deitado | Лёжа | Berbaring | Liegend | 寝ころび | Uzanarak | Nằm đọc
+Altura de los ojos | Eye height | 视线高度 | Hauteur des yeux | Altura dos olhos | Высота глаз | Tinggi mata | Augenhöhe | 目の高さ | Göz yüksekliği | Tầm mắt
+la real | real | 真实 | réelle | a real | реальная | asli | echt | 実際 | gerçek | thật
+Giro | Turning | 转向 | Rotation | Giro | Поворот | Putar | Drehen | 回転 | Dönüş | Xoay
+suave | smooth | 平滑 | fluide | suave | плавный | halus | weich | スムーズ | yumuşak | mượt
+por pasos | snap | 分段 | par crans | por passos | шагами | bertahap | stufenweise | スナップ | adımlı | từng nấc
+Velocidad | Speed | 速度 | Vitesse | Velocidade | Скорость | Kecepatan | Tempo | 速度 | Hız | Tốc độ
+trotar | jog | 慢跑 | trot | trotar | бег | lari kecil | joggen | ジョグ | koşu | chạy bộ
+caminar | walk | 步行 | marche | caminhar | шаг | jalan | gehen | 歩き | yürüme | đi bộ
+Viñeta | Vignette | 暗角 | Vignette | Vinheta | Виньетка | Vinyet | Vignette | ビネット | Vinyet | Viền tối
+Idioma | Language | 语言 | Langue | Idioma | Язык | Bahasa | Sprache | 言語 | Dil | Ngôn ngữ
+Más idiomas | More languages | 更多语言 | Plus de langues | Mais idiomas | Ещё языки | Bahasa lainnya | Mehr Sprachen | 他の言語 | Daha fazla dil | Thêm ngôn ngữ
+automático | automatic | 自动 | automatique | automático | авто | otomatis | automatisch | 自動 | otomatik | tự động
+Hindi, árabe, bengalí y urdu: pronto | Hindi, Arabic, Bengali, Urdu: soon | 印地语、阿拉伯语、孟加拉语、乌尔都语：即将推出 | Hindi, arabe, bengali, ourdou : bientôt | Hindi, árabe, bengali e urdu: em breve | Хинди, арабский, бенгальский, урду: скоро | Hindi, Arab, Bengali, Urdu: segera | Hindi, Arabisch, Bengalisch, Urdu: bald | ヒンディー語・アラビア語・ベンガル語・ウルドゥー語：近日 | Hintçe, Arapça, Bengalce, Urduca: yakında | Hindi, Ả Rập, Bengal, Urdu: sắp có
+Moderna cálida | Warm modern | 温暖现代 | Moderne chaleureuse | Moderna aconchegante | Тёплый модерн | Modern hangat | Warm modern | 温もりモダン | Sıcak modern | Hiện đại ấm áp
+Refugio alpino | Alpine lodge | 高山小屋 | Refuge alpin | Refúgio alpino | Альпийский приют | Pondok alpen | Alpenhütte | アルプスの山小屋 | Alp kulübesi | Nhà gỗ núi Alps
+Casa del lago | Lake house | 湖畔小屋 | Maison du lac | Casa do lago | Дом у озера | Rumah danau | Haus am See | 湖畔の家 | Göl evi | Nhà bên hồ
+Casa de playa | Beach house | 海滨小屋 | Maison de plage | Casa de praia | Дом на пляже | Rumah pantai | Strandhaus | ビーチハウス | Sahil evi | Nhà bên biển
+Cabaña nevada | Snowy cabin | 雪中木屋 | Cabane enneigée | Cabana nevada | Заснеженная хижина | Kabin bersalju | Verschneite Hütte | 雪の山小屋 | Karlı kulübe | Lều tuyết
+Casa del desierto | Desert house | 沙漠之家 | Maison du désert | Casa do deserto | Дом в пустыне | Rumah gurun | Wüstenhaus | 砂漠の家 | Çöl evi | Nhà sa mạc
+Casa del bosque | Forest house | 林间小屋 | Maison de la forêt | Casa da floresta | Дом в лесу | Rumah hutan | Waldhaus | 森の家 | Orman evi | Nhà trong rừng
+Otoño en el valle | Autumn valley | 山谷之秋 | Automne dans la vallée | Outono no vale | Осень в долине | Musim gugur lembah | Herbst im Tal | 谷の秋 | Vadide sonbahar | Thu trong thung lũng
+Loft nocturno | Night loft | 夜色阁楼 | Loft de nuit | Loft noturno | Ночной лофт | Loft malam | Nachtloft | 夜のロフト | Gece loftu | Gác xép đêm
+Isla tropical | Tropical island | 热带岛屿 | Île tropicale | Ilha tropical | Тропический остров | Pulau tropis | Tropeninsel | 南国の島 | Tropik ada | Đảo nhiệt đới
+Noche estrellada | Starry night | 星夜 | Nuit étoilée | Noite estrelada | Звёздная ночь | Malam berbintang | Sternennacht | 星降る夜 | Yıldızlı gece | Đêm đầy sao
+Cama del dormitorio | Bedroom bed | 卧室的床 | Lit de la chambre | Cama do quarto | Кровать в спальне | Ranjang kamar | Bett im Schlafzimmer | 寝室のベッド | Yatak odası yatağı | Giường phòng ngủ
+Silla del balcón | Balcony chair | 阳台椅子 | Chaise du balcon | Cadeira da varanda | Стул на балконе | Kursi balkon | Balkonstuhl | バルコニーの椅子 | Balkon sandalyesi | Ghế ban công
+Sillón de la biblioteca | Library armchair | 书房扶手椅 | Fauteuil de la bibliothèque | Poltrona da biblioteca | Кресло в библиотеке | Kursi pustaka | Bibliothekssessel | 書斎の肘掛け椅子 | Kitaplık koltuğu | Ghế bành thư phòng
+Sofá de la sala | Living room sofa | 客厅沙发 | Canapé du salon | Sofá da sala | Диван в гостиной | Sofa ruang tamu | Wohnzimmersofa | リビングのソファ | Salon kanepesi | Sofa phòng khách
+Tumbona de la terraza | Terrace lounger | 露台躺椅 | Transat de la terrasse | Espreguiçadeira do terraço | Шезлонг на террасе | Kursi santai teras | Terrassenliege | テラスの寝椅子 | Teras şezlongu | Ghế nằm sân thượng

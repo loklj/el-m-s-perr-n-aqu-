@@ -78,6 +78,7 @@ namespace FolioXR.Menu
         private float _touchStart, _touchAzimuth, _lastAzimuth;
         private Vector3 _touchLocal, _spaceLocal;
         private long _minute = -1;
+        private string _language;
         private TextMesh _notice;
         private Transform _noticeHead;
 
@@ -495,6 +496,7 @@ namespace FolioXR.Menu
         {
             _builder.Length = 0;
             _builder.Append("H0123456789:%—Batería Volver");
+            if (_language != Loc.Current) { _language = Loc.Current; _minute = -1; }   // Idioma nuevo: rehacer las casillas.
             foreach (string name in MenuModel.CategoryNames) _builder.Append(name);
             if (_model != null)
                 foreach (MenuOption option in _model.Options) _builder.Append(option.Text);
