@@ -34,8 +34,9 @@ namespace UnityEngine
     public static class Mathf { public const float PI = (float)Math.PI, Deg2Rad = PI / 180f;
         public static float Clamp(float v, float a, float b) => v < a ? a : v > b ? b : v; public static int Clamp(int v, int a, int b) => v < a ? a : v > b ? b : v;
         public static float Clamp01(float v) => Clamp(v, 0f, 1f); public static float Max(float a, float b) => a > b ? a : b; public static int Max(int a, int b) => a > b ? a : b;
-        public static float Min(float a, float b) => a < b ? a : b; public static float Abs(float a) => Math.Abs(a);
+        public static float Min(float a, float b) => a < b ? a : b; public static int Min(int a, int b) => a < b ? a : b; public static float Abs(float a) => Math.Abs(a);
         public static float Lerp(float a, float b, float t) => a + (b - a) * Clamp01(t); public static float Sin(float a) => (float)Math.Sin(a); public static float Cos(float a) => (float)Math.Cos(a);
         public static float Sqrt(float a) => (float)Math.Sqrt(a);
+        public static float Asin(float a) => (float)Math.Asin(a); public static float Acos(float a) => (float)Math.Acos(a);
         public static float SmoothStep(float from, float to, float t) { t = Clamp01(t); t = -2f * t * t * t + 3f * t * t; return to * t + from * (1f - t); } }
 }

@@ -10,13 +10,15 @@ namespace FolioXR.Books
 {
     /// <summary>
     /// Estantería 3D de la biblioteca (encargo 18, parte 1; Claude, 12 nov 2026).
-    /// En la casa, los libros del usuario aparecen en la estantería real de la biblioteca (filas a la altura
-    /// de los ojos, delante de los libros pintados). En passthrough, una estantería propia aparece frente a
-    /// la persona desde el menú. Se toma un libro pellizcando su lomo (manos) o con el grip cerca (mandos):
-    /// sale del estante y queda en la mano. Soltarlo junto a una fila lo deja ahí (el orden se guarda,
-    /// «a mano»); soltarlo lejos del estante lo abre. El libro abierto falta del estante, y soltarlo
-    /// sobre una fila lo cierra y lo guarda en ese lugar (pedido del usuario, 13 nov 2026).
-    /// Usa la misma vista que el menú (colección, formato y orden de <see cref="BookCollections"/>).
+    /// En la casa, las estanterías están vacías y solo tienen los libros de la persona (pedido del usuario,
+    /// 15 nov 2026): cada libro queda en la fila y el lugar donde se lo deja, y eso se guarda. Un libro nuevo
+    /// aparece en el primer hueco libre, empezando por las filas a la altura de los ojos. En passthrough,
+    /// una estantería propia aparece frente a la persona desde el menú, con sus propios lugares.
+    /// Se toma un libro pellizcando su lomo (manos) o con el grip cerca (mandos): sale del estante y queda en
+    /// la mano. Soltarlo sobre cualquier fila lo deja ahí (los vecinos se corren si hace falta); soltarlo
+    /// lejos del estante lo abre. El libro abierto deja su hueco, y soltarlo sobre una fila lo cierra y lo
+    /// guarda en ese lugar (pedido del usuario, 13 nov 2026).
+    /// La estantería muestra todos los libros: los filtros del menú (colección, formato) no esconden ninguno.
     /// </summary>
     public sealed class BookShelf : MonoBehaviour
     {
@@ -36,15 +38,20 @@ namespace FolioXR.Books
             public TextMesh Title;
             public int Row;             // Fila donde quedó.
             public float Along;         // Distancia desde el inicio de la fila hasta el centro del lomo.
+            public int Leather;         // Color de la tapa (columna del atlas).
         }
 
-        private struct Line { public Vector3 Left, Right, Facing; }
+        private struct Line { public Vector3 Left, Right, Facing; public float Length; public Color Light; }
+        private int _blocks = 1, _block;    // Bloques de luz del atlas (0 = sin teñir) y el que usa lo que se está armando.
         private readonly List<Line> _lines = new List<Line>();
-        private List<BookEntry> _view = new List<BookEntry>();
+        private readonly List<List<ShelfLayout.Item>> _rows = new List<List<ShelfLayout.Item>>();   // Libros de cada fila.
+        private readonly List<ShelfLayout.Item> _trial = new List<ShelfLayout.Item>();
+        private bool _houseShown;
         private int _held = -1, _heldRole;
         private Vector3 _heldOffset;
         private bool _bookWasGrabbed;
         private GameObject _marker;
+        private Mesh _markerMesh;
 
         private readonly List<Slot> _slots = new List<Slot>();
         private readonly List<Vector3> _vertices = new List<Vector3>();
@@ -90,6 +97,13 @@ namespace FolioXR.Books
             BookLibrary.StateChanged += MarkDirty;
             BookCollections.Changed += MarkDirty;
             FolioAccessibility.Changed += OnAccessibility;
+            Font.textureRebuilt += OnFontRebuilt;
+        }
+
+        /// <summary>La fuente rehízo su textura: el material de los títulos de los lomos apunta a la nueva.</summary>
+        private void OnFontRebuilt(Font font)
+        {
+            if (font == _font && _textMaterial != null) _textMaterial.mainTexture = _font.material.mainTexture;
         }
 
         private void OnDisable()
@@ -97,9 +111,91 @@ namespace FolioXR.Books
             BookLibrary.StateChanged -= MarkDirty;
             BookCollections.Changed -= MarkDirty;
             FolioAccessibility.Changed -= OnAccessibility;
+            Font.textureRebuilt -= OnFontRebuilt;
         }
 
         private void MarkDirty() => _dirty = true;
+
+        // ───────────── Lugares guardados ─────────────
+
+        private const string PlacesKey = "folioxr.shelf.lugares";
+        [System.Serializable] private sealed class Place { public string id; public int row; public float x; }
+        [System.Serializable]
+        private sealed class Places
+        {
+            public List<Place> house = new List<Place>();   // Estanterías de la casa (las mismas en todos los entornos).
+            public List<Place> free = new List<Place>();    // Estantería propia de passthrough.
+        }
+        private Places _places;
+        private string _savedPlaces;
+        private readonly HashSet<string> _known = new HashSet<string>();   // Libros de la biblioteca en el último reparto.
+
+        private Places Stored
+        {
+            get
+            {
+                if (_places != null) return _places;
+                _savedPlaces = PlayerPrefs.GetString(PlacesKey, "{}");
+                try { _places = JsonUtility.FromJson<Places>(_savedPlaces) ?? new Places(); }
+                catch (System.Exception e)
+                {
+                    Debug.LogWarning("[FolioXR] Estantería: lugares ilegibles, se empieza de cero: " + e.Message);
+                    _places = new Places();
+                }
+                if (_places.house == null) _places.house = new List<Place>();
+                if (_places.free == null) _places.free = new List<Place>();
+                return _places;
+            }
+        }
+
+        /// <summary>
+        /// Guarda dónde quedó cada libro (lo que está en _rows) si cambió algo. El lugar de un libro que ahora
+        /// no está en la lista (la biblioteca todavía cargando, por ejemplo) se conserva: solo se olvida al
+        /// quitar el libro (Forget).
+        /// </summary>
+        private void SavePlaces(bool house)
+        {
+            List<Place> list = house ? Stored.house : Stored.free;
+            var kept = new List<Place>();
+            foreach (Place place in list)
+                if (place != null && place.id != null && !_known.Contains(place.id)) kept.Add(place);
+            list.Clear();
+            for (int r = 0; r < _rows.Count; r++)
+                foreach (ShelfLayout.Item item in _rows[r])
+                    list.Add(new Place { id = item.Id, row = r, x = Mathf.Round(item.X * 10000f) / 10000f });
+            list.AddRange(kept);
+            string json = JsonUtility.ToJson(Stored);
+            if (json == _savedPlaces) return;
+            _savedPlaces = json;
+            PlayerPrefs.SetString(PlacesKey, json);
+            PlayerPrefs.Save();
+        }
+
+        /// <summary>El libro salió de la biblioteca: su lugar en las estanterías queda libre.</summary>
+        public static void Forget(string id)
+        {
+            if (Instance == null || string.IsNullOrEmpty(id)) return;
+            Places stored = Instance.Stored;
+            int removed = stored.house.RemoveAll(p => p == null || p.id == id) + stored.free.RemoveAll(p => p == null || p.id == id);
+            if (removed == 0) return;
+            Instance._savedPlaces = JsonUtility.ToJson(stored);
+            PlayerPrefs.SetString(PlacesKey, Instance._savedPlaces);
+            PlayerPrefs.Save();
+            Instance._dirty = true;
+        }
+
+        /// <summary>
+        /// Vuelve a acomodar todos los libros de la estantería que se ve, juntos y en el orden elegido en el
+        /// menú (recientes, título o autor). Para empezar de nuevo después de moverlos a gusto.
+        /// </summary>
+        public static void Arrange()
+        {
+            if (Instance == null) return;
+            // Solo los libros que están a la vista: los lugares de libros que no cargaron se conservan.
+            (Instance._houseShown ? Instance.Stored.house : Instance.Stored.free).RemoveAll(p => p == null || p.id == null || Instance._known.Contains(p.id));
+            Instance._dirty = true;
+            Debug.Log("[FolioXR] Estantería: libros acomodados de nuevo.");
+        }
 
         private void OnAccessibility()
         {
@@ -140,8 +236,7 @@ namespace FolioXR.Books
             if (page == null || page.sharedMaterial == null) return false;
             _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             if (_font == null) return false;
-            _atlas = Atlas();
-            _material = new Material(page.sharedMaterial) { name = "FolioXR estantería", mainTexture = _atlas, color = Color.white };
+            _material = new Material(page.sharedMaterial) { name = "FolioXR estantería", color = Color.white };
             Shader text = Resources.Load<Shader>("FolioXRText3D");
             _textMaterial = text != null && text.isSupported
                 ? new Material(text) { name = "FolioXR títulos de lomos", mainTexture = _font.material.mainTexture }
@@ -163,32 +258,83 @@ namespace FolioXR.Books
 
         // ───────────── Construcción ─────────────
 
-        // Atlas 16 × 4: columnas 0-6 cueros, 7 madera, 8 papel, 9 resaltado; filas = sombreado (frente, lado, arriba, abajo).
+        // Atlas de 16 columnas (0-6 cueros, 7 madera, 8 papel, 9 resaltado) por 4 sombreados (frente, lado, arriba,
+        // abajo), repetido en bloques: el bloque 0 va sin teñir (estantería propia, libro en la mano) y cada fila
+        // de la casa tiene el suyo, teñido con la luz horneada que le llega.
         private static readonly float[] Shade = { 1f, 0.72f, 1.18f, 0.5f };
 
-        private static Texture2D Atlas()
+        private void BuildAtlas()
         {
-            var texture = new Texture2D(16, 4, TextureFormat.RGBA32, false)
-            { name = "FolioXR colores de estantería", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+            _blocks = _lines.Count + 1;
+            if (_atlas == null || _atlas.height != 4 * _blocks)
+            {
+                if (_atlas != null) Destroy(_atlas);
+                _atlas = new Texture2D(16, 4 * _blocks, TextureFormat.RGBA32, false)
+                { name = "FolioXR colores de estantería", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+                _material.mainTexture = _atlas;
+            }
             var colors = new List<Color>(BookCover.LeatherColors)
             {
                 new Color(0.42f, 0.29f, 0.18f), // madera
                 new Color(0.86f, 0.82f, 0.72f), // papel (cantos)
                 new Color(0.95f, 0.78f, 0.35f)  // resaltado
             };
-            for (int y = 0; y < 4; y++)
+            for (int y = 0; y < 4 * _blocks; y++)
+            {
+                Color light = BlockLight(y / 4);
                 for (int x = 0; x < 16; x++)
                 {
-                    Color c = x < colors.Count ? colors[x] : Color.gray;
-                    c *= Shade[y];
+                    Color c = (x < colors.Count ? colors[x] : Color.gray) * Shade[y % 4] * light;
                     c.a = 1f;
-                    texture.SetPixel(x, y, c);
+                    _atlas.SetPixel(x, y, c);
                 }
-            texture.Apply(false, true);
-            return texture;
+            }
+            _atlas.Apply(false, false);
+            // La barrita del hueco usa el bloque sin teñir, que cambia de lugar con el tamaño del atlas.
+            if (_markerMesh != null)
+            {
+                var uv = new List<Vector2>();
+                for (int i = 0; i < _markerMesh.vertexCount; i++) uv.Add(Texel(9, 2, 0));
+                _markerMesh.SetUVs(0, uv);
+            }
         }
 
-        private static Vector2 Texel(int column, int shade) => new Vector2((column + 0.5f) / 16f, (shade + 0.5f) / 4f);
+        /// <summary>
+        /// Luz del bloque. Tiene un piso: en una estantería casi a oscuras los libros se oscurecen, pero se
+        /// siguen distinguiendo (floor) y sus títulos se siguen leyendo.
+        /// </summary>
+        private Color BlockLight(int block, float floor = 0.3f)
+        {
+            if (block <= 0 || block > _lines.Count) return Color.white;
+            Color c = _lines[block - 1].Light;
+            float brightest = Mathf.Max(0.01f, Mathf.Max(c.r, Mathf.Max(c.g, c.b)));
+            float k = brightest < floor ? floor / brightest : brightest > 1.15f ? 1.15f / brightest : 1f;
+            return new Color(c.r * k, c.g * k, c.b * k, 1f);
+        }
+
+        private Vector2 Texel(int column, int shade, int block) =>
+            new Vector2((column + 0.5f) / 16f, (block * 4 + shade + 0.5f) / (4f * _blocks));
+
+        private Color TitleColor(int leather, int block)
+        {
+            Color c = (leather == 6 ? new Color(0.25f, 0.16f, 0.08f) : new Color(0.93f, 0.8f, 0.45f)) * BlockLight(block, 0.6f);
+            c.a = 1f;
+            return c;
+        }
+
+        /// <summary>Pasa un libro a otro bloque de luz (0 al tomarlo: en la mano se ve con sus colores).</summary>
+        private void Relight(int index, int block)
+        {
+            Slot s = _slots[index];
+            // Mismo orden de caras que Box: frente, atrás, dos lados, arriba (canto de papel) y abajo.
+            for (int face = 0; face < 6; face++)
+            {
+                Vector2 t = Texel(face == 4 ? 8 : s.Leather, face == 0 ? 0 : face == 4 ? 2 : face == 5 ? 3 : 1, block);
+                for (int k = 0; k < 4; k++) _uv[s.FirstVertex + face * 4 + k] = t;
+            }
+            _mesh.SetUVs(0, _uv);
+            if (s.Title != null) s.Title.color = TitleColor(s.Leather, block);
+        }
 
         private void Rebuild(BookLibrary library, IReadOnlyList<ShelfRow> rows, string current)
         {
@@ -200,51 +346,107 @@ namespace FolioXR.Books
             _hover = _taking = _held = -1;
             if (_marker != null) _marker.SetActive(false);
 
-            List<BookEntry> books = BookCollections.View(library.Books);
-            _view = books;
+            // Todos los libros, en el orden del menú: así se reparten los que todavía no tienen lugar.
+            List<BookEntry> books = BookCollections.View(library.Books, true);
             _lines.Clear();
+            _houseShown = rows != null;
             // Filas como (izquierda, derecha, hacia la sala), en coordenadas del mundo.
-            var lines = new List<(Vector3 left, Vector3 right, Vector3 facing)>();
             if (rows != null)
             {
                 Transform root = _environment.HouseRoot;
                 foreach (ShelfRow row in rows)
-                    lines.Add((root.TransformPoint(row.Left), root.TransformPoint(row.Right), root.TransformDirection(row.Facing).normalized));
+                    AddLine(root.TransformPoint(row.Left), root.TransformPoint(row.Right), root.TransformDirection(row.Facing).normalized, row.Light);
+                BuildAtlas();
             }
             else
             {
+                foreach (var line in FreeRows()) AddLine(line.Item1, line.Item2, line.Item3, Color.white);
+                BuildAtlas();
+                _block = 0;
                 BuildFrame();
-                lines.AddRange(FreeRows());
             }
-            int index = 0, placed = 0, rowIndex = -1;
-            foreach (var line in lines)
+            int waiting = Distribute(books, _houseShown ? Stored.house : Stored.free);
+            SavePlaces(_houseShown);
+            var byId = new Dictionary<string, BookEntry>();
+            foreach (BookEntry entry in books) if (entry != null && entry.id != null) byId[entry.id] = entry;
+            int placed = 0;
+            for (int r = 0; r < _rows.Count; r++)
             {
-                rowIndex++;
-                _lines.Add(new Line { Left = line.left, Right = line.right, Facing = line.facing });
-                Vector3 along = (line.right - line.left).normalized;
-                float length = Vector3.Distance(line.left, line.right);
-                Quaternion rotation = Quaternion.LookRotation(line.facing, Vector3.up);
-                float x = 0f;
-                while (index < books.Count)
+                Line line = _lines[r];
+                Vector3 along = (line.Right - line.Left).normalized;
+                Quaternion rotation = Quaternion.LookRotation(line.Facing, Vector3.up);
+                foreach (ShelfLayout.Item item in _rows[r])
                 {
-                    BookEntry entry = books[index];
-                    float width = SpineWidth(entry), height = SpineHeight(entry);
-                    if (x + width > length) break;
-                    index++;
-                    if (current != null && entry.id == current) { x += width + 0.004f; continue; } // Hueco del libro abierto.
-                    // El lomo queda en el plano de la fila; el libro se extiende hacia atrás.
-                    Vector3 center = line.left + along * (x + width * 0.5f) + Vector3.up * (height * 0.5f) + line.facing * 0.017f;
-                    AddBook(entry, center, rotation, new Vector3(width, height, 0.034f), rowIndex, x + width * 0.5f);
-                    x += width + 0.004f;
                     placed++;
+                    if (current != null && item.Id == current) continue;   // Hueco del libro abierto: su lugar lo espera.
+                    BookEntry entry = byId[item.Id];
+                    float height = SpineHeight(entry);
+                    // El lomo queda en el plano de la fila; el libro se extiende hacia el fondo del estante.
+                    Vector3 center = line.Left + along * (item.X + item.Width * 0.5f) + Vector3.up * (height * 0.5f + 0.0005f);
+                    _block = r + 1;
+                    AddBook(entry, center, rotation, new Vector3(item.Width, height, SpineDepth(height)), r, item.X + item.Width * 0.5f);
                 }
             }
             _mesh.Clear();
             _mesh.SetVertices(_vertices);
             _mesh.SetUVs(0, _uv);
             _mesh.SetTriangles(_triangles, 0, true);
-            if (index < books.Count)
-                Debug.Log("[FolioXR] Estantería: caben " + placed + " de " + books.Count + " libros; el resto sigue en el menú.");
+            if (waiting > 0)
+                Debug.Log("[FolioXR] Estantería: caben " + placed + " de " + (placed + waiting) + " libros; el resto sigue en el menú.");
+        }
+
+        private void AddLine(Vector3 left, Vector3 right, Vector3 facing, Color light)
+        {
+            _lines.Add(new Line { Left = left, Right = right, Facing = facing, Length = Vector3.Distance(left, right), Light = light });
+        }
+
+        /// <summary>
+        /// Reparte los libros en las filas: cada uno donde lo dejaron (places) y los que no tienen lugar, en el
+        /// primer hueco libre siguiendo el orden de las filas. Devuelve cuántos no entraron.
+        /// </summary>
+        private int Distribute(List<BookEntry> books, List<Place> places)
+        {
+            _rows.Clear();
+            for (int r = 0; r < _lines.Count; r++) _rows.Add(new List<ShelfLayout.Item>());
+            var byId = new Dictionary<string, BookEntry>();
+            foreach (BookEntry entry in books) if (entry != null && entry.id != null) byId[entry.id] = entry;
+            _known.Clear();
+            foreach (string id in byId.Keys) _known.Add(id);
+            var seated = new HashSet<string>();
+            foreach (Place place in places)
+            {
+                // Lugares de libros que ya no están, de filas que no existen o repetidos: se olvidan.
+                if (place == null || place.id == null || !byId.ContainsKey(place.id) || place.row < 0 ||
+                    place.row >= _rows.Count || !seated.Add(place.id)) continue;
+                _rows[place.row].Add(new ShelfLayout.Item { Id = place.id, X = place.x, Width = SpineWidth(byId[place.id]) });
+            }
+            for (int r = 0; r < _rows.Count; r++)
+            {
+                List<ShelfLayout.Item> row = _rows[r];
+                // La fila es más corta en otro entorno o los libros engordaron: los últimos buscan otro hueco.
+                while (!ShelfLayout.Resolve(row, _lines[r].Length))
+                {
+                    seated.Remove(row[row.Count - 1].Id);
+                    row.RemoveAt(row.Count - 1);
+                }
+            }
+            int waiting = 0;
+            foreach (BookEntry entry in books)
+            {
+                if (entry == null || entry.id == null || seated.Contains(entry.id)) continue;
+                float width = SpineWidth(entry);
+                bool found = false;
+                for (int r = 0; r < _rows.Count && !found; r++)
+                {
+                    float x = ShelfLayout.FirstGap(_rows[r], _lines[r].Length, width);
+                    if (x < 0f) continue;
+                    ShelfLayout.Insert(_rows[r], new ShelfLayout.Item { Id = entry.id, X = x, Width = width });
+                    seated.Add(entry.id);
+                    found = true;
+                }
+                if (!found) waiting++;
+            }
+            return waiting;
         }
 
         private static float SpineWidth(BookEntry entry)
@@ -253,6 +455,9 @@ namespace FolioXR.Books
             float pages = Mathf.Max(1, entry.pages);
             return Mathf.Clamp(0.016f + pages * 0.00009f, 0.016f, 0.06f);
         }
+
+        /// <summary>Fondo del libro parado en el estante (el ancho de sus hojas), según su alto.</summary>
+        private static float SpineDepth(float height) => Mathf.Min(0.19f, height * 0.68f);
 
         private static float SpineHeight(BookEntry entry)
         {
@@ -267,7 +472,7 @@ namespace FolioXR.Books
             int first = _vertices.Count;
             // Lomo (frente) y tapas en cuero; arriba se ve el canto de las hojas.
             Box(center - rotation * Vector3.forward * (size.z * 0.5f), rotation, size, leather, 8);
-            var slot = new Slot { Entry = entry, Center = center, Rotation = rotation, Size = size, FirstVertex = first, Row = row, Along = along };
+            var slot = new Slot { Entry = entry, Center = center, Rotation = rotation, Size = size, FirstVertex = first, Row = row, Along = along, Leather = leather };
             // Título a lo largo del lomo, de abajo hacia arriba.
             var go = new GameObject("Lomo · " + entry.title);
             go.transform.SetParent(_titles, false);
@@ -280,7 +485,7 @@ namespace FolioXR.Books
             text.characterSize = Mathf.Clamp(size.x * 0.65f * 10f / 48f, 0.0018f, 0.003f);
             text.anchor = TextAnchor.MiddleCenter;
             text.alignment = TextAlignment.Center;
-            text.color = leather == 6 ? new Color(0.25f, 0.16f, 0.08f) : new Color(0.93f, 0.8f, 0.45f);
+            text.color = TitleColor(leather, _block);
             text.text = Spine(entry.title, size.y);
             var r = go.GetComponent<MeshRenderer>();
             r.sharedMaterial = _textMaterial;
@@ -313,7 +518,7 @@ namespace FolioXR.Books
         {
             int b = _vertices.Count;
             _vertices.Add(c - u - v); _vertices.Add(c + u - v); _vertices.Add(c + u + v); _vertices.Add(c - u + v);
-            Vector2 t = Texel(column, shade);
+            Vector2 t = Texel(column, shade, _block);
             for (int i = 0; i < 4; i++) _uv.Add(t);
             // Las dos caras: el material de página no descarta caras traseras en todos los casos.
             _triangles.AddRange(new[] { b, b + 2, b + 1, b, b + 3, b + 2, b, b + 1, b + 2, b, b + 2, b + 3 });
@@ -400,6 +605,7 @@ namespace FolioXR.Books
                     _heldRole = role;
                     _heldOffset = point - _slots[near].Center;
                     _hover = -1;
+                    Relight(near, 0);
                     Debug.Log("[FolioXR] Estantería: en la mano «" + _slots[near].Entry.title + "».");
                     return;
                 }
@@ -420,12 +626,13 @@ namespace FolioXR.Books
             {
                 // Se perdió la mano: el libro vuelve a su lugar.
                 Move(_held, s.Center);
+                Relight(_held, s.Row + 1);
                 _held = -1;
                 if (_marker != null) _marker.SetActive(false);
                 return;
             }
             Vector3 center = point - _heldOffset;
-            bool onShelf = DropTarget(center, s.Entry.id, out string before, out Vector3 markerAt, out Quaternion markerRotation);
+            bool onShelf = DropTarget(center, s.Entry.id, s.Size.x, out int row, out Vector3 markerAt, out Quaternion markerRotation);
             if (pressed)
             {
                 Move(_held, center);
@@ -441,13 +648,13 @@ namespace FolioXR.Books
             _held = -1;
             if (onShelf)
             {
-                Debug.Log("[FolioXR] Estantería: «" + s.Entry.title + "» guardado " + (before != null ? "antes de otro libro." : "al final."));
-                BookCollections.Place(_view, s.Entry.id, before);
-                _dirty = true;
+                Debug.Log("[FolioXR] Estantería: «" + s.Entry.title + "» queda en la fila " + (row + 1) + ".");
+                Settle(s.Entry.id, row);
             }
             else
             {
                 Move(index, s.Center);
+                Relight(index, s.Row + 1);
                 Take(index);
             }
         }
@@ -460,7 +667,7 @@ namespace FolioXR.Books
             _bookWasGrabbed = grabbed;
             if (grabbed && library.Current != null)
             {
-                bool over = DropTarget(_book.transform.position, library.Current.id, out _, out Vector3 at, out Quaternion rotation);
+                bool over = DropTarget(_book.transform.position, library.Current.id, SpineWidth(library.Current), out _, out Vector3 at, out Quaternion rotation);
                 if (_marker != null)
                 {
                     _marker.SetActive(over);
@@ -470,55 +677,58 @@ namespace FolioXR.Books
             }
             if (!released || library.Current == null) return false;
             if (_marker != null) _marker.SetActive(false);
-            if (!DropTarget(_book.transform.position, library.Current.id, out string before, out _, out _)) return false;
-            Debug.Log("[FolioXR] Estantería: «" + library.Current.title + "» cerrado y guardado.");
-            BookCollections.Place(_view, library.Current.id, before);
+            if (!DropTarget(_book.transform.position, library.Current.id, SpineWidth(library.Current), out int row, out _, out _)) return false;
+            Debug.Log("[FolioXR] Estantería: «" + library.Current.title + "» cerrado y guardado en la fila " + (row + 1) + ".");
+            Settle(library.Current.id, row);
             library.CloseCurrent();
-            _dirty = true;
             return true;
         }
 
         /// <summary>
-        /// ¿El punto está sobre una fila? Si es así, before es el libro ante el que quedaría (null = al final)
-        /// y at/rotation marcan el hueco con una barrita dorada.
+        /// ¿El punto está sobre una fila donde el libro cabe? Si es así, row es la fila, _trial queda con los
+        /// libros de esa fila ya acomodados (el que se suelta, donde lo dejan; los vecinos, corridos si hace
+        /// falta) y at/rotation marcan con una barrita dorada dónde quedaría el lomo.
         /// </summary>
-        private bool DropTarget(Vector3 point, string id, out string before, out Vector3 at, out Quaternion rotation, float extra = 0f)
+        private bool DropTarget(Vector3 point, string id, float width, out int row, out Vector3 at, out Quaternion rotation, float extra = 0f)
         {
-            before = null; at = Vector3.zero; rotation = Quaternion.identity;
-            int bestRow = -1; float bestScore = float.MaxValue, bestAlong = 0f;
+            row = -1; at = Vector3.zero; rotation = Quaternion.identity;
+            float bestScore = float.MaxValue, bestAlong = 0f;
             for (int r = 0; r < _lines.Count; r++)
             {
                 Line line = _lines[r];
-                Vector3 axis = line.Right - line.Left;
-                float length = axis.magnitude;
-                if (length < 0.01f) continue;
-                axis /= length;
+                if (line.Length < 0.01f) continue;
+                Vector3 axis = (line.Right - line.Left) / line.Length;
                 Vector3 d = point - line.Left;
                 float along = Vector3.Dot(d, axis), up = Vector3.Dot(d, Vector3.up), depth = Vector3.Dot(d, line.Facing);
-                if (along < -0.08f - extra || along > length + 0.08f + extra) continue;
+                if (along < -0.08f - extra || along > line.Length + 0.08f + extra) continue;
                 if (up < -0.06f - extra || up > 0.34f + extra) continue;
-                if (depth < -0.2f - extra || depth > 0.22f + extra) continue;
+                if (depth < -0.3f - extra || depth > 0.22f + extra) continue;
                 float score = Mathf.Abs(up - 0.12f) + Mathf.Abs(depth) * 0.5f;
-                if (score < bestScore) { bestScore = score; bestRow = r; bestAlong = Mathf.Clamp(along, 0f, length); }
+                if (score < bestScore) { bestScore = score; row = r; bestAlong = along; }
             }
-            if (bestRow < 0) return false;
-            // Primer libro de esa fila (o de las siguientes) que queda a la derecha del punto.
-            float markerAlong = -1f;
-            for (int i = 0; i < _slots.Count; i++)
-            {
-                Slot s = _slots[i];
-                if (s.Entry.id == id || s.Row < bestRow) continue;
-                if (s.Row == bestRow && s.Along < bestAlong) { markerAlong = s.Along + s.Size.x * 0.5f + 0.002f; continue; }
-                before = s.Entry.id;
-                if (s.Row == bestRow) markerAlong = s.Along - s.Size.x * 0.5f - 0.002f;
-                break;
-            }
-            Line row = _lines[bestRow];
-            if (markerAlong < 0f) markerAlong = Mathf.Min(bestAlong, 0.01f);
-            Vector3 dir = (row.Right - row.Left).normalized;
-            at = row.Left + dir * markerAlong + Vector3.up * 0.12f + row.Facing * 0.02f;
-            rotation = Quaternion.LookRotation(row.Facing, Vector3.up);
+            if (row < 0) return false;
+            // Prueba: la fila sin este libro (si ya estaba en ella) más el libro donde lo sueltan.
+            _trial.Clear();
+            foreach (ShelfLayout.Item item in _rows[row])
+                if (item.Id != id) _trial.Add(new ShelfLayout.Item { Id = item.Id, X = item.X, Width = item.Width });
+            var dropped = new ShelfLayout.Item { Id = id, X = bestAlong - width * 0.5f, Width = width };
+            _trial.Add(dropped);
+            if (!ShelfLayout.Resolve(_trial, _lines[row].Length, dropped)) { row = -1; return false; }   // Fila llena.
+            Line target = _lines[row];
+            Vector3 dir = (target.Right - target.Left) / target.Length;
+            at = target.Left + dir * (dropped.X + width * 0.5f) + Vector3.up * 0.12f + target.Facing * 0.02f;
+            rotation = Quaternion.LookRotation(target.Facing, Vector3.up);
             return true;
+        }
+
+        /// <summary>Deja el libro en la fila con el acomodo que DropTarget acaba de calcular (_trial) y lo guarda.</summary>
+        private void Settle(string id, int row)
+        {
+            foreach (List<ShelfLayout.Item> items in _rows) items.RemoveAll(item => item.Id == id);
+            _rows[row].Clear();
+            _rows[row].AddRange(_trial);
+            SavePlaces(_houseShown);
+            _dirty = true;
         }
 
         private void Move(int index, Vector3 center) => SetBox(index, center);
@@ -527,14 +737,14 @@ namespace FolioXR.Books
         {
             var go = new GameObject("Hueco en la estantería");
             go.transform.SetParent(transform, false);
-            var mesh = new Mesh { name = "Hueco" };
+            var mesh = _markerMesh = new Mesh { name = "Hueco" };
             var v = new List<Vector3>(); var uv = new List<Vector2>(); var t = new List<int>();
             Vector3 h = new Vector3(0.0025f, 0.12f, 0.015f);
             void F(Vector3 c, Vector3 a, Vector3 b)
             {
                 int k = v.Count;
                 v.Add(c - a - b); v.Add(c + a - b); v.Add(c + a + b); v.Add(c - a + b);
-                for (int i = 0; i < 4; i++) uv.Add(Texel(9, 2));
+                for (int i = 0; i < 4; i++) uv.Add(Texel(9, 2, 0));
                 t.AddRange(new[] { k, k + 2, k + 1, k, k + 3, k + 2, k, k + 1, k + 2, k, k + 2, k + 3 });
             }
             F(Vector3.forward * h.z, Vector3.right * h.x, Vector3.up * h.y);

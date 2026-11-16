@@ -101,8 +101,8 @@ namespace FolioXR.Reading
         /// <summary>Lectura de derecha a izquierda (manga), guardada por libro.</summary>
         public bool RightToLeft { get; private set; }
         /// <summary>Página (desde 0) que muestra cada lado, o -1 si ese lado está vacío.</summary>
-        public int LeftSlotPage => _spreadReady ? _shownSpread.Left : -1;
-        public int RightSlotPage => _spreadReady ? _shownSpread.Right : -1;
+        public int LeftSlotPage => !_spreadReady ? -1 : _handTurn != null ? _handTurn.Slot(-1, _shownSpread) : _shownSpread.Left;
+        public int RightSlotPage => !_spreadReady ? -1 : _handTurn != null ? _handTurn.Slot(1, _shownSpread) : _shownSpread.Right;
         /// <summary>Modo acostado: el libro se coloca hacia donde mira la cabeza, aunque sea el techo.</summary>
         public static bool LyingMode => PlayerPrefs.GetInt(LyingPrefsKey, 0) != 0;
         private PageTurnEffect _turn;
@@ -768,12 +768,14 @@ namespace FolioXR.Reading
 
         /// <summary>Libro cerrado (tapa a la vista). Las páginas siguen cargadas: abrirlo es inmediato.</summary>
         public bool Closed => Body != null && Body.Closed;
-        private const string ClosedStatus = "Libro cerrado\nAbrir: A/X, pellizco derecho o deslizar un dedo por la tapa";
+        private const string ClosedStatus = "Libro cerrado\nAbrir: A/X, pellizco derecho o levantar la tapa con la mano";
+        private const string TurnHint = "Siguiente: A/X, pellizco derecho o llevar la hoja con la mano · Anterior: B/Y o pellizco izquierdo";
+        private string _pageStatus = string.Empty;   // «Páginas 4-5 de 26…»: vuelve al abrir el libro.
         public event System.Action ClosedChanged;
 
         public void CloseBook()
         {
-            if (Body == null || Closed || !_spreadReady) return;
+            if (Body == null || Closed || !_spreadReady || HandTurning) return;
             Body.SetClosed(true);
             SetStatus(ClosedStatus);
             Debug.Log("[FolioXR] Libro: cerrado.");
@@ -782,16 +784,29 @@ namespace FolioXR.Reading
 
         public void OpenBook()
         {
-            if (Body == null || !Closed) return;
+            if (Body == null || !Closed || HandTurning) return;
             Body.SetClosed(false);
-            SetStatus(_lastPageStatus ?? string.Empty);
+            SetStatus(_pageStatus);
             Debug.Log("[FolioXR] Libro: abierto.");
+            ClosedChanged?.Invoke();
+        }
+
+        /// <summary>La mano soltó la tapa: queda cerrado o abierto según dónde la dejó.</summary>
+        internal void EndHandFold(bool closed)
+        {
+            if (Body == null) return;
+            bool was = Body.Closed;
+            Body.EndManualFold(closed);
+            if (closed == was) return;
+            SetStatus(closed ? ClosedStatus : _pageStatus);
+            Debug.Log("[FolioXR] Libro: " + (closed ? "cerrado" : "abierto") + " con la mano.");
             ClosedChanged?.Invoke();
         }
 
         [ContextMenu("Siguiente doble página")]
         public void NextSpread()
         {
+            if (HandTurning) return;
             if (Closed) { OpenBook(); return; }
             if (_busy || _renderer == null) return;
             int target = _shownSpread.Next(_pageCount);
@@ -802,7 +817,7 @@ namespace FolioXR.Reading
         [ContextMenu("Doble página anterior")]
         public void PreviousSpread()
         {
-            if (_busy || _renderer == null) return;
+            if (_busy || _renderer == null || HandTurning) return;
             if (Closed) return;
             int target = _shownSpread.Previous;
             // Pasar hacia atrás desde la primera página cierra el libro, como uno de papel.
@@ -909,15 +924,20 @@ namespace FolioXR.Reading
             {
                 // La hoja sale del lado que se deja y cae sobre el otro; debajo ya está la página nueva.
                 bool towardLeft = forward != rtl;
-                Texture2D lifted = (towardLeft ? _rightTexture : _leftTexture) ?? Texture2D.whiteTexture;
-                if (lifted != null)
-                {
-                    if (towardLeft) ShowPage(rightPage, newRight);
-                    else ShowPage(leftPage, newLeft);
-                    float pageWidth = rightPage.transform.localScale.x;
-                    yield return _turn.Play(towardLeft, lifted, towardLeft ? newLeft : newRight, pageWidth,
-                        rightPage.transform.localScale.y, gutter * 0.5f, Body != null ? Body.TiltRadians : 0f);
-                }
+                Texture2D lifted = towardLeft ? _rightTexture : _leftTexture;
+                if (towardLeft) ShowPage(rightPage, newRight);
+                else ShowPage(leftPage, newLeft);
+                float pageWidth = rightPage.transform.localScale.x, pageTall = rightPage.transform.localScale.y;
+                float tilt = Body != null ? Body.TiltRadians : 0f;
+                Color tint = PaperTint(out Color blank);
+                int from = towardLeft ? 1 : -1;
+                if (QuickTurn)
+                    yield return _turn.Play(towardLeft, lifted, towardLeft ? newLeft : newRight, pageWidth, pageTall,
+                                            gutter * 0.5f, tilt, tint, blank);
+                else
+                    yield return _turn.PlayNatural(towardLeft, lifted, towardLeft ? newLeft : newRight, pageWidth, pageTall,
+                                                   gutter * 0.5f, tilt, Body != null ? Body.CurlDepth(from) : 0f,
+                                                   Body != null ? Body.CurlDepth(-from) : 0f, Body != null ? Body.CurlReach : 0f, tint, blank);
             }
             if (_leftTexture != null && _leftTexture != newLeft) Destroy(_leftTexture);
             if (_rightTexture != null && _rightTexture != newRight) Destroy(_rightTexture);
@@ -930,18 +950,235 @@ namespace FolioXR.Reading
             {
                 ShowError(rightResult);
             }
+            else ShowPageStatus(leftIndex, right != null);
+
+            _busy = false;
+        }
+
+        private void ShowPageStatus(int leftIndex, bool two)
+        {
+            string preview = PdfPageRenderer.IsRealRendererAvailable
+                ? string.Empty
+                : "Vista previa del Editor: el PDF real solo se dibuja en el Quest.\n";
+            _pageStatus = preview + "Páginas " + (leftIndex + 1) + (two ? "-" + (leftIndex + 2) : string.Empty) +
+                          " de " + _pageCount + "\n" + TurnHint;
+            SetStatus(Closed ? ClosedStatus : _pageStatus);
+        }
+
+        /// <summary>Color del papel según el modo de página; blank: el de una hoja sin página (papel vacío).</summary>
+        private Color PaperTint(out Color blank)
+        {
+            string path = _renderer != null ? _renderer.PdfPath : null;
+            Color tint = PageTheme.Tint(path);
+            blank = PageTheme.NeedsRemap(path) ? new Color(30f / 255, 29f / 255, 28f / 255) : tint;
+            return tint;
+        }
+
+        // ───────────── Paso de página: la hoja sigue a la mano, o rápido (pedido del usuario, 15 nov 2026) ─────────────
+
+        public const string QuickTurnPrefsKey = "folioxr.book.quickTurn";
+        /// <summary>
+        /// false (de fábrica): la hoja sigue a la mano y, con botones o pellizcos, pasa con calma.
+        /// true: la animación corta de antes; deslizar un dedo la dispara entera.
+        /// </summary>
+        public static bool QuickTurn => PlayerPrefs.GetInt(QuickTurnPrefsKey, 0) != 0;
+
+        public static void SetQuickTurn(bool quick)
+        {
+            PlayerPrefs.SetInt(QuickTurnPrefsKey, quick ? 1 : 0);
+            PlayerPrefs.Save();
+        }
+
+        /// <summary>Hoja que la mano está llevando de un lado al otro.</summary>
+        private sealed class HandTurn
+        {
+            public BookSpread Spread;                    // Doble página a la que lleva.
+            public bool TowardLeft, Released, Complete, Loaded, Applied, Landed, Restored;
+            public float Wanted, Shown, Velocity;
+            public int Width;
+            public Texture2D First, Second;
+            public PdfResult FirstResult, SecondResult;
+            public Texture2D NewLeft => Spread.Left == Spread.First ? First : Second;
+            public Texture2D NewRight => Spread.Right == Spread.First ? First : Second;
+
+            /// <summary>
+            /// Página de cada lado mientras la hoja está en el aire (tinta y marcadores): el lado del que sale ya
+            /// muestra la página nueva (si llegó) y el otro sigue con la de antes hasta que la hoja lo tape.
+            /// </summary>
+            public int Slot(int side, BookSpread shown)
+            {
+                int before = side < 0 ? shown.Left : shown.Right;
+                if (Restored) return before;                 // La hoja volvió a su lugar.
+                bool origin = (side > 0) == TowardLeft;
+                if (!origin) return Landed ? -1 : before;    // Ya apoyada, tapa la página de antes.
+                if (!Applied || FirstResult == null || !FirstResult.Ok) return -1;
+                return side < 0 ? Spread.Left : Spread.Right;
+            }
+        }
+
+        private HandTurn _handTurn;
+
+        /// <summary>Hay una hoja o la tapa en la mano: botones y pellizcos esperan.</summary>
+        public bool HandTurning => _handTurn != null || (Body != null && Body.Manual);
+        /// <summary>La mano todavía lleva la hoja (no la soltó ni terminó sola).</summary>
+        internal bool HandTurnHeld => _handTurn != null && !_handTurn.Released;
+
+        /// <summary>
+        /// Doble página a la que lleva pasar con la mano la hoja de ese lado (+1 derecha, −1 izquierda), o −1 si
+        /// no se puede. closes: es la primera página y pasar hacia atrás cierra el libro.
+        /// </summary>
+        internal int HandTurnTarget(int fromSide, out bool closes)
+        {
+            closes = false;
+            if (_busy || _renderer == null || !_spreadReady || Closed || HandTurning) return -1;
+            bool forward = (fromSide > 0) != RightToLeft;
+            int target = forward ? _shownSpread.Next(_pageCount) : _shownSpread.Previous;
+            if (target >= 0 && target != _leftIndex) return target;
+            closes = !forward;
+            return -1;
+        }
+
+        /// <summary>Levanta la hoja de ese lado para llevarla con <see cref="DragHandTurn"/>.</summary>
+        internal bool BeginHandTurn(int fromSide)
+        {
+            int target = HandTurnTarget(fromSide, out _);
+            if (target < 0 || leftPage == null || rightPage == null) return false;
+            if (_turn == null) _turn = PageTurnEffect.Create(leftPage);
+            if (_turn == null) return false;
+            _handTurn = new HandTurn
+            {
+                Spread = new BookSpread(target, _pageCount, SingleCover, RightToLeft),
+                TowardLeft = fromSide > 0,
+                Width = DesiredPageWidth()
+            };
+            StartCoroutine(TurnByHand(_handTurn));
+            return true;
+        }
+
+        /// <summary>Avance de la hoja en la mano: 0 = donde estaba, 1 = del otro lado.</summary>
+        internal void DragHandTurn(float t)
+        {
+            if (_handTurn != null && !_handTurn.Released) _handTurn.Wanted = Mathf.Clamp01(t);
+        }
+
+        /// <summary>La mano soltó la hoja: sigue sola hasta el otro lado o vuelve, según dónde quedó y con qué impulso.</summary>
+        internal void EndHandTurn(float velocity)
+        {
+            if (_handTurn == null || _handTurn.Released) return;
+            _handTurn.Released = true;
+            _handTurn.Velocity = Mathf.Clamp(velocity, -4f, 4f);
+            _handTurn.Complete = _handTurn.Shown + _handTurn.Velocity * 0.2f > 0.5f;
+        }
+
+        private IEnumerator LoadHandTurn(HandTurn turn)
+        {
+            float start = Time.realtimeSinceStartup;
+            PdfPageRenderer renderer = _renderer;
+            yield return renderer.RenderPage(turn.Spread.First, turn.Width, (t, r) => { turn.First = t; turn.FirstResult = r; });
+            if (turn.FirstResult.Ok && turn.Spread.Second >= 0)
+                yield return renderer.RenderPage(turn.Spread.Second, turn.Width, (t, r) => { turn.Second = t; turn.SecondResult = r; });
+            ReadingDiagnostics.Record("spread_ready_ms", (Time.realtimeSinceStartup - start) * 1000.0);
+            turn.Loaded = true;
+        }
+
+        private IEnumerator TurnByHand(HandTurn turn)
+        {
+            _busy = true;
+            _resolutionDirty = false;
+            Renderer origin = turn.TowardLeft ? rightPage : leftPage;
+            Texture2D leaving = turn.TowardLeft ? _rightTexture : _leftTexture;
+            int from = turn.TowardLeft ? 1 : -1;
+            Color tint = PaperTint(out Color blank);
+            _turn.Begin(turn.TowardLeft, leaving, null, rightPage.transform.localScale.x, rightPage.transform.localScale.y,
+                        gutter * 0.5f, Body != null ? Body.TiltRadians : 0f, Body != null ? Body.CurlDepth(from) : 0f,
+                        Body != null ? Body.CurlDepth(-from) : 0f, Body != null ? Body.CurlReach : 0f, tint, blank);
+            // Debajo de la hoja que se levanta, papel en blanco hasta que llegue la página nueva.
+            ShowPage(origin, null);
+            StartCoroutine(LoadHandTurn(turn));
+            while (true)
+            {
+                if (turn.Loaded && !turn.Applied)
+                {
+                    turn.Applied = true;
+                    if (!turn.FirstResult.Ok)
+                    {
+                        // No se pudo dibujar la página: la hoja vuelve sola a su lugar.
+                        turn.Released = true;
+                        turn.Complete = false;
+                    }
+                    else
+                    {
+                        ShowPage(origin, turn.TowardLeft ? turn.NewRight : turn.NewLeft);
+                        _turn.SetArriving(turn.TowardLeft ? turn.NewLeft : turn.NewRight, tint, blank);
+                    }
+                }
+                float dt = Time.deltaTime;
+                if (!turn.Released)
+                {
+                    // Filtro que quita el temblor del seguimiento de la mano: firme con la mano casi quieta
+                    // y rápido cuando la mano se mueve, para que la hoja no se atrase.
+                    float lag = Mathf.Lerp(0.09f, 0.03f, Mathf.Clamp01(Mathf.Abs(turn.Wanted - turn.Shown) * 10f));
+                    turn.Shown = Mathf.Lerp(turn.Shown, turn.Wanted, 1f - Mathf.Exp(-dt / lag));
+                    if (turn.Shown > 0.985f && turn.Wanted > 0.985f) { turn.Released = true; turn.Complete = true; }
+                }
+                else
+                {
+                    // Suelta, cae hacia el lado que le toca partiendo del impulso que traía.
+                    float direction = turn.Complete ? 1f : -1f;
+                    turn.Velocity = Mathf.Clamp(turn.Velocity + direction * 9f * dt, -5f, 5f);
+                    turn.Shown += turn.Velocity * dt;
+                    if (turn.Complete ? turn.Shown >= 1f : turn.Shown <= 0f)
+                    {
+                        turn.Shown = turn.Complete ? 1f : 0f;
+                        _turn.Pose(turn.Shown);
+                        break;
+                    }
+                }
+                _turn.Pose(turn.Shown);
+                yield return null;
+            }
+            // La hoja ya está apoyada. El dibujo de las páginas no se puede cortar: si la mano fue más rápida,
+            // se espera con el papel en blanco (al llegar) o con todo como estaba (al volver).
+            if (turn.Complete) turn.Landed = true;
             else
             {
-                int shownRight = right != null ? leftIndex + 2 : leftIndex + 1;
-                string preview = PdfPageRenderer.IsRealRendererAvailable
-                    ? string.Empty
-                    : "Vista previa del Editor: el PDF real solo se dibuja en el Quest.\n";
-                _lastPageStatus = preview + "Páginas " + (leftIndex + 1) +
-                          (right != null ? "-" + shownRight : string.Empty) + " de " + _pageCount +
-                          "\nSiguiente: A/X, pellizco derecho o deslizar un dedo por la hoja · Anterior: B/Y o pellizco izquierdo";
-                SetStatus(Closed ? ClosedStatus : _lastPageStatus);
+                ShowPage(origin, leaving);
+                _turn.End();
+                turn.Restored = true;
             }
-
+            while (!turn.Loaded) yield return null;
+            bool failed = !turn.FirstResult.Ok;
+            if (!turn.Complete || failed)
+            {
+                ShowPage(origin, leaving);
+                _turn.End();
+                if (turn.First != null) Destroy(turn.First);
+                if (turn.Second != null) Destroy(turn.Second);
+                _handTurn = null;
+                if (failed) ShowError(turn.FirstResult);
+                _busy = false;
+                yield break;
+            }
+            Texture2D newLeft = turn.NewLeft, newRight = turn.NewRight;
+            _leftIndex = turn.Spread.First;
+            _shownSpread = turn.Spread;
+            _renderedWidth = turn.Width;
+            _handTurn = null;
+            SpreadShown?.Invoke(_leftIndex, _pageCount);
+            if (turn.First.width > 0)
+            {
+                _aspectHeightOverWidth = turn.First.height / (float)turn.First.width;
+                ApplyLayout();
+            }
+            if (_leftTexture != null && _leftTexture != newLeft) Destroy(_leftTexture);
+            if (_rightTexture != null && _rightTexture != newRight) Destroy(_rightTexture);
+            _leftTexture = newLeft;
+            _rightTexture = newRight;
+            ShowPage(leftPage, newLeft);
+            ShowPage(rightPage, newRight);
+            _turn.End();
+            if (turn.SecondResult != null && !turn.SecondResult.Ok) ShowError(turn.SecondResult);
+            else ShowPageStatus(_leftIndex, turn.Second != null);
             _busy = false;
         }
 

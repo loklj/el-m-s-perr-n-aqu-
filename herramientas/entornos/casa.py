@@ -2,7 +2,7 @@
 # de lectura siguen saliendo de ese archivo); aquí solo se hace lo que se ve, con más detalle.
 import math
 import numpy as np
-from fx import Geo, Group, TRS, T, Euler, Sc, _cyl
+from fx import Geo, Group, TRS, T, Euler, Sc, SWAP, _cyl
 
 LIBROS_CALIDOS = [(0.27, 0.40, 0.47), (0.66, 0.33, 0.23), (0.72, 0.60, 0.37), (0.35, 0.48, 0.35),
                   (0.47, 0.35, 0.43), (0.84, 0.76, 0.61), (0.32, 0.48, 0.53), (0.57, 0.44, 0.29)]
@@ -11,8 +11,13 @@ LIBROS_OSCUROS = [(0.20, 0.24, 0.32), (0.48, 0.18, 0.16), (0.55, 0.45, 0.25), (0
 
 
 class Casa:
-    def __init__(self, g: Geo, tema):
+    def __init__(self, g: Geo, tema, estantes='vacios'):
+        """estantes: 'vacios' (sin libros ni adornos: ahí van los libros de la persona) o 'marcados' (se
+        generan con marca = 1, como en los primeros horneados; generar.py los usa para repetir el atlas)."""
         self.g, self.t = g, tema
+        self.estantes = estantes
+        self.laterales = []  # (caja de antes, caja nueva) de cada lateral de estantería, en Blender
+        self.frentes = []    # (estantería, tabla, centro en Blender) del canto delantero de cada tabla
         self.h = tema['alto']
         self.wall = 0.18
         self.rng = np.random.default_rng(tema['semilla'])
@@ -228,14 +233,31 @@ class Casa:
                        color=(tono, tono * self.rnd(0.95, 1.1), tono * 0.9), peso=0.9)
 
     def estante(self, origen, ancho, yaw):
+        """Estantería vacía (pedido del usuario, 15 nov 2026): los libros los deja la persona donde quiera.
+        Los libros y adornos de antes se siguen sorteando para que el resto de la casa no cambie; solo se
+        dibujan con estantes='marcados'. La madera lleva marca = 2 (laterales, 3) y lo que la llenaba, 1."""
         g = self.g
         grp = Group(origen, yaw)
         paso = 0.38
-        g.box('madera', (0, 1.18, 0.22), (ancho, 2.36, 0.07), group=grp, grano=(0, 0, 1))
+        llenar = self.estantes == 'marcados'
+        g.box('madera', (0, 1.18, 0.22), (ancho, 2.36, 0.07), group=grp, grano=(0, 0, 1), marca=2)
         for lado in range(2):
-            g.box('madera', ((lado - 0.5) * (ancho - 0.08), 1.18, 0), (0.08, 2.36, 0.5), group=grp)
+            # Los laterales sobresalen 3 mm de las tablas (al frente y al costado): antes sus caras quedaban
+            # en el mismo plano que los cantos de las tablas y el horneado dejaba cuadritos negros.
+            de_antes = (((lado - 0.5) * (ancho - 0.08), 1.18, 0), (0.08, 2.36, 0.5))
+            signo = lado * 2 - 1
+            saliente = (((lado - 0.5) * (ancho - 0.08) + signo * 0.0015, 1.18, -0.0015), (0.083, 2.36, 0.503))
+            if llenar:
+                # Misma caja que en el primer horneado (el atlas no cambia); generar.py la lleva a la nueva.
+                self.laterales.append(tuple(SWAP @ (g.plan @ grp @ TRS(p, (0, 0, 0), t_)) @ SWAP for p, t_ in (de_antes, saliente)))
+            p, t_ = de_antes if llenar else saliente
+            g.box('madera', p, t_, group=grp, marca=3)
+        numero = len(self.frentes) // 7
         for fila in range(7):
-            g.box('madera', (0, 0.08 + fila * paso, 0), (ancho, 0.055, 0.5), group=grp)
+            g.box('madera', (0, 0.08 + fila * paso, 0), (ancho, 0.055, 0.5), group=grp, marca=2)
+            # El canto delantero mira a la sala como los lomos: su luz horneada dice cuánta luz llega a esa fila.
+            centro = SWAP @ (g.plan @ grp @ T((0, 0.08 + fila * paso, -0.25))) @ SWAP
+            self.frentes.append((numero, fila, centro[:3, 3].copy()))
         dens = self.t.get('muebles', 1.0)
         for fila in range(6):
             x = -ancho * 0.5 + 0.10
@@ -250,18 +272,22 @@ class Casa:
                 if hueco and self.rnd() < 0.04:
                     # Hueco con un adorno o libros acostados.
                     if self.rnd() < 0.5:
-                        g.cyl('maceta', (x + 0.09, 0.108 + fila * paso + 0.09, -0.03), (0.11, 0.18, 0.11),
-                              group=grp, n=14, r1=0.3)
+                        if llenar:
+                            g.cyl('maceta', (x + 0.09, 0.108 + fila * paso + 0.09, -0.03), (0.11, 0.18, 0.11),
+                                  group=grp, n=14, r1=0.3, marca=1)
                     else:
                         for k in range(3):
                             ck = np.array(self.libros[int(self.rnd(0, 8))])
-                            g.box('libros', (x + 0.12, 0.108 + fila * paso + 0.018 + k * 0.034, -0.03),
-                                  (0.24, 0.032, 0.17), e=(0, self.rnd(-8, 8), 0), group=grp, color=tuple(ck), peso=0.6)
+                            giro = self.rnd(-8, 8)
+                            if llenar:
+                                g.box('libros', (x + 0.12, 0.108 + fila * paso + 0.018 + k * 0.034, -0.03),
+                                      (0.24, 0.032, 0.17), e=(0, giro, 0), group=grp, color=tuple(ck), peso=0.6, marca=1)
                     x += 0.27
                     continue
                 if self.rnd() < 0.06: tilt = self.rnd(6, 13)
-                g.box('libros', (x + bw * 0.5 + (alto * 0.5 * math.sin(math.radians(tilt))), 0.108 + fila * paso + alto * 0.5, -0.20 + fondo * 0.5),
-                      (bw, alto, fondo), e=(0, 0, -tilt), group=grp, color=tuple(c), peso=0.6, tapa=(tilt == 0))
+                if llenar:
+                    g.box('libros', (x + bw * 0.5 + (alto * 0.5 * math.sin(math.radians(tilt))), 0.108 + fila * paso + alto * 0.5, -0.20 + fondo * 0.5),
+                          (bw, alto, fondo), e=(0, 0, -tilt), group=grp, color=tuple(c), peso=0.6, tapa=(tilt == 0), marca=1)
                 x += bw + 0.004 + (alto * math.sin(math.radians(tilt)) if tilt else 0)
 
     def cuadro(self, pos, ancho, alto, yaw, tono=(1, 1, 1)):

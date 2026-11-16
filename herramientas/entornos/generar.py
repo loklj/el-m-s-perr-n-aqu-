@@ -39,7 +39,7 @@ def ub(p):
 
 
 # ───────────── Escena ─────────────
-def escena(t, lejos=True):
+def escena(t, lejos=True, estantes='vacios'):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     # Los archivos temporales de Cycles (cientos de MB por horneado) van junto a la caché, no a /tmp:
     # así basta con FOLIO_CACHE para usar un disco con espacio.
@@ -62,19 +62,26 @@ def escena(t, lejos=True):
     sc.render.image_settings.color_depth = '32'
     sc.render.resolution_percentage = 100
     g = fx.Geo((t['ancho'] / 12, t['fondo'] / 10))
-    c = casa.Casa(g, t).construir()
+    c = casa.Casa(g, t, estantes).construir()
     P = paisaje.Paisaje(t).construir()
     casa_objs = g.build()
+    faltan = None
+    if estantes == 'marcados':
+        # Caras de la madera de las estanterías que los libros tapaban del todo y por eso se quitaban:
+        # con el estante vacío hacen falta. Quedan en un objeto aparte, fuera del atlas de siempre.
+        faltan = _copia_marcada(casa_objs)
+        fx.remove_hidden([faltan], [b for b, m in zip(g.boxes, g.box_marca) if m != 1])
     quitadas = fx.remove_hidden(casa_objs, g.boxes)
+    if faltan is not None: _dejar_las_que_faltan(faltan, casa_objs)
     cerca = P.g.build()
     lejos_objs = P.lejos.build()
     mats = materiales.crear(t)
     mats.update(paisaje.materiales(t))
     var_objs = [gv.build() for gv in P.far_variants] if lejos else []
-    for o in casa_objs + cerca + lejos_objs + [x for grp in var_objs for x in grp]:
+    for o in casa_objs + cerca + lejos_objs + [x for grp in var_objs for x in grp] + ([faltan] if faltan else []):
         o.data.materials.append(mats[o['mat']])
     inst = paisaje.instanciar(var_objs, P.far_points) if lejos else []
-    ctx = dict(t=t, casa=c, P=P, casa_objs=casa_objs, cerca=cerca, lejos=lejos_objs, inst=inst, mats=mats)
+    ctx = dict(t=t, casa=c, P=P, casa_objs=casa_objs, cerca=cerca, lejos=lejos_objs, inst=inst, mats=mats, faltan=faltan)
     log(f"casa: {sum(len(o.data.polygons) for o in casa_objs)} caras ({quitadas} tapadas quitadas); "
         f"cerca: {sum(len(o.data.polygons) for o in cerca)}; árboles lejanos: {len(P.far_points[0])}")
     mundo(ctx)
@@ -466,6 +473,14 @@ def panorama(ctx, ancho, spp, E):
     return rgb, ojo
 
 
+def vistas_estantes(t):
+    """Ojo y dirección frente a cada estantería (biblioteca y la del rincón de la escalera)."""
+    sx, sz = t['ancho'] / 12, t['fondo'] / 10
+    return {'estante1': ((1.7 * sx, 1.45, 2.25 * sz), (0, -0.05, 1)),
+            'estante2': ((3.35 * sx, 1.45, -3.25 * sz), (1, -0.05, 0)),
+            'estante1cerca': ((1.0 * sx, 1.35, 3.55 * sz), (0.25, -0.1, 1))}
+
+
 def comprobar(ctx, objs_tex, pano_jpg, nombres, ojo):
     """Vista «como en Unity»: mallas con su textura horneada sin luz y el panorama de fondo."""
     sc = bpy.context.scene
@@ -493,6 +508,7 @@ def comprobar(ctx, objs_tex, pano_jpg, nombres, ojo):
     co = camara()
     pts = {n: (e, d) for n, e, d in ctx['casa'].puntos()}
     pts.update({'jardin': ((2.5, 1.6, -12.5), (-0.5, 0.05, 0.8)), 'arriba': ((-16, 9, -20), (0.55, -0.3, 0.75))})
+    pts.update(vistas_estantes(ctx['t']))
     for n in nombres:
         mirar(co, *pts[n])
         sc.render.resolution_x, sc.render.resolution_y = 1100, 680
@@ -500,6 +516,258 @@ def comprobar(ctx, objs_tex, pano_jpg, nombres, ojo):
         sc.render.filepath = f'{CACHE}/final_{ctx["t"]["slug"]}_{n}.jpg'
         bpy.ops.render.render(write_still=True)
         log('comprobación', sc.render.filepath)
+
+# ───────────── Estanterías vacías sobre un tema ya horneado ─────────────
+MADERA_ESTANTE = (2, 3)   # Marcas de fx.Geo: 1 = libros y adornos pintados, 2 = madera, 3 = laterales.
+
+
+def _marcas(me):
+    a = np.zeros(len(me.polygons), np.int32)
+    capa = me.attributes.get('marca')
+    if capa is not None: capa.data.foreach_get('value', a)
+    return a
+
+
+def _quitar_caras(ob, fuera):
+    """Borra de la malla las caras que cumplen «fuera» (recibe la cara de bmesh y su marca).
+    Las UV y los atributos de las demás no cambian."""
+    import bmesh
+    me = ob.data
+    bm = bmesh.new(); bm.from_mesh(me); bm.faces.ensure_lookup_table()
+    capa = bm.faces.layers.int['marca']
+    caras = [f for f in bm.faces if fuera(f, f[capa])]
+    bmesh.ops.delete(bm, geom=caras, context='FACES')
+    bm.to_mesh(me); bm.free(); me.update()
+    return len(caras)
+
+
+def _copia(ob, nombre):
+    otro = ob.copy(); otro.data = ob.data.copy(); otro.name = nombre
+    bpy.context.scene.collection.objects.link(otro)
+    for k in ('atlas', 'peso', 'doble', 'mat', 'uv_propia'):
+        if k in ob: otro[k] = ob[k]
+    return otro
+
+
+def _copia_marcada(objs):
+    """Copia, en un objeto aparte, de toda la madera de las estanterías (antes de quitar caras tapadas)."""
+    con = [o for o in objs if np.isin(_marcas(o.data), MADERA_ESTANTE).any()]
+    if len(con) != 1: raise SystemExit(f'se esperaba la madera de las estanterías en un solo grupo y hay {len(con)}')
+    otro = _copia(con[0], 'faltan')
+    _quitar_caras(otro, lambda f, m: m not in MADERA_ESTANTE)
+    return otro
+
+
+def _clave(centro, normal):
+    return tuple(np.round(np.asarray(centro) * 1e4).astype(np.int64)) + tuple(np.round(np.asarray(normal) * 10).astype(np.int64))
+
+
+def _dejar_las_que_faltan(faltan, objs):
+    """Deja en «faltan» solo las caras que no están en la casa (las que los libros tapaban)."""
+    estan = set()
+    for o in objs:
+        m = _marcas(o.data)
+        for poly in o.data.polygons:
+            if m[poly.index] in MADERA_ESTANTE: estan.add(_clave(poly.center, poly.normal))
+    _quitar_caras(faltan, lambda f, m: _clave(f.calc_center_median(), f.normal) in estan)
+
+
+def _texels(me, tam):
+    """Texels del atlas que ocupan las caras de la malla (fila 0 abajo, como las imágenes de Blender)."""
+    uv = _uv(me)
+    n = len(me.polygons)
+    ls = np.empty(n, np.int32); me.polygons.foreach_get('loop_start', ls)
+    lt = np.empty(n, np.int32); me.polygons.foreach_get('loop_total', lt)
+    m = np.zeros((tam, tam), np.uint8)
+    pts = np.round((uv * tam - 0.5) * 16).astype(np.int32)      # El centro del texel i está en i + 0,5.
+    for a_, c_ in zip(ls, lt):
+        cv2.fillConvexPoly(m, pts[a_:a_ + c_], 1, shift=4)
+    return m
+
+
+def _densidad(me, tam):
+    """Texels por metro de las caras de una malla ya ubicada en el atlas."""
+    uv = _uv(me)
+    n = len(me.polygons)
+    a3 = np.empty(n, np.float32); me.polygons.foreach_get('area', a3)
+    ls = np.empty(n, np.int32); me.polygons.foreach_get('loop_start', ls)
+    lt = np.empty(n, np.int32); me.polygons.foreach_get('loop_total', lt)
+    nxt = np.arange(len(uv)) + 1
+    nxt[ls + lt - 1] = ls
+    cruz = uv[:, 0] * uv[nxt, 1] - uv[nxt, 0] * uv[:, 1]
+    auv = np.abs(np.add.reduceat(cruz, ls)) * 0.5
+    return math.sqrt(float(auv.sum()) / max(1e-9, float(a3.sum()))) * tam
+
+
+def _mover_laterales(ob, laterales):
+    """Lleva cada lateral de estantería de su caja de antes a la que sobresale 3 mm (las UV no cambian)."""
+    me = ob.data
+    co = np.empty(len(me.vertices) * 3, np.float64); me.vertices.foreach_get('co', co)
+    co = co.reshape(-1, 3)
+    m = _marcas(me)
+    usados = sorted({v for poly in me.polygons if m[poly.index] == 3 for v in poly.vertices})
+    if not usados: return 0
+    idx = np.array(usados)
+    movidos = 0
+    for antes, despues in laterales:
+        loc = (np.c_[co[idx], np.ones(len(idx))] @ np.linalg.inv(antes).T)[:, :3]
+        dentro = np.all(np.abs(loc) <= 0.5 + 1e-4, axis=1)
+        co[idx[dentro]] = (np.c_[loc[dentro], np.ones(int(dentro.sum()))] @ despues.T)[:, :3]
+        movidos += int(dentro.sum())
+    me.vertices.foreach_set('co', co.ravel()); me.update()
+    return movidos
+
+
+def _ubicar(ob, ocupado, tam, dens, margen=5):
+    """Da a cada cara (rectángulo) de «ob» un lugar libre del atlas, a «dens» texels por metro.
+    ocupado: texels ya usados (se actualiza). Devuelve cuántas caras ubicó."""
+    me = ob.data
+    n = len(me.polygons)
+    if n == 0: return 0
+    uv = _uv(me).astype(np.float64)
+    co = np.empty(len(me.vertices) * 3, np.float64); me.vertices.foreach_get('co', co)
+    co = co.reshape(-1, 3)
+    lv = np.empty(len(me.loops), np.int32); me.loops.foreach_get('vertex_index', lv)
+    occ = (cv2.dilate(ocupado, np.ones((7, 7), np.uint8)) > 0).astype(np.int32)
+    orden = sorted(range(n), key=lambda i: -me.polygons[i].area)
+    for i in orden:
+        poly = me.polygons[i]
+        if poly.loop_total != 4: raise SystemExit('una cara de estantería que falta no es un rectángulo')
+        ls = poly.loop_start
+        p = co[lv[ls:ls + 4]]
+        w, h = np.linalg.norm(p[1] - p[0]) * dens, np.linalg.norm(p[3] - p[0]) * dens
+        puesto = False
+        for girar in (False, True):
+            a_, b_ = (w, h) if not girar else (h, w)
+            A, B = int(math.ceil(a_)) + 2 * margen, int(math.ceil(b_)) + 2 * margen
+            if A > tam or B > tam: continue
+            I = np.zeros((tam + 1, tam + 1), np.int64)
+            I[1:, 1:] = occ.cumsum(0).cumsum(1)
+            S = I[B:, A:] - I[:-B, A:] - I[B:, :-A] + I[:-B, :-A]
+            ys, xs = np.nonzero(S == 0)
+            if not len(ys): continue
+            y0, x0 = int(ys[0]), int(xs[0])
+            occ[y0:y0 + B, x0:x0 + A] = 1
+            ocupado[y0 + margen:y0 + B - margen, x0 + margen:x0 + A - margen] = 1
+            x0 += margen; y0 += margen
+            esquinas = ([(x0, y0), (x0 + w, y0), (x0 + w, y0 + h), (x0, y0 + h)] if not girar else
+                        [(x0, y0), (x0, y0 + w), (x0 + h, y0 + w), (x0 + h, y0)])
+            uv[ls:ls + 4] = np.array(esquinas) / tam
+            puesto = True
+            break
+        if not puesto: raise SystemExit('no queda lugar en el atlas para una cara de estantería; hay que hornear el tema entero (--todo)')
+    me.uv_layers.active.data.foreach_set('uv', uv.astype(np.float32).ravel())
+    return n
+
+
+def luz_de_estantes(ob, luz, casa_, t, E, tam):
+    """Luz que llega a cada fila de las estanterías, para teñir en Unity los libros que deja la persona
+    (se dibujan sin luz). Sale del canto delantero de las tablas, que mira a la sala como los lomos.
+    Devuelve 36 números: por estantería (biblioteca, rincón) y fila (de abajo hacia arriba), el factor
+    rojo, verde y azul por el que se multiplica el color del libro en pantalla."""
+    me = ob.data
+    m = _marcas(me)
+    uv = _uv(me)
+    centros = np.array([p.center[:] for p in me.polygons])
+    normales = np.array([p.normal[:] for p in me.polygons])
+    madera = np.array(materiales.lin(t['madera']))[:3] * 0.9
+    por_tabla = {}
+    for numero, fila, centro in casa_.frentes:
+        d = np.linalg.norm(centros - centro, axis=1)
+        d[~np.isin(m, MADERA_ESTANTE)] = 1e9
+        i = int(np.argmin(d))
+        if d[i] > 2e-3: continue
+        poly = me.polygons[i]
+        pts = np.round((uv[poly.loop_start:poly.loop_start + poly.loop_total] * tam - 0.5) * 16).astype(np.int32)
+        mask = np.zeros((tam, tam), np.uint8)
+        cv2.fillConvexPoly(mask, pts, 1, shift=4)
+        mask = cv2.erode(mask, np.ones((3, 3), np.uint8)) > 0
+        if mask.sum() < 20: continue
+        por_tabla[(numero, fila)] = luz[mask].mean(0) / madera
+    k = 0.35                                    # Un libro de color medio.
+    ref = 1.055 * k ** (1 / 2.4) - 0.055
+    fuera = []
+    for numero in range(2):
+        for fila in range(6):
+            cerca = [por_tabla[c] for c in ((numero, fila), (numero, fila + 1)) if c in por_tabla]
+            if not cerca: fuera += [1.0, 1.0, 1.0]; continue
+            y = cielo.aces(np.mean(cerca, 0) * k * E)
+            y = np.where(y <= 0.0031308, y * 12.92, 1.055 * np.power(np.maximum(y, 1e-9), 1 / 2.4) - 0.055)
+            fuera += [round(float(v), 3) for v in np.clip(y / ref, 0.04, 1.25)]
+    return fuera
+
+
+def vaciar_estantes(t, a):
+    """Quita de un tema ya horneado lo que llenaba las estanterías (libros y adornos pintados) sin rehacer
+    el atlas: repite la casa con el mismo reparto de UV, borra esas caras, hornea de nuevo solo la madera de
+    las estanterías (antes quedaba en sombra detrás de los libros) y la pega en casa_luz.jpg."""
+    t0 = time.time()
+    slug = t['slug']
+    out = os.path.join(SALIDA, slug)
+    datos = json.load(open(f'{out}/datos.json'))
+    E, tam = float(datos['exposicion']), int(datos['atlas'])
+    # Originales: se guardan la primera vez para poder repetir el paso.
+    origen = os.path.join(CACHE, 'original', slug)
+    os.makedirs(origen, exist_ok=True)
+    for nombre in ('casa_malla.bytes', 'casa_luz.jpg'):
+        if not os.path.exists(f'{origen}/{nombre}'):
+            with open(f'{out}/{nombre}', 'rb') as f, open(f'{origen}/{nombre}', 'wb') as g_: g_.write(f.read())
+    ctx = escena(t, lejos=False, estantes='marcados')
+    for o in ctx['lejos']:
+        if o.name.startswith('terreno_dentro'): o.hide_render = True
+    ctx['E'] = E
+    casa_ob = unir_y_empaquetar(ctx['casa_objs'], 'casa', tam)
+    cerca_ob = unir_y_empaquetar(ctx['cerca'], 'cerca', tam)
+    prueba = f'{CACHE}/{slug}_prueba.bytes'
+    exportar(casa_ob, prueba)
+    if open(prueba, 'rb').read() != open(f'{origen}/casa_malla.bytes', 'rb').read():
+        raise SystemExit(f'{slug}: la casa generada no coincide con la malla horneada; hay que hornear el tema entero (--todo).')
+    os.remove(prueba)
+    marcas = _marcas(casa_ob.data)
+    faltan = ctx['faltan']
+    log(f'{slug}: {int((marcas == 1).sum())} caras de libros y adornos, {int(np.isin(marcas, MADERA_ESTANTE).sum())} de madera '
+        f'de estantería y {len(faltan.data.polygons)} que los libros tapaban')
+    estantes = _copia(casa_ob, 'estantes')
+    _quitar_caras(estantes, lambda f, m: m not in MADERA_ESTANTE)
+    _quitar_caras(casa_ob, lambda f, m: m != 0)
+    ajeno = _texels(casa_ob.data, tam)
+    if len(faltan.data.polygons):
+        desenvolver(faltan)
+        ocupado = np.maximum(ajeno, _texels(estantes.data, tam))
+        _ubicar(faltan, ocupado, tam, _densidad(estantes.data, tam))
+        _activar(estantes); faltan.select_set(True)
+        bpy.ops.object.join()
+        estantes = bpy.context.view_layer.objects.active
+    else:
+        bpy.data.objects.remove(faltan)
+    movidos = _mover_laterales(estantes, ctx['casa'].laterales)
+    log(f'{slug}: {movidos} vértices de laterales movidos')
+    luz = horneado_guardado(estantes, tam, a.spp, f'{CACHE}/{slug}_estantes_{tam}.npy')
+    datos['luz_estantes'] = luz_de_estantes(estantes, luz, ctx['casa'], t, E, tam)
+    log(f'{slug}: luz de las filas (biblioteca, de abajo hacia arriba): ' + ' '.join(f'{v:.2f}' for v in datos['luz_estantes'][1:18:3])
+        + ' · rincón: ' + ' '.join(f'{v:.2f}' for v in datos['luz_estantes'][19:36:3]))
+    propio = _texels(estantes.data, tam) > 0
+    cerca_de = cv2.dilate(propio.astype(np.uint8), np.ones((7, 7), np.uint8)) > 0
+    libre = cv2.dilate(ajeno, np.ones((3, 3), np.uint8)) == 0
+    donde = propio | (cerca_de & libre)
+    atlas = cv2.imread(f'{origen}/casa_luz.jpg')[::-1, :, ::-1].copy()
+    if atlas.shape[0] != tam: raise SystemExit(f'{slug}: casa_luz.jpg mide {atlas.shape[0]} px y se esperaban {tam}.')
+    atlas[donde] = cielo.a_srgb(luz, E)[donde]
+    guardar_jpg(f'{out}/casa_luz.jpg', atlas, 93)
+    log(f'{slug}: {int(donde.sum())} texels nuevos ({donde.mean() * 100:.1f} % del atlas)')
+    # La malla sale sin los libros pintados; la madera vuelve a ser parte de la casa.
+    _activar(casa_ob); estantes.select_set(True)
+    bpy.ops.object.join()
+    casa_ob = bpy.context.view_layer.objects.active
+    tris = exportar(casa_ob, f'{out}/casa_malla.bytes')
+    with open(f'{out}/cerca_malla.bytes', 'rb') as f: f.seek(8); tris += int(np.frombuffer(f.read(4), np.uint32)[0]) // 3
+    datos['triangulos'] = int(tris)
+    with open(f'{out}/datos.json', 'w') as f: json.dump(datos, f, indent=1)
+    ojo = tuple(datos['ojo'])
+    comprobar(ctx, [(casa_ob, f'{out}/casa_luz.jpg'), (cerca_ob, f'{out}/cerca_luz.jpg')], f'{out}/cielo.jpg',
+              ['estante1', 'estante2', 'estante1cerca'], ojo)
+    log(f'{slug}: estanterías vacías en {(time.time() - t0) / 60:.1f} min')
+    memoria()
 
 
 def memoria():
@@ -550,7 +818,8 @@ def todo(t, a):
     guardar_jpg(f'{out}/cielo.jpg', cielo.a_srgb(pano, E), 92)
     datos = dict(tema=slug, exposicion=E, ojo=list(ojo), triangulos=int(tris), atlas=a.tam, panorama=a.pano,
                  texels_casa=casa_ob['texels'], texels_cerca=cerca_ob['texels'],
-                 sol=[float(v) for v in cielo.sol(t)[[0, 2, 1]]])
+                 sol=[float(v) for v in cielo.sol(t)[[0, 2, 1]]],
+                 luz_estantes=luz_de_estantes(casa_ob, luz_casa, ctx['casa'], t, E, a.tam))
     with open(f'{out}/datos.json', 'w') as f: json.dump(datos, f, indent=1)
     comprobar(ctx, [(casa_ob, f'{out}/casa_luz.jpg'), (cerca_ob, f'{out}/cerca_luz.jpg')], f'{out}/cielo.jpg',
               a.vista.split(','), ojo)
@@ -563,7 +832,9 @@ if __name__ == '__main__':
     ap.add_argument('tema')
     ap.add_argument('--vista', default='sofa,terraza,cama,jardin')
     ap.add_argument('--todo', action='store_true')
-    ap.add_argument('--solo', choices=['casa', 'cerca', 'pano'], help='hornea solo ese atlas y termina (se guarda en caché)')
+    ap.add_argument('--solo', choices=['casa', 'cerca', 'pano', 'estantes'],
+                    help='hornea solo ese atlas y termina (se guarda en caché); pano rehace el cielo; estantes vacía '
+                         'las estanterías de un tema ya horneado')
     ap.add_argument('--tam', type=int, default=4096)
     ap.add_argument('--spp', type=int, default=28)
     ap.add_argument('--pano', type=int, default=6144)
@@ -573,7 +844,8 @@ if __name__ == '__main__':
     a = ap.parse_args()
     os.makedirs(CACHE, exist_ok=True)
     tema = temas.POR_SLUG[a.tema]
-    if a.todo or a.solo: todo(tema, a)
+    if a.solo == 'estantes': vaciar_estantes(tema, a)
+    elif a.todo or a.solo: todo(tema, a)
     else:
         ctx = escena(tema)
         for o in ctx['lejos']:

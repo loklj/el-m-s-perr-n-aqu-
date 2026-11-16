@@ -22,21 +22,32 @@ namespace FolioXR.Environments
 
     /// <summary>Raíz y puntos locales. Posee exclusivamente los recursos creados por Build.</summary>
     /// <summary>
-    /// Una fila de la estantería de la biblioteca donde caben los libros del usuario (encargo 18). Coordenadas
-    /// locales de la raíz de la casa: Left y Right sobre la tabla, en el borde delantero de los libros pintados.
+    /// Una fila de una estantería de la casa, para los libros de la persona (encargo 18; vacías desde el 15 nov
+    /// 2026). Coordenadas locales de la raíz de la casa: Left y Right sobre la tabla, en el plano de los lomos.
     /// </summary>
     public sealed class ShelfRow
     {
         public Vector3 Left { get; }
         public Vector3 Right { get; }
         public Vector3 Facing { get; }
-        public ShelfRow(Vector3 left, Vector3 right, Vector3 facing) { Left = left; Right = right; Facing = facing; }
+        /// <summary>Estantería (0 = biblioteca, 1 = rincón de la escalera) y fila contada desde abajo (0 a 5).</summary>
+        public int Shelf { get; }
+        public int Level { get; }
+        /// <summary>
+        /// Luz horneada que llega a la fila (datos.json, «luz_estantes»): tiñe los libros de la persona, que se
+        /// dibujan sin luz, para que no brillen en una estantería en penumbra.
+        /// </summary>
+        public Color Light { get; internal set; } = Color.white;
+        public ShelfRow(Vector3 left, Vector3 right, Vector3 facing, int shelf = 0, int level = 0)
+        {
+            Left = left; Right = right; Facing = facing; Shelf = shelf; Level = level;
+        }
     }
 
     public sealed class HouseBuildResult : IDisposable
     {
         public GameObject Root { get; internal set; }
-        /// <summary>Filas libres para la estantería 3D, de la más cómoda a la menos cómoda.</summary>
+        /// <summary>Filas de las estanterías (biblioteca y rincón), de la más cómoda a la menos cómoda.</summary>
         public IReadOnlyList<ShelfRow> ShelfRows { get; internal set; } = Array.Empty<ShelfRow>();
         public IReadOnlyList<ReadingPoint> ReadingPoints { get; internal set; }
         public int TriangleCount { get; internal set; }

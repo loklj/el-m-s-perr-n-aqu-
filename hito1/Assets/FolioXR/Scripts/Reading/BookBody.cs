@@ -36,14 +36,20 @@ namespace FolioXR.Reading
         private float _baseCurlL, _baseCurlR, _fold, _builtCurl = -1f, _nextSweep;
         private bool _contentsHidden, _built;
 
+        /// <summary>La mano está llevando la tapa (cerrar o abrir): el pliegue no se mueve solo.</summary>
+        public bool Manual { get; private set; }
+
         /// <summary>Libro cerrado: la mitad de la portada se pliega sobre la otra y queda la tapa a la vista.</summary>
         public bool Closed { get; private set; }
-        public bool Folding => _fold > 0.001f && _fold < 0.999f;
+        public bool Folding => Manual || (_fold > 0.001f && _fold < 0.999f);
         /// <summary>Lado que no se mueve al cerrar (+1 derecha, -1 izquierda): ahí queda el libro cerrado.</summary>
         public int RestSide => _book != null && _book.RightToLeft ? -1 : 1;
         /// <summary>Inclinación de cada mitad con el libro abierto (para la hoja que pasa).</summary>
         public float TiltRadians => TiltDegrees * Mathf.Deg2Rad;
         public bool HardCover => _shape.Hard;
+        /// <summary>Hundimiento actual de la hoja de ese lado junto al lomo, y hasta dónde llega (fracción del ancho).</summary>
+        public float CurlDepth(int side) => _shape.CurlDepth(side);
+        public float CurlReach => _shape.Reach;
 
         internal static BookBody Attach(FolioBook book)
         {
@@ -180,13 +186,34 @@ namespace FolioXR.Reading
         /// <summary>Cierra o abre el libro (animado salvo instant o «reducir movimiento»).</summary>
         public void SetClosed(bool closed, bool instant = false)
         {
+            Manual = false;
             Closed = closed;
             if (instant || FolioXR.Accessibility.FolioAccessibility.ReduceMotion) _fold = closed ? 1f : 0f;
             ApplyFold();
         }
 
+        /// <summary>
+        /// La tapa sigue a la mano: s = 0 abierto, 1 cerrado, lineal en el ángulo de la mitad que se pliega.
+        /// Hasta EndManualFold el libro sigue contando como estaba (abierto o cerrado).
+        /// </summary>
+        internal void SetManualFold(float s)
+        {
+            Manual = true;
+            // ApplyFold suaviza el pliegue con SmoothStep: aquí se deshace para que el ángulo sea el de la mano.
+            _fold = PageTurnShape.InverseSmoothStep(s);
+            ApplyFold();
+        }
+
+        /// <summary>La mano soltó la tapa: termina sola de cerrarse o de abrirse desde donde quedó.</summary>
+        internal void EndManualFold(bool closed)
+        {
+            Manual = false;
+            Closed = closed;
+        }
+
         private void Update()
         {
+            if (Manual) return;
             float target = Closed ? 1f : 0f;
             if (!Mathf.Approximately(_fold, target))
             {

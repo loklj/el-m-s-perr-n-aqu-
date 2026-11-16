@@ -342,6 +342,17 @@ namespace FolioXR.Reading
             return string.Join("\n", lines);
         }
 
+        // La fuente rehace su textura cuando entran letras nuevas. El material propio de los títulos debe
+        // apuntar a la nueva: si no, las letras recién agregadas no se ven (en el visor le faltaba la «C»
+        // a un título, 15 nov 2026).
+        private void OnEnable() { Font.textureRebuilt += OnFontRebuilt; }
+        private void OnDisable() { Font.textureRebuilt -= OnFontRebuilt; }
+
+        private void OnFontRebuilt(Font font)
+        {
+            if (font == _font && _textMaterial != null) _textMaterial.mainTexture = _font.material.mainTexture;
+        }
+
         private void OnDestroy()
         {
             if (_leather != null) Destroy(_leather);

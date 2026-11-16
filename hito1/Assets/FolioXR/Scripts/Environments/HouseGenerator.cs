@@ -221,8 +221,10 @@ namespace FolioXR.Environments
                 Table(new Vector3(0.55f, 0f, -1.0f), 0.55f, 0.55f, 0.53f);
                 Lamp(new Vector3(0.5f, 0f, -0.1f));
                 Bookshelf(new Vector3(1.7f, 0f, 4.55f), 3.2f, 0f);
-                ShelfRows(new Vector3(1.7f, 0f, 4.55f), 3.2f, 0f);
                 Bookshelf(new Vector3(5.55f, 0f, -3.25f), 2.6f, 90f);
+                // Filas para los libros de la persona: primero la biblioteca, después la estantería del rincón.
+                ShelfRows(new Vector3(1.7f, 0f, 4.55f), 3.2f, 0f);
+                ShelfRows(new Vector3(5.55f, 0f, -3.25f), 2.6f, 90f);
                 B(Cream, new Vector3(2.1f, 0.006f, 1.1f), new Vector3(2.7f, 0.012f, 3f), true);
                 // Cama orientada al balcón, con cabecera, colchón, manta y dos almohadas.
                 Vector3 bed = new Vector3(-2.8f, h, 1.25f);
@@ -253,16 +255,22 @@ namespace FolioXR.Environments
                     Plant(new Vector3(-5.15f + i * 0.9f, 0f, 4.1f), 0.65f + 0.15f * Next());
             }
 
+            /// <summary>
+            /// Estantería vacía (pedido del usuario, 15 nov 2026): los libros los deja la persona donde quiera
+            /// (BookShelf). Los laterales sobresalen 3 mm de las tablas, como en la versión horneada.
+            /// </summary>
             private void Bookshelf(Vector3 origin, float width, float yaw)
             {
                 Matrix4x4 group = Group(origin, yaw);
                 const float shelfSpacing = 0.38f;
                 GB(group, Wood, new Vector3(0f, 1.18f, 0.22f), new Vector3(width, 2.36f, 0.07f));
                 for (int side = 0; side < 2; side++)
-                    GB(group, Wood, new Vector3((side - 0.5f) * (width - 0.08f), 1.18f, 0f), new Vector3(0.08f, 2.36f, 0.5f));
+                    GB(group, Wood, new Vector3((side - 0.5f) * (width - 0.08f) + (side * 2 - 1) * 0.0015f, 1.18f, -0.0015f),
+                       new Vector3(0.083f, 2.36f, 0.503f));
                 for (int row = 0; row <= 6; row++)
                     GB(group, Wood, new Vector3(0f, 0.08f + row * shelfSpacing, 0f), new Vector3(width, 0.055f, 0.5f));
-                // Siempre llena; la densidad varía el grosor, no elimina las estanterías esenciales.
+                // Antes aquí iban libros de adorno. Sus números se siguen sorteando para que el resto de la casa
+                // procedural (plantas, muebles) quede igual que siempre.
                 for (int row = 0; row < 6; row++)
                 {
                     float x = -width * 0.5f + 0.10f;
@@ -270,32 +278,30 @@ namespace FolioXR.Environments
                     {
                         float bw = (0.065f + Next() * 0.035f) / _theme.FurnitureDensity;
                         if (x + bw > width * 0.5f - 0.08f) break;
-                        float height = 0.23f + Next() * 0.095f;
-                        float depth = 0.25f + Next() * 0.08f;
-                        Add(_bookBoxes[_random.Next(_bookBoxes.Length)], Books,
-                            group * Matrix4x4.TRS(new Vector3(x + bw * 0.5f, 0.108f + row * shelfSpacing + height * 0.5f, -0.03f),
-                                                 Quaternion.identity, new Vector3(bw, height, depth)));
+                        Next(); Next(); _random.Next(_bookBoxes.Length);
                         x += bw + 0.006f;
                     }
                 }
             }
 
+            private readonly List<ShelfRow> _shelfRows = new List<ShelfRow>();
+
             /// <summary>
-            /// Filas de la biblioteca (a la altura de los ojos primero) para los libros del usuario. Van 2 cm por
-            /// delante de los libros pintados, que en la versión horneada terminan en z local −0,20.
+            /// Filas de una estantería para los libros de la persona, de la más cómoda (altura de los ojos) a la
+            /// menos. Left y Right van sobre la tabla, en el plano de los lomos (3,5 cm adentro del borde).
             /// </summary>
             private void ShelfRows(Vector3 origin, float width, float yaw)
             {
                 Matrix4x4 m = _planScale * Group(origin, yaw);
-                var rows = new List<ShelfRow>();
-                foreach (int row in new[] { 3, 4, 2 })
+                int shelf = _shelfRows.Count / 6;
+                foreach (int row in new[] { 3, 4, 2, 5, 1, 0 })
                 {
-                    float y = 0.108f + row * 0.38f;
-                    rows.Add(new ShelfRow(m.MultiplyPoint3x4(new Vector3(-width * 0.5f + 0.10f, y, -0.205f)),
-                                          m.MultiplyPoint3x4(new Vector3(width * 0.5f - 0.10f, y, -0.205f)),
-                                          m.MultiplyVector(Vector3.back).normalized));
+                    float y = 0.1075f + row * 0.38f;
+                    _shelfRows.Add(new ShelfRow(m.MultiplyPoint3x4(new Vector3(-width * 0.5f + 0.09f, y, -0.215f)),
+                                                m.MultiplyPoint3x4(new Vector3(width * 0.5f - 0.09f, y, -0.215f)),
+                                                m.MultiplyVector(Vector3.back).normalized, shelf, row));
                 }
-                _result.ShelfRows = rows.AsReadOnly();
+                _result.ShelfRows = _shelfRows.AsReadOnly();
             }
 
             private void Seat(Vector3 position, float width, float yaw)

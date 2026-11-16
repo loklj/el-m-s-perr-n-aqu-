@@ -24,6 +24,21 @@ Opciones de `--todo`: `--tam` (lado del atlas, 4096), `--spp` (muestras de la ca
 
 La caché y los temporales ocupan unos 2 GB. Si el disco de `/tmp` tiene poco espacio, indica otra carpeta con `FOLIO_CACHE=/ruta/con/espacio`. La tarjeta gráfica se usa sola si hay; `FOLIO_GPU=0` fuerza el procesador.
 
+## Estanterías vacías sobre un tema ya horneado
+
+```bash
+python3 generar.py moderna-calida --solo estantes
+```
+
+Las estanterías se generan vacías: los libros los deja la persona en el visor (`BookShelf.cs`). Este paso sirvió para vaciar los once temas que ya estaban horneados con libros pintados, sin repetir el horneado entero (90 segundos por tema con dos núcleos en vez de 40 minutos):
+
+1. Repite la casa como en el primer horneado, con los libros (`estantes='marcados'`), y comprueba que la malla sale idéntica a `casa_malla.bytes`. Así cada cara conserva su lugar en el atlas.
+2. Borra las caras de los libros y adornos, y repone las tablas que quedaban tapadas del todo (les busca un lugar libre en el atlas).
+3. Hornea de nuevo solo la madera de las estanterías, que antes quedaba en sombra, y la pega en `casa_luz.jpg`.
+4. Mide la luz que llega a cada fila y la guarda en `datos.json` (`luz_estantes`): Unity tiñe con ella los libros de la persona.
+
+Guarda los archivos originales en `/tmp/bl/cache/original/<tema>/` y se puede repetir. Deja vistas de comprobación en `/tmp/bl/cache/final_<tema>_estante1.jpg` y `_estante2.jpg`. Un horneado completo (`--todo`) ya sale con las estanterías vacías y no necesita este paso.
+
 ## Qué produce
 
 En `hito1/Assets/FolioXR/Resources/Entornos/<tema>/`:
@@ -33,7 +48,7 @@ En `hito1/Assets/FolioXR/Resources/Entornos/<tema>/`:
 | `casa_malla.bytes` y `casa_luz.jpg` | Casa y muebles, con su atlas de color y luz |
 | `cerca_malla.bytes` y `cerca_luz.jpg` | Terreno hasta 34 m, árboles, arbustos, rocas y pasto |
 | `cielo.jpg` | Panorama de 360° con el cielo y todo el paisaje lejano |
-| `datos.json` | Exposición, centro del panorama y densidad de texels |
+| `datos.json` | Exposición, centro del panorama, densidad de texels y luz de cada fila de las estanterías |
 
 Además deja en `/tmp/bl/cache/final_<tema>_<vista>.jpg` imágenes «como en Unity» (mallas con su textura, sin luz, y el panorama de fondo) para revisar el resultado sin el visor.
 

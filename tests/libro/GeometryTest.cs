@@ -37,6 +37,124 @@ static class GeometryTest
         return (n * sxu - sx * su) / Math.Max(1e-12f, n * sxx - sx * sx);
     }
 
+    /// <summary>Hoja que sigue a la mano (PageTurnShape): nace y termina sobre las páginas, y la mano la gobierna sin saltos.</summary>
+    static void PageTurn()
+    {
+        const int n = PageTurnShape.Columns;
+        const float w = 0.17f, inner = 0.001f, reach = 0.27f, curlA = 0.006f, curlB = 0.008f;
+        float tilt = BookGeometry.TiltDegrees * Mathf.Deg2Rad, sin = Mathf.Sin(tilt), cos = Mathf.Cos(tilt);
+        var x = new float[n + 1]; var lift = new float[n + 1];
+        var x2 = new float[n + 1]; var lift2 = new float[n + 1];
+        foreach (bool towardLeft in new[] { true, false })
+        {
+            string name = towardLeft ? " (hacia la izquierda)" : " (hacia la derecha)";
+            float side = towardLeft ? 1f : -1f;   // Lado del que sale.
+            // En t = 0 la hoja coincide con la página del lado del que sale; en t = 1, con la del otro.
+            for (int end = 0; end <= 1; end++)
+            {
+                PageTurnShape.Chain(end, towardLeft, w, inner, tilt, curlA, curlB, reach, x, lift);
+                float half = end == 0 ? side : -side, curl = end == 0 ? curlA : curlB;
+                bool flat = true;
+                for (int i = 0; i <= n; i++)
+                {
+                    float f = i / (float)n;
+                    float along = half * x[i] * cos + lift[i] * sin, depth = half * x[i] * sin - lift[i] * cos;
+                    if (Math.Abs(along - (inner + f * w)) > 2e-5f) flat = false;
+                    if (Math.Abs(depth - (BookGeometry.Curl(f, curl, reach) - PageTurnShape.Clearance)) > 2e-5f) flat = false;
+                }
+                Ok(flat, "la hoja " + (end == 0 ? "sale de" : "llega a") + " la forma de la página" + name);
+            }
+            // Mientras pasa: no se estira, no atraviesa las páginas y avanza siempre hacia el otro lado.
+            bool length = true, above = true, forward = true, finite = true;
+            float lastGrab = float.MaxValue;
+            for (int k = 0; k <= 200; k++)
+            {
+                float t = k / 200f;
+                PageTurnShape.Chain(t, towardLeft, w, inner, tilt, 0f, 0f, reach, x, lift);
+                for (int i = 0; i < n; i++)
+                {
+                    float dx = x[i + 1] - x[i], dl = lift[i + 1] - lift[i];
+                    if (Math.Abs(Math.Sqrt(dx * dx + dl * dl) - w / n) > 1e-5) length = false;
+                }
+                PageTurnShape.Chain(t, towardLeft, w, inner, tilt, curlA, curlB, reach, x, lift);
+                for (int i = 0; i <= n; i++)
+                {
+                    if (float.IsNaN(x[i] + lift[i])) finite = false;
+                    // Altura de la página de abajo en ese x (cada mitad sube con la V y se hunde junto al lomo).
+                    float floor = Math.Abs(x[i]) * sin / cos - Math.Max(curlA, curlB) / cos;
+                    if (lift[i] < floor - 1e-4f) above = false;
+                }
+                float grab = side * PageTurnShape.XAt(t, towardLeft, w, inner, tilt, curlA, curlB, reach, 0.8f * w);
+                if (grab > lastGrab + 1e-6f) forward = false;
+                lastGrab = grab;
+            }
+            Ok(length, "la hoja no se estira ni se encoge" + name);
+            Ok(above, "la hoja no atraviesa las páginas" + name);
+            Ok(forward, "el punto tomado avanza siempre hacia el otro lado" + name);
+            Ok(finite, "la hoja no tiene puntos inválidos" + name);
+            // La mano: de la posición del punto tomado se recupera el avance.
+            bool solved = true;
+            foreach (float along in new[] { 0.5f * w, 0.8f * w, w })
+                for (int k = 0; k <= 40; k++)
+                {
+                    float t = k / 40f;
+                    float at = PageTurnShape.XAt(t, towardLeft, w, inner, tilt, curlA, curlB, reach, along);
+                    float back = PageTurnShape.Solve(at, towardLeft, w, inner, tilt, curlA, curlB, reach, along);
+                    // Cerca de los extremos la hoja casi no se mueve a lo ancho: se compara por posición.
+                    float again = PageTurnShape.XAt(back, towardLeft, w, inner, tilt, curlA, curlB, reach, along);
+                    if (Math.Abs(again - at) > 2e-5f) solved = false;
+                    if (t > 0.1f && t < 0.9f && Math.Abs(back - t) > 2e-3f) solved = false;
+                }
+            Ok(solved, "de la mano se recupera el avance de la hoja" + name);
+            Ok(PageTurnShape.Solve(side * 2f * w, towardLeft, w, inner, tilt, curlA, curlB, reach, 0.8f * w) == 0f, "mano más afuera que la hoja: no se levanta" + name);
+            Ok(PageTurnShape.Solve(-side * 2f * w, towardLeft, w, inner, tilt, curlA, curlB, reach, 0.8f * w) == 1f, "mano pasada al otro lado: hoja apoyada" + name);
+            float middle = PageTurnShape.Solve(0f, towardLeft, w, inner, tilt, curlA, curlB, reach, 0.8f * w);
+            Ok(Math.Abs(middle - 0.5f) < 0.02f, "mano sobre el lomo: hoja a mitad de camino" + name + ": " + middle);
+            // A mitad de camino la hoja está parada sobre el lomo.
+            PageTurnShape.Chain(0.5f, towardLeft, w, inner, tilt, 0f, 0f, reach, x, lift);
+            Ok(Math.Abs(x[n]) < 1e-4f && lift[n] > 0.95f * w, "a mitad de camino la hoja queda parada" + name);
+            // Al empezar, el borde ya se levantó y el pie sigue casi acostado (como una hoja tomada por el borde).
+            PageTurnShape.Chain(0.2f, towardLeft, w, inner, tilt, 0f, 0f, reach, x, lift);
+            float foot = (float)Math.Atan2(lift[1] - lift[0], side * (x[1] - x[0])), edge = (float)Math.Atan2(lift[n] - lift[n - 1], side * (x[n] - x[n - 1]));
+            Ok(edge > foot + 0.2f && foot < tilt + 0.3f, "al empezar se levanta primero el borde" + name);
+        }
+        // Reflejo: hacia la derecha es el mismo giro espejado.
+        PageTurnShape.Chain(0.37f, true, w, inner, tilt, curlA, curlB, reach, x, lift);
+        PageTurnShape.Chain(0.37f, false, w, inner, tilt, curlA, curlB, reach, x2, lift2);
+        bool mirror = true;
+        for (int i = 0; i <= n; i++) if (Math.Abs(x[i] + x2[i]) > 1e-6f || Math.Abs(lift[i] - lift2[i]) > 1e-6f) mirror = false;
+        Ok(mirror, "hacia la derecha es el mismo giro espejado");
+        // El pie se atrasa al salir y se adelanta al llegar, sin retroceder nunca.
+        bool steady = true;
+        for (int k = 1; k <= 100; k++) if (PageTurnShape.BaseProgress(k / 100f) < PageTurnShape.BaseProgress((k - 1) / 100f)) steady = false;
+        Ok(steady && PageTurnShape.BaseProgress(0f) == 0f && Math.Abs(PageTurnShape.BaseProgress(1f) - 1f) < 1e-6f, "el pie de la hoja nunca retrocede");
+        Ok(PageTurnShape.BaseProgress(0.25f) < 0.25f && PageTurnShape.BaseProgress(0.75f) > 0.75f, "el pie se atrasa al salir y se adelanta al llegar");
+        // Tapa en la mano.
+        foreach (int front in new[] { -1, 1 })
+        {
+            float along = 0.8f * w;
+            Ok(PageTurnShape.FoldFromX(front * along * cos, front, along, tilt) < 1e-3f, "tapa: mano donde estaba = abierto");
+            Ok(PageTurnShape.FoldFromX(-front * along, front, along, tilt) > 0.999f, "tapa: mano del otro lado = cerrado");
+            float half = PageTurnShape.FoldFromX(0f, front, along, tilt);
+            Ok(Math.Abs(half - (Mathf.PI * 0.5f - tilt) / (Mathf.PI - tilt)) < 1e-4f, "tapa: mano sobre el lomo = tapa parada");
+            bool rising = true;
+            for (int k = 1; k <= 50; k++)
+                if (PageTurnShape.FoldFromX(front * along * (1f - 2f * k / 50f), front, along, tilt) <
+                    PageTurnShape.FoldFromX(front * along * (1f - 2f * (k - 1) / 50f), front, along, tilt) - 1e-6f) rising = false;
+            Ok(rising, "tapa: se cierra a medida que la mano cruza");
+            // El ángulo que pide la mano es el que BookGeometry da a la mitad que se pliega.
+            float s = 0.37f;
+            BookGeometry.HalfAngles(PageTurnShape.InverseSmoothStep(s), -front, out float la, out float ra);
+            float angle = front < 0 ? la : ra, expected = BookGeometry.TiltDegrees + (180f - BookGeometry.TiltDegrees) * s;
+            Ok(Math.Abs(angle - expected) < 0.05f, "tapa: el pliegue sigue el ángulo de la mano: " + angle + " / " + expected);
+        }
+        bool inverse = true;
+        for (int k = 0; k <= 50; k++)
+            if (Math.Abs(PageTurnShape.InverseSmoothStep(Mathf.SmoothStep(0f, 1f, k / 50f)) - k / 50f) > 1e-3f) inverse = false;
+        Ok(inverse, "el suavizado del pliegue se deshace bien");
+        Ok(Math.Abs(PageTurnShape.ArcHeight(0.1f, 0.06f) - 0.08f) < 1e-6f && PageTurnShape.ArcHeight(0.1f, 0.2f) == 0f, "altura del arco del punto tomado");
+    }
+
     static void Main()
     {
         var m = new MeshData();
@@ -111,6 +229,7 @@ static class GeometryTest
             BookGeometry.SpineFor(m, s, BookGeometry.HalfRotation(-1, la), BookGeometry.HalfRotation(1, ra), out mid, out outward, out thick);
             Ok(outward.z > 0.9f, "abierto: el lomo queda por detrás");
         }
+        PageTurn();
         Console.WriteLine(fails == 0 ? "OK: " + checks + " comprobaciones de la forma del libro (sin Unity)" : fails + " fallas de " + checks);
         Environment.Exit(fails == 0 ? 0 : 1);
     }

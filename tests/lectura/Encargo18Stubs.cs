@@ -13,4 +13,4 @@ namespace FolioXR.Accessibility {
   public void NextPage(){}public void PreviousPage(){}public void Close(){}public void Open(string f){}public void LoadIndex(){}
  }
 }
-namespace FolioXR.Books {public static class BookShelf {public static bool FreeStanding;public static void SetFreeStanding(bool b){}}}
+namespace FolioXR.Books {public static class BookShelf {public static bool FreeStanding;public static int Arranged;public static void SetFreeStanding(bool b){}public static void Arrange(){Arranged++;}public static void Forget(string id){}}}

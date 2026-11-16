@@ -91,17 +91,19 @@ class Geo:
         self.groups = {}
         self.plan = Sc((plan[0], 1.0, plan[1]))  # _planScale de la casa
         self.boxes = []  # Matrices (Blender) de las cajas: sirven para quitar caras tapadas.
+        self.box_marca = []  # Marca de cada caja (1 = lo que llenaba las estanterías).
         self.rng = np.random.default_rng(1)
 
     def _g(self, key):
         g = self.groups.get(key)
         if g is None:
-            g = self.groups[key] = dict(v=[], f=[], c=[], d=[], n=0)
+            g = self.groups[key] = dict(v=[], f=[], c=[], d=[], m=[], n=0)
         return g
 
     def raw(self, mat, verts_b, faces, atlas='casa', peso=1.0, suave=False, doble=False,
-            color=(1, 1, 1), grano=(1, 0, 0), uv=None):
-        """Añade vértices ya en coordenadas de Blender. uv: una coordenada por vértice, en metros."""
+            color=(1, 1, 1), grano=(1, 0, 0), uv=None, marca=0):
+        """Añade vértices ya en coordenadas de Blender. uv: una coordenada por vértice, en metros.
+        marca: etiqueta entera por cara (atributo «marca»); la usa generar.py para reconocer las estanterías."""
         g = self._g((atlas, mat, peso, suave, doble))
         if uv is not None: g.setdefault('uv', []).append(np.asarray(uv, float))
         base = g['n']
@@ -109,7 +111,7 @@ class Geo:
         por_cara = hasattr(color, 'shape') and getattr(color, 'ndim', 1) == 2
         for k, f in enumerate(faces):
             g['f'].append(tuple(base + i for i in f))
-            g['c'].append(tuple(color[k]) if por_cara else color); g['d'].append(grano)
+            g['c'].append(tuple(color[k]) if por_cara else color); g['d'].append(grano); g['m'].append(int(marca))
         g['n'] += len(verts_b)
 
     def mesh(self, mat, m_u, verts_b, faces, plan=True, **kw):
@@ -130,6 +132,7 @@ class Geo:
         if group is not None: m = group @ m
         if kw.get('tapa', True):
             self.boxes.append(SWAP @ ((self.plan @ m) if kw.get('plan', True) else m) @ SWAP)
+            self.box_marca.append(int(kw.get('marca', 0)))
         kw.pop('tapa', None)
         self.mesh(mat, m, _CUBE_B, _CUBE_F, **kw)
 
@@ -229,6 +232,8 @@ class Geo:
             cc = np.repeat(np.c_[np.array(g['c'], float), np.ones(len(g['c']))], counts, axis=0)
             dd = np.repeat(np.array(g['d'], float), counts, axis=0)
             col.data.foreach_set('color', cc.ravel()); dirs.data.foreach_set('vector', dd.ravel())
+            if len(g['m']) == len(me.polygons):
+                me.attributes.new('marca', 'INT', 'FACE').data.foreach_set('value', g['m'])
             if suave:
                 me.polygons.foreach_set('use_smooth', [True] * len(me.polygons))
             propia = 'uv' in g and len(g['uv']) == len(g['v'])

@@ -22,6 +22,7 @@ namespace FolioXR.Environments
             public int atlas = 4096;
             public float texels_casa = 70f;
             public float texels_cerca = 60f;
+            public float[] luz_estantes;   // Por estantería y fila (desde abajo): rojo, verde y azul.
         }
 
         internal static bool Exists(EnvironmentTheme theme)
@@ -46,6 +47,14 @@ namespace FolioXR.Environments
                 try { JsonUtility.FromJsonOverwrite(json.text, data); }
                 catch (Exception e) { Debug.LogWarning("[FolioXR] datos.json del entorno ilegible: " + e.Message); }
             }
+            // Luz de cada fila de las estanterías, para los libros de la persona (BookShelf).
+            if (data.luz_estantes != null)
+                foreach (ShelfRow row in result.ShelfRows)
+                {
+                    int i = (row.Shelf * 6 + row.Level) * 3;
+                    if (i + 2 < data.luz_estantes.Length)
+                        row.Light = new Color(data.luz_estantes[i], data.luz_estantes[i + 1], data.luz_estantes[i + 2]);
+                }
             Shader shader = Resources.Load<Shader>("FolioXRBaked");
             if (shader != null && !shader.isSupported) shader = null;
             if (shader == null) Debug.LogWarning("[FolioXR] Falta FolioXR/Baked: el entorno usa el sombreador de las páginas.");

@@ -15,8 +15,8 @@ namespace FolioXR.Accessibility {public static class FolioAccessibility {public 
 namespace FolioXR.Reading {
  public class PdfResult {public bool Ok;}
  public class PdfPageRenderer {public string PdfPath="test.pdf";public static bool IsRealRendererAvailable=true;public List<int> Requests=new List<int>();public int Fail=-1;public Action DuringRender;public IEnumerator RenderPage(int page,int width,Action<UnityEngine.Texture2D,PdfResult> done){Requests.Add(page);var once=DuringRender;DuringRender=null;once?.Invoke();done(page==Fail?null:new UnityEngine.Texture2D{Page=page},new PdfResult{Ok=page!=Fail});yield break;}}
- public class PageTurnEffect {public static int Turns;public static PageTurnEffect Create(UnityEngine.Renderer r)=>new PageTurnEffect();public IEnumerator Play(bool left,UnityEngine.Texture2D first,UnityEngine.Texture2D second,float w,float h,float gutter,float tilt=0f){Turns++;yield break;}}
- public class BookBody {public float TiltRadians=>0.157f;}
+ public class PageTurnEffect {public static int Turns;public static PageTurnEffect Create(UnityEngine.Renderer r)=>new PageTurnEffect();public IEnumerator Play(bool left,UnityEngine.Texture2D first,UnityEngine.Texture2D second,float w,float h,float gutter,float tilt,UnityEngine.Color tint,UnityEngine.Color blank){Turns++;yield break;}public IEnumerator PlayNatural(bool left,UnityEngine.Texture2D first,UnityEngine.Texture2D second,float w,float h,float gutter,float tilt,float curlFrom,float curlTo,float reach,UnityEngine.Color tint,UnityEngine.Color blank){Turns++;yield break;}}
+ public class BookBody {public float TiltRadians=>0.157f;public float CurlDepth(int side)=>0.006f;public float CurlReach=>0.27f;}
  public class BookCover {public void SetRightToLeft(bool b){}}
  public static class ReadingDiagnostics {public static void Record(string key,double value){}}
  public static class PageTheme {public static bool Night;public static bool NeedsRemap(string p)=>Night;public static UnityEngine.Color Tint(string p)=>new UnityEngine.Color(1,1,1);}
@@ -27,6 +27,9 @@ namespace FolioXR.Reading {
   private int _leftIndex,_pageCount,_renderedWidth;private float _aspectHeightOverWidth,gutter;
   private string _lastPageStatus;private UnityEngine.Texture2D _leftTexture,_rightTexture;private PageTurnEffect _turn;
   public BookBody Body;  public bool Closed;public void OpenBook(){Closed=false;}public void CloseBook(){Closed=true;}private const string ClosedStatus="";
+  // Hoja en la mano (15 nov 2026): en estas pruebas nadie la toma; el paso con botones usa el giro natural.
+  private sealed class HandTurn {public int Slot(int side,BookSpread shown)=>-1;}private HandTurn _handTurn;public bool HandTurning=>false;public static bool QuickTurn;
+  private UnityEngine.Color PaperTint(out UnityEngine.Color blank){blank=new UnityEngine.Color(1,1,1);return new UnityEngine.Color(1,1,1);}private void ShowPageStatus(int left,bool two){}
   public float BookScale=1;public BookCover Cover;private PdfPageRenderer _renderer=new PdfPageRenderer();
   public UnityEngine.Renderer leftPage=new UnityEngine.Renderer(),rightPage=new UnityEngine.Renderer();
   public event Action<int,int> SpreadShown;public int Progress=-1;public List<int> Requests=>_renderer.Requests;

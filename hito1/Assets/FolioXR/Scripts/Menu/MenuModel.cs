@@ -121,6 +121,7 @@ namespace FolioXR.Menu
                 _removeId = null;
                 _removing = false;
                 BookCollections.Forget(entry.id);
+                BookShelf.Forget(entry.id);
                 library.Remove(entry);
             }
             RebuildOptions();
@@ -184,6 +185,7 @@ namespace FolioXR.Menu
 
         // ── «+ Agregar libro» y configuración de un libro (pedido del usuario, 11 nov 2026) ──
         private int _libraryMode; // 0 = lista, 1 = elegir de dónde agregar, 2 = organizar.
+        private float _arrangeShelfUntil;
         private int _settingsGroup; // 0 = grupos; 1 lectura, 2 libro y movimiento, 3 herramientas, 4 accesibilidad, 5 acerca de.
         private string _keyboardCollection; // "" = nueva colección; otro = renombrar esa colección.
         private float _deleteCollectionUntil;
@@ -356,7 +358,7 @@ namespace FolioXR.Menu
             options.Add(new MenuOption("Volver", () => { _libraryMode = 0; RebuildOptions(); }));
             int sort = (int)BookCollections.Sort, filter = (int)BookCollections.Filter;
             options.Add(new MenuOption("Ordenar:\n" + BookCollections.SortNames[sort],
-                () => BookCollections.SetSort((BookCollections.SortMode)((sort + 1) % 4))));
+                () => BookCollections.SetSort((BookCollections.SortMode)((sort + 1) % 3))));
             options.Add(new MenuOption("Formato:\n" + BookCollections.FilterNames[filter],
                 () => BookCollections.SetFilter((BookCollections.FormatFilter)((filter + 1) % BookCollections.FilterNames.Length)),
                 marked: () => BookCollections.Filter != BookCollections.FormatFilter.All));
@@ -378,6 +380,15 @@ namespace FolioXR.Menu
                     : "Estantería: " + (BookShelf.FreeStanding ? "ocultar" : "mostrar"),
                 () => { BookShelf.SetFreeStanding(!BookShelf.FreeStanding); RebuildOptions(); }, () => !house,
                 () => house || BookShelf.FreeStanding));
+            // Cada libro queda donde se lo deja; esto los vuelve a juntar en el orden elegido arriba.
+            bool arrange = Time.unscaledTime < _arrangeShelfUntil;
+            options.Add(new MenuOption(arrange ? "¿Acomodar? Toca\notra vez" : "Acomodar la\nestantería", () =>
+            {
+                if (!arrange) { _arrangeShelfUntil = Time.unscaledTime + 4f; RebuildOptions(); return; }
+                _arrangeShelfUntil = 0f;
+                BookShelf.Arrange();
+                RebuildOptions();
+            }, () => house || BookShelf.FreeStanding));
         }
 
         /// <summary>Accesibilidad (encargo 18, parte 3).</summary>
@@ -803,6 +814,9 @@ namespace FolioXR.Menu
                     }
                     if (_settingsGroup == 2) options.Add(new MenuOption("Menú: " + (_sphereStyle() ? "esfera" : "simple"),
                         () => _setSphereStyle(!_sphereStyle())));
+                    // Pedido del usuario (15 nov 2026): la hoja sigue a la mano; la animación corta queda como opción.
+                    if (_settingsGroup == 2) options.Add(new MenuOption("Paso de página:\n" + (FolioBook.QuickTurn ? "rápido" : "sigue la mano"),
+                        () => { FolioBook.SetQuickTurn(!FolioBook.QuickTurn); RebuildOptions(); }));
                     if (_settingsGroup == 2) options.Add(new MenuOption("Física: " + (_book != null && _book.RealisticPhysics ? "Realista" : "Flotante"),
                         () => { _book.SetRealisticPhysics(!_book.RealisticPhysics); RebuildOptions(); }, () => _book != null));
                     if (_settingsGroup == 2) options.Add(new MenuOption("Acostado: " + (FolioBook.LyingMode ? "sí" : "no"),
