@@ -131,7 +131,7 @@ namespace FolioXR.Reading
 
         private void LateUpdate()
         {
-            if (_book == null) return;
+            if (_book == null || _book.Empty) { _dragHand = -1; return; }
             if (!_built) { Build(); if (!_built) return; }
             Place();
             Interact();
@@ -174,8 +174,7 @@ namespace FolioXR.Reading
             // La X va en la mitad que no se mueve al cerrar, arriba y afuera.
             Transform home = body.Half(body.RestSide);
             if (_close.parent != home) _close.SetParent(home, false);
-            var library = FolioXR.Books.BookLibrary.Instance;
-            _close.gameObject.SetActive(library != null && library.Current != null && (open || closed));
+            _close.gameObject.SetActive(!_book.Empty && (open || closed));
             _close.localPosition = new Vector3(body.RestSide * (inner + width + Outside), top + 0.012f,
                                                closed ? -body.CoverOuterDepth - 0.002f : front);
             _close.localRotation = Quaternion.identity;
@@ -201,7 +200,8 @@ namespace FolioXR.Reading
                 {
                     Debug.Log("[FolioXR] Libro: X, se guarda en la estantería.");
                     var library = FolioXR.Books.BookLibrary.Instance;
-                    if (library != null) library.CloseCurrent();
+                    if (library != null && library.Current != null) library.CloseCurrent();
+                    else _book.PutAway();                            // Libro de muestra: solo se guarda.
                     return;
                 }
                 for (int c = 0; c < 2; c++)

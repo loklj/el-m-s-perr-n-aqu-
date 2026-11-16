@@ -178,6 +178,8 @@ namespace FolioXR.Books
         private void OpenLastRead()
         {
             if (!Available || _book == null) return;
+            // El libro se guardó antes de salir: se vuelve sin ninguno abierto.
+            if (PlayerPrefs.GetInt(FolioBook.EmptyPrefsKey, 0) != 0) return;
             foreach (BookEntry entry in _books)
             {
                 if (entry.lastRead <= 0) break; // Vienen ordenados por última lectura.
@@ -428,14 +430,14 @@ namespace FolioXR.Books
                 Current = null;
                 _dirty = false;
                 _bookmarks = new List<int>();
-                if (_book != null) _book.OpenDefaultDocument();
+                if (_book != null) _book.PutAway();
             }
             Reload();
             StateChanged?.Invoke();
             Notify("Se quitó «" + entry.title + "» de la biblioteca.");
         }
 
-        /// <summary>Cierra el libro abierto (guarda su página) y vuelve al de muestra.</summary>
+        /// <summary>Cierra el libro abierto (guarda su página): no queda ninguno abierto (FolioBook.PutAway).</summary>
         public void CloseCurrent()
         {
             if (Current == null || _book == null) return;
@@ -444,7 +446,9 @@ namespace FolioXR.Books
             _relocatePage = -1;
             Save(false);
             Debug.Log("[FolioXR] Biblioteca: cerrar «" + Current.title + "»");
-            _book.OpenDefaultDocument();
+            Current = null;
+            StateChanged?.Invoke();
+            _book.PutAway();
         }
 
         public void ToggleBookmark()

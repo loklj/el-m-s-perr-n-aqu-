@@ -72,6 +72,8 @@ namespace FolioXR.Reading
                 input.Sample(_rig, input == _owner || input == _second, _distanceToBook, PinchDistance);
             if (_book == null || !_book.isActiveAndEnabled || _rig == null)
             { Release(false); return; }
+            // Libro guardado (sin ninguno abierto): se suelta sin lanzarlo y no hay nada que agarrar.
+            if (_book.Empty) { if (_owner != null) CancelGrab(); return; }
 
             UpdateHeldPose();
             bool attempt = false;

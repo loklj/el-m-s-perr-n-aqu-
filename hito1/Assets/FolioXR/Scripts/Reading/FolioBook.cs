@@ -208,6 +208,8 @@ namespace FolioXR.Reading
         /// </summary>
         public void RequestDocument(string path, string documentId, int leftPage)
         {
+            _emptyPending = false;
+            if (PlayerPrefs.GetInt(EmptyPrefsKey, 0) != 0) { PlayerPrefs.SetInt(EmptyPrefsKey, 0); PlayerPrefs.Save(); }
             _pendingPath = path;
             _pendingId = documentId;
             _pendingPage = Mathf.Max(0, leftPage);
@@ -217,6 +219,64 @@ namespace FolioXR.Reading
         public void OpenDefaultDocument()
         {
             if (_defaultPath != null) RequestDocument(_defaultPath, null, 0);
+        }
+
+        // ───────────── Sin libro abierto (pedido del usuario, 16 nov 2026) ─────────────
+        // Al guardar el libro en la estantería (X, menú) no aparece otro: las manos quedan libres. El libro
+        // se esconde (hijos apagados, sin colisión ni física) y vuelve al abrir uno desde la biblioteca.
+        public const string EmptyPrefsKey = "folioxr.book.empty";
+        /// <summary>No hay libro abierto: el libro está escondido.</summary>
+        public bool Empty { get; private set; }
+        private readonly System.Collections.Generic.List<GameObject> _hiddenParts = new System.Collections.Generic.List<GameObject>();
+        private bool _hiddenCollider;
+
+        /// <summary>Guarda el libro: no queda ninguno abierto. Al volver a entrar a la app sigue así.</summary>
+        public void PutAway()
+        {
+            _pendingPath = null;
+            PlayerPrefs.SetInt(EmptyPrefsKey, 1);
+            PlayerPrefs.Save();
+            if (_started && !_busy) GoEmpty();
+            else _emptyPending = true;
+        }
+
+        private bool _emptyPending;
+
+        private void GoEmpty()
+        {
+            _emptyPending = false;
+            if (Empty) return;
+            if (_renderer != null) { _renderer.Dispose(); _renderer = null; }
+            _pageCount = 0;
+            DocumentId = null;
+            _spreadReady = false;
+            Empty = true;
+            SetHidden(true);
+            Debug.Log("[FolioXR] Libro: ninguno abierto.");
+        }
+
+        private void SetHidden(bool hidden)
+        {
+            if (hidden)
+            {
+                FreezePhysics();
+                _hiddenParts.Clear();
+                for (int i = 0; i < transform.childCount; i++)
+                {
+                    GameObject part = transform.GetChild(i).gameObject;
+                    if (part.activeSelf) _hiddenParts.Add(part);
+                }
+                foreach (GameObject part in _hiddenParts) part.SetActive(false);
+                _hiddenCollider = bookCollider != null && bookCollider.enabled;
+                if (bookCollider != null) bookCollider.enabled = false;
+            }
+            else
+            {
+                foreach (GameObject part in _hiddenParts) if (part != null) part.SetActive(true);
+                _hiddenParts.Clear();
+                if (bookCollider != null && _hiddenCollider) bookCollider.enabled = true;
+                PlaceInFrontOfView();
+            }
         }
 
         /// <summary>Salta a una página (marcadores). Devuelve false si el libro está ocupado.</summary>
@@ -394,6 +454,16 @@ namespace FolioXR.Reading
                 startPage = _pendingPage;
                 _pendingPath = null;
             }
+            // Con la biblioteca del visor y nada que retomar (o el libro se guardó al salir), no se abre el de muestra.
+            var library = FolioXR.Books.BookLibrary.Instance;
+            bool none = startId == null && library != null && library.Available &&
+                        (library.Books.Count > 0 || PlayerPrefs.GetInt(EmptyPrefsKey, 0) != 0);
+            if (none || _emptyPending)
+            {
+                _started = true;
+                GoEmpty();
+                yield break;
+            }
             yield return LoadDocument(startPath, startId, startPage);
             _started = true;
         }
@@ -402,6 +472,7 @@ namespace FolioXR.Reading
         private IEnumerator LoadDocument(string path, string documentId, int leftPage)
         {
             _busy = true;
+            if (Empty) { Empty = false; SetHidden(false); }
             if (Body != null && Body.Closed) { Body.SetClosed(false, true); ClosedChanged?.Invoke(); }
             string previousPath = _renderer != null ? _renderer.PdfPath : null;
             if (_renderer != null)
@@ -502,6 +573,7 @@ namespace FolioXR.Reading
             }
             // Dos cuadros después del recentrado, cuando la cabeza ya tiene su pose nueva.
             if (_recenterPending > 0 && --_recenterPending == 0) PlaceInFrontOfView();
+            if (_emptyPending && _pendingPath == null && _started && !_busy) GoEmpty();
             if (_pendingPath != null && _started && !_busy)
             {
                 string path = _pendingPath, id = _pendingId;

@@ -43,7 +43,7 @@ namespace FolioXR.Reading
 
         private void Update()
         {
-            if (_book == null || _book.leftPage == null || _book.rightPage == null) return;
+            if (_book == null || _book.leftPage == null || _book.rightPage == null || _book.Empty) return;
             if (Time.unscaledTime >= _nextFind) { _nextFind = Time.unscaledTime + 1.5f; FindHands(); }
             if (_drag != Drag.None) { Follow(); return; }
             // Con el libro agarrado solo pasa la hoja la mano que no lo sostiene (Tip la distingue con BookGrab).

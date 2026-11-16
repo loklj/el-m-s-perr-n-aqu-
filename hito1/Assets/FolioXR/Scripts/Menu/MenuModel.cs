@@ -694,7 +694,9 @@ namespace FolioXR.Menu
                     options.Add(new MenuOption(shut ? "Abrir el libro" : "Cerrar la tapa",
                         () => { if (_book.Closed) _book.OpenBook(); else _book.CloseBook(); RebuildOptions(); },
                         () => _book != null && library.Current != null));
-                    options.Add(new MenuOption("Dejar este libro\n(vuelve el de muestra)", library.CloseCurrent, () => library.Current != null));
+                    options.Add(new MenuOption("Guardar el libro\n(sin ninguno abierto)",
+                        () => { if (library.Current != null) library.CloseCurrent(); else _book.PutAway(); RebuildOptions(); },
+                        () => _book != null && !_book.Empty));
                     options.Add(new MenuOption("Editar libro", () => { _setupId = library.Current.id; RebuildOptions(); },
                         () => library.Current != null));
                     BookEntry current = library.Current;
