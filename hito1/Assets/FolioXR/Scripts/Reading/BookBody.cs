@@ -50,6 +50,10 @@ namespace FolioXR.Reading
         /// <summary>Hundimiento actual de la hoja de ese lado junto al lomo, y hasta dónde llega (fracción del ancho).</summary>
         public float CurlDepth(int side) => _shape.CurlDepth(side);
         public float CurlReach => _shape.Reach;
+        /// <summary>Mitad del libro de ese lado: lomo en su origen, hoja en z = 0 mirando a -Z. Gira al plegar.</summary>
+        internal Transform Half(int side) => _halves[side < 0 ? 0 : 1];
+        /// <summary>Cuán cerrado está: 0 abierto, 1 cerrado (lineal en el ángulo de la mitad que se pliega).</summary>
+        public float FoldAmount => Mathf.SmoothStep(0f, 1f, _fold);
 
         internal static BookBody Attach(FolioBook book)
         {

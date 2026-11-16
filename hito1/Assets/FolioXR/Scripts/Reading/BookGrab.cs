@@ -92,6 +92,8 @@ namespace FolioXR.Reading
                 // Un lado físico nunca cuenta dos veces (mano + mando emulado).
                 if (_owner != null && (_owner.Node == input.Node || _owner.IsHand != input.IsHand)) continue;
                 float distance = input.IsHand ? (input.FistMode ? PalmDistance : PinchDistance) : ControllerDistance;
+                // Sobre la X o un círculo del libro, el pellizco es para ese control, no para agarrar el libro.
+                if (BookControls.Claims(input.Position)) continue;
                 if (DistanceToBook(input.Position) < distance) Take(input);
             }
         }

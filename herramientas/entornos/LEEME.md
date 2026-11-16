@@ -39,6 +39,18 @@ Las estanterías se generan vacías: los libros los deja la persona en el visor 
 
 Guarda los archivos originales en `/tmp/bl/cache/original/<tema>/` y se puede repetir. Deja vistas de comprobación en `/tmp/bl/cache/final_<tema>_estante1.jpg` y `_estante2.jpg`. Un horneado completo (`--todo`) ya sale con las estanterías vacías y no necesita este paso.
 
+## Retoques sobre un tema ya horneado
+
+```bash
+python3 generar.py casa-del-lago --solo agua
+python3 generar.py casa-del-lago --solo hojas
+```
+
+- `--solo agua` crea `agua_malla.bytes`: una malla plana a la altura del agua, desde la orilla hasta 147 m, donde el terreno queda bajo el agua. Unity la pinta con el panorama proyectado desde su centro (`FolioXRPano.shader`), así el agua se ve en su lugar desde cualquier punto de la casa. Solo hace falta en los temas con agua (lago, playa, isla); en los demás no escribe nada.
+- `--solo hojas` corrige `casa_luz.jpg` y `cerca_luz.jpg`: las hojas se hornean por una cara y se muestran por las dos, así que la mitad salía negra. Las celdas oscuras de hojas toman un tono de sombra del color de las hojas iluminadas del mismo arbusto. Deja una marca en `datos.json` (`hojas_casa`, `hojas_cerca`) para no repetirlo.
+
+Un horneado completo hace los dos pasos al final.
+
 ## Qué produce
 
 En `hito1/Assets/FolioXR/Resources/Entornos/<tema>/`:
@@ -48,6 +60,7 @@ En `hito1/Assets/FolioXR/Resources/Entornos/<tema>/`:
 | `casa_malla.bytes` y `casa_luz.jpg` | Casa y muebles, con su atlas de color y luz |
 | `cerca_malla.bytes` y `cerca_luz.jpg` | Terreno hasta 34 m, árboles, arbustos, rocas y pasto |
 | `cielo.jpg` | Panorama de 360° con el cielo y todo el paisaje lejano |
+| `agua_malla.bytes` | Solo en temas con agua: superficie del agua desde la orilla, sin atlas (usa el panorama) |
 | `datos.json` | Exposición, centro del panorama, densidad de texels y luz de cada fila de las estanterías |
 
 Además deja en `/tmp/bl/cache/final_<tema>_<vista>.jpg` imágenes «como en Unity» (mallas con su textura, sin luz, y el panorama de fondo) para revisar el resultado sin el visor.

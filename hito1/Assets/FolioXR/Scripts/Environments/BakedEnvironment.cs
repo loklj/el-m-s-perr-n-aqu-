@@ -76,9 +76,28 @@ namespace FolioXR.Environments
             float nearTiling = data.atlas / Mathf.Max(1f, data.texels_cerca) / 0.45f;
             Part(result, "Casa horneada", ReadMesh(Resources.Load<TextAsset>(path + "casa_malla"), "FolioXR casa"),
                  Material(result, shader, unlitFallback, houseLight, detail, houseTiling, 0.22f, "Casa horneada"), Vector3.zero);
-            Part(result, "Terreno cercano", ReadMesh(Resources.Load<TextAsset>(path + "cerca_malla"), "FolioXR cerca"),
-                 Material(result, shader, unlitFallback, nearLight, detail, nearTiling, 0.34f, "Terreno cercano"), Vector3.zero);
+            Mesh near = ReadMesh(Resources.Load<TextAsset>(path + "cerca_malla"), "FolioXR cerca");
+            Material nearMaterial = Material(result, shader, unlitFallback, nearLight, detail, nearTiling, 0.34f, "Terreno cercano");
+            if (shader != null)
+            {
+                // Los últimos metros del terreno cercano se deshacen sobre el panorama: sin borde a la vista.
+                Bounds b = near.bounds;
+                float radius = Mathf.Max(Mathf.Max(-b.min.x, b.max.x), Mathf.Max(-b.min.z, b.max.z));
+                // Con MSAA el borde se reparte en la cobertura; sin MSAA (z = 1), descartando píxeles.
+                nearMaterial.SetVector("_Fade", new Vector4(radius - 7.5f, radius - 0.3f, QualitySettings.antiAliasing > 1 ? 0f : 1f, 0f));
+            }
+            Part(result, "Terreno cercano", near, nearMaterial, Vector3.zero);
             Vector3 eye = data.ojo != null && data.ojo.Length == 3 ? new Vector3(data.ojo[0], data.ojo[1], data.ojo[2]) : Vector3.up * 1.6f;
+            // Agua desde la orilla (lago, playa, isla): el panorama proyectado sobre una malla plana.
+            TextAsset water = Resources.Load<TextAsset>(path + "agua_malla");
+            Shader pano = Resources.Load<Shader>("FolioXRPano");
+            if (water != null && pano != null && pano.isSupported)
+            {
+                var waterMaterial = result.Own(new Material(pano) { name = "FolioXR agua cercana" });
+                waterMaterial.SetTexture("_MainTex", sky);
+                waterMaterial.SetVector("_Eye", eye);
+                Part(result, "Agua cercana", ReadMesh(water, "FolioXR agua"), waterMaterial, Vector3.zero);
+            }
             Part(result, "Cielo panorámico", SkySphere(HouseGenerator.SkyRadius),
                  Material(result, shader, unlitFallback, sky, null, 0f, 0f, "Cielo panorámico"), eye);
             result.MaterialCount = 3;

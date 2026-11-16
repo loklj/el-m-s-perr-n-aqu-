@@ -59,10 +59,31 @@ namespace FolioXR.Environments
             ? _house.Root.transform.position.y : _rig != null && _rig.trackingSpace != null
                 ? _rig.trackingSpace.position.y : 0f;
         public bool InputPaused { get; set; }
-        /// <summary>Raíz de la casa activa (trazos guardados en sus coordenadas) o null en passthrough.</summary>
+
+        // ───────────── Altura de los ojos en la casa (pedido del usuario, 16 nov 2026) ─────────────
+        // El visor mide la altura real de la cabeza sobre el piso real. En la casa eso se sentía muy alto, así
+        // que el piso de la casa queda unos centímetros por encima del real: los ojos bajan esa medida.
+        public const string EyeOffsetPrefsKey = "folioxr.eyeOffsetCm";
+        public static readonly int[] EyeOffsets = { 0, -5, -10, -15, -20, -25, -30, -40, -50 };
+        /// <summary>Centímetros que se suman a la altura real de los ojos dentro de la casa (negativo = más bajo).</summary>
+        public static int EyeOffsetCm => Mathf.Clamp(PlayerPrefs.GetInt(EyeOffsetPrefsKey, -15), -60, 20);
+        /// <summary>Metros que el piso de la casa queda sobre el piso real (0 en passthrough).</summary>
+        public float FloorLift => _active ? -EyeOffsetCm * 0.01f : 0f;
+
+        public static void SetEyeOffsetCm(int cm)
+        {
+            int before = EyeOffsetCm;
+            PlayerPrefs.SetInt(EyeOffsetPrefsKey, Mathf.Clamp(cm, -60, 20));
+            PlayerPrefs.Save();
+            var controller = FindFirstObjectByType<FolioEnvironmentController>();
+            // Dentro de la casa el cambio se nota al tiro: el cuerpo baja o sube la diferencia.
+            if (controller != null && controller._active && controller._rig != null)
+                controller._rig.transform.position += Vector3.up * ((EyeOffsetCm - before) * 0.01f);
+        }
         /// <summary>Filas de la estantería de la biblioteca de la casa activa (vacío en passthrough).</summary>
         public IReadOnlyList<ShelfRow> ShelfRows =>
             _active && _house != null ? _house.ShelfRows : (IReadOnlyList<ShelfRow>)Array.Empty<ShelfRow>();
+        /// <summary>Raíz de la casa activa (trazos guardados en sus coordenadas) o null en passthrough.</summary>
         public Transform HouseRoot => _active && _house != null && _house.Root != null ? _house.Root.transform : null;
         public string EnvironmentName => _theme != null ? _theme.Name : null;
         public bool IsTeleportFloor(Collider collider) =>
@@ -420,7 +441,7 @@ namespace FolioXR.Environments
             ReadingPoint point = _house.ReadingPoints[_pointIndex];
             Transform root = _house.Root.transform;
             Transform eyes = _rig.centerEyeAnchor;
-            float eyeHeight = Mathf.Max(0.5f, eyes.position.y - _rig.trackingSpace.position.y);
+            float eyeHeight = Mathf.Max(0.5f, eyes.position.y - _rig.trackingSpace.position.y - FloorLift);
             Vector3 targetPosition = root.TransformPoint(point.FloorPosition) + Vector3.up * (eyeHeight + 0.03f);
             Vector3 targetForward = Vector3.ProjectOnPlane(root.TransformDirection(point.ViewDirection), Vector3.up);
             Vector3 currentForward = Vector3.ProjectOnPlane(eyes.forward, Vector3.up);

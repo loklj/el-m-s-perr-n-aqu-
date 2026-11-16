@@ -122,6 +122,7 @@ namespace FolioXR.Menu
                 _removing = false;
                 BookCollections.Forget(entry.id);
                 BookShelf.Forget(entry.id);
+                CoverThumbs.Forget(entry.id);
                 library.Remove(entry);
             }
             RebuildOptions();
@@ -815,6 +816,18 @@ namespace FolioXR.Menu
                     if (_settingsGroup == 2) options.Add(new MenuOption("Menú: " + (_sphereStyle() ? "esfera" : "simple"),
                         () => _setSphereStyle(!_sphereStyle())));
                     // Pedido del usuario (15 nov 2026): la hoja sigue a la mano; la animación corta queda como opción.
+                    if (_settingsGroup == 2)
+                    {
+                        // Pedido del usuario (16 nov 2026): en la casa se veía todo desde muy arriba.
+                        int eye = FolioEnvironmentController.EyeOffsetCm;
+                        options.Add(new MenuOption("Altura de los ojos:\n" + (eye == 0 ? "la real" : (eye > 0 ? "+" : "−") + Mathf.Abs(eye) + " cm"), () =>
+                        {
+                            int[] steps = FolioEnvironmentController.EyeOffsets;
+                            int at = System.Array.IndexOf(steps, eye);
+                            FolioEnvironmentController.SetEyeOffsetCm(steps[(at + 1) % steps.Length]);
+                            RebuildOptions();
+                        }));
+                    }
                     if (_settingsGroup == 2) options.Add(new MenuOption("Paso de página:\n" + (FolioBook.QuickTurn ? "rápido" : "sigue la mano"),
                         () => { FolioBook.SetQuickTurn(!FolioBook.QuickTurn); RebuildOptions(); }));
                     if (_settingsGroup == 2) options.Add(new MenuOption("Física: " + (_book != null && _book.RealisticPhysics ? "Realista" : "Flotante"),

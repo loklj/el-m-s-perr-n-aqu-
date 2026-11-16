@@ -239,28 +239,36 @@ namespace FolioXR.Reading
             return Mathf.Abs((p.z - depth) * meters) < Touch;
         }
 
-        /// <summary>Punta que toca la hoja: unos centímetros delante del mando, o el índice de la mano.</summary>
-        private bool Tip(int i, out Vector3 position)
+        /// <summary>Punta que toca la hoja: unos centímetros delante del mando, o el índice de la mano, sin apretar nada.</summary>
+        private bool Tip(int i, out Vector3 position) => Pointer(i, out position, out bool pressed) && !pressed;
+
+        /// <summary>
+        /// Punta de esa mano (0 izquierda, 1 derecha) o de su mando, y si está apretando: pellizco del índice,
+        /// gatillo o agarre. Sin apretar pasa hojas; apretando toma los círculos y la X del libro (BookControls).
+        /// La mano que sostiene el libro o una herramienta no cuenta.
+        /// </summary>
+        internal bool Pointer(int i, out Vector3 position, out bool pressed)
         {
             position = Vector3.zero;
+            pressed = false;
             XRNode node = i == 0 ? XRNode.LeftHand : XRNode.RightHand;
             if (FolioXR.Tools.ToolRegistry.HoldsHand(node) || FolioXR.Tools.ToolRegistry.HoldsController(node)) return false;
-            if (_grab != null && _grab.HoldsSide(node)) return false;   // Esa mano sostiene el libro: pasa la otra.
+            if (_grab != null && _grab.HoldsSide(node)) return false;   // Esa mano sostiene el libro: actúa la otra.
             InputDevice device = InputDevices.GetDeviceAtXRNode(node);
             if (device.isValid && (device.characteristics & InputDeviceCharacteristics.Controller) != 0 &&
                 device.TryGetFeatureValue(CommonUsages.isTracked, out bool tracked) && tracked)
             {
                 Transform anchor = _rig == null ? null : node == XRNode.LeftHand ? _rig.leftControllerAnchor : _rig.rightControllerAnchor;
                 if (anchor == null) return false;
-                // Con el agarre apretado ese mando está en otra cosa (tomar el libro, un libro de la estantería).
-                if (device.TryGetFeatureValue(CommonUsages.gripButton, out bool grip) && grip) return false;
+                pressed = (device.TryGetFeatureValue(CommonUsages.gripButton, out bool grip) && grip) ||
+                          (device.TryGetFeatureValue(CommonUsages.triggerButton, out bool trigger) && trigger);
                 position = anchor.position + anchor.forward * 0.05f;
                 return true;
             }
             OVRHand hand = _hands[i];
             if (hand == null || !hand.isActiveAndEnabled || !hand.IsTracked || !hand.IsDataHighConfidence ||
                 hand.IsSystemGestureInProgress) return false;
-            if (hand.GetFingerIsPinching(OVRHand.HandFinger.Index)) return false;
+            pressed = hand.GetFingerIsPinching(OVRHand.HandFinger.Index);
             OVRSkeleton skeleton = _skeletons[i];
             if (skeleton == null || !skeleton.IsInitialized || skeleton.Bones == null) return false;
             OVRSkeleton.SkeletonType type = skeleton.GetSkeletonType();

@@ -382,6 +382,7 @@ namespace FolioXR.Reading
             if (Cover == null) Cover = BookCover.Attach(this);
             if (Body == null) Body = BookBody.Attach(this);
             if (GetComponent<BookHands>() == null) gameObject.AddComponent<BookHands>();
+            if (GetComponent<BookControls>() == null) gameObject.AddComponent<BookControls>();
             if (_pendingPath == null) Cover.Apply(false, 0, "Libro de muestra", false);
             // Un libro de la biblioteca pedido durante el arranque reemplaza al de prueba.
             string startPath = pdfPath, startId = null;
@@ -443,6 +444,25 @@ namespace FolioXR.Reading
             Debug.Log("[FolioXR] PDF: " + path + " (" + pages + " páginas, id=" + DocumentId + ")");
             int start = Mathf.Clamp(leftPage, 0, pages - 1);
             yield return ShowSpread(start);
+            if (!CoverThumbs.Has(DocumentId)) StartCoroutine(MakeThumbnail(DocumentId));
+        }
+
+        /// <summary>
+        /// Miniatura de la primera página para la estantería (CoverThumbs): se hace una vez por libro, con el
+        /// libro ya a la vista y cuando no hay otra página dibujándose.
+        /// </summary>
+        private IEnumerator MakeThumbnail(string document)
+        {
+            yield return new WaitForSeconds(1f);
+            while (_busy || _coverPagesPending || HandTurning) yield return null;
+            if (_renderer == null || document != DocumentId || _pageCount <= 0 || CoverThumbs.Has(document)) yield break;
+            _busy = true;
+            Texture2D page = null;
+            yield return _renderer.RenderPage(0, 360, (t, r) => page = t);
+            _busy = false;
+            if (page == null) yield break;
+            if (document == DocumentId) CoverThumbs.Save(document, page);
+            Destroy(page);
         }
 
         private void Update()

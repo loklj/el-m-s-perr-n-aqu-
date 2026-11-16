@@ -39,6 +39,8 @@ namespace FolioXR.Books
             public int Row;             // Fila donde quedó.
             public float Along;         // Distancia desde el inicio de la fila hasta el centro del lomo.
             public int Leather;         // Color de la tapa (columna del atlas).
+            public Transform Cover;     // Portada de frente (si el libro ya tiene miniatura).
+            public Material CoverMaterial;
         }
 
         private struct Line { public Vector3 Left, Right, Facing; public float Length; public Color Light; }
@@ -51,7 +53,7 @@ namespace FolioXR.Books
         private Vector3 _heldOffset;
         private bool _bookWasGrabbed;
         private GameObject _marker;
-        private Mesh _markerMesh;
+        private Mesh _markerMesh, _coverQuad;
 
         private readonly List<Slot> _slots = new List<Slot>();
         private readonly List<Vector3> _vertices = new List<Vector3>();
@@ -98,6 +100,7 @@ namespace FolioXR.Books
             BookCollections.Changed += MarkDirty;
             FolioAccessibility.Changed += OnAccessibility;
             Font.textureRebuilt += OnFontRebuilt;
+            CoverThumbs.Changed += MarkDirty;
         }
 
         /// <summary>La fuente rehízo su textura: el material de los títulos de los lomos apunta a la nueva.</summary>
@@ -112,6 +115,7 @@ namespace FolioXR.Books
             BookCollections.Changed -= MarkDirty;
             FolioAccessibility.Changed -= OnAccessibility;
             Font.textureRebuilt -= OnFontRebuilt;
+            CoverThumbs.Changed -= MarkDirty;
         }
 
         private void MarkDirty() => _dirty = true;
@@ -253,6 +257,11 @@ namespace FolioXR.Books
             _titles = new GameObject("Títulos").transform;
             _titles.SetParent(transform, false);
             _marker = MarkerObject();
+            // Rectángulo de 1 × 1 para las portadas; mira a −Z como el Quad de Unity y lleva las dos caras.
+            _coverQuad = new Mesh { name = "Portada" };
+            _coverQuad.SetVertices(new List<Vector3> { new Vector3(-0.5f, -0.5f, 0f), new Vector3(0.5f, -0.5f, 0f), new Vector3(0.5f, 0.5f, 0f), new Vector3(-0.5f, 0.5f, 0f) });
+            _coverQuad.SetUVs(0, new List<Vector2> { new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 1f) });
+            _coverQuad.SetTriangles(new[] { 0, 3, 2, 0, 2, 1, 0, 2, 3, 0, 1, 2 }, 0);
             return true;
         }
 
@@ -334,6 +343,7 @@ namespace FolioXR.Books
             }
             _mesh.SetUVs(0, _uv);
             if (s.Title != null) s.Title.color = TitleColor(s.Leather, block);
+            if (s.CoverMaterial != null) s.CoverMaterial.color = BlockLight(block);
         }
 
         private void Rebuild(BookLibrary library, IReadOnlyList<ShelfRow> rows, string current)
@@ -341,7 +351,12 @@ namespace FolioXR.Books
             _dirty = false;
             _shownCurrent = current;
             _vertices.Clear(); _uv.Clear(); _triangles.Clear();
-            foreach (Slot s in _slots) if (s.Title != null) Destroy(s.Title.gameObject);
+            foreach (Slot s in _slots)
+            {
+                if (s.Title != null) Destroy(s.Title.gameObject);
+                if (s.Cover != null) Destroy(s.Cover.gameObject);
+                if (s.CoverMaterial != null) Destroy(s.CoverMaterial);
+            }
             _slots.Clear();
             _hover = _taking = _held = -1;
             if (_marker != null) _marker.SetActive(false);
@@ -381,10 +396,10 @@ namespace FolioXR.Books
                     if (current != null && item.Id == current) continue;   // Hueco del libro abierto: su lugar lo espera.
                     BookEntry entry = byId[item.Id];
                     float height = SpineHeight(entry);
-                    // El lomo queda en el plano de la fila; el libro se extiende hacia el fondo del estante.
+                    // De frente: la tapa queda en el plano de la fila y el grosor va hacia el fondo del estante.
                     Vector3 center = line.Left + along * (item.X + item.Width * 0.5f) + Vector3.up * (height * 0.5f + 0.0005f);
                     _block = r + 1;
-                    AddBook(entry, center, rotation, new Vector3(item.Width, height, SpineDepth(height)), r, item.X + item.Width * 0.5f);
+                    AddBook(entry, center, rotation, new Vector3(item.Width, height, SpineWidth(entry)), r, item.X + item.Width * 0.5f);
                 }
             }
             _mesh.Clear();
@@ -418,7 +433,7 @@ namespace FolioXR.Books
                 // Lugares de libros que ya no están, de filas que no existen o repetidos: se olvidan.
                 if (place == null || place.id == null || !byId.ContainsKey(place.id) || place.row < 0 ||
                     place.row >= _rows.Count || !seated.Add(place.id)) continue;
-                _rows[place.row].Add(new ShelfLayout.Item { Id = place.id, X = place.x, Width = SpineWidth(byId[place.id]) });
+                _rows[place.row].Add(new ShelfLayout.Item { Id = place.id, X = place.x, Width = FaceWidth(byId[place.id]) });
             }
             for (int r = 0; r < _rows.Count; r++)
             {
@@ -434,7 +449,7 @@ namespace FolioXR.Books
             foreach (BookEntry entry in books)
             {
                 if (entry == null || entry.id == null || seated.Contains(entry.id)) continue;
-                float width = SpineWidth(entry);
+                float width = FaceWidth(entry);
                 bool found = false;
                 for (int r = 0; r < _rows.Count && !found; r++)
                 {
@@ -449,6 +464,9 @@ namespace FolioXR.Books
             return waiting;
         }
 
+        // Separación de la portada y del título respecto a la tapa: de lejos, menos que esto parpadea.
+        private const float CoverGap = 0.0015f, TitleGap = 0.002f;
+
         private static float SpineWidth(BookEntry entry)
         {
             // Grosor según páginas: entre 1,6 y 6 cm.
@@ -456,8 +474,16 @@ namespace FolioXR.Books
             return Mathf.Clamp(0.016f + pages * 0.00009f, 0.016f, 0.06f);
         }
 
-        /// <summary>Fondo del libro parado en el estante (el ancho de sus hojas), según su alto.</summary>
-        private static float SpineDepth(float height) => Mathf.Min(0.19f, height * 0.68f);
+        /// <summary>
+        /// Ancho del libro puesto de frente (pedido del usuario, 16 nov 2026: «que se vea la portada»): el de su
+        /// portada si ya tiene miniatura; si no, el de una hoja corriente.
+        /// </summary>
+        private static float FaceWidth(BookEntry entry)
+        {
+            Texture2D cover = CoverThumbs.Get(entry.id);
+            float aspect = cover != null && cover.height > 0 ? Mathf.Clamp(cover.width / (float)cover.height, 0.5f, 1.1f) : 0.68f;
+            return SpineHeight(entry) * aspect;
+        }
 
         private static float SpineHeight(BookEntry entry)
         {
@@ -470,35 +496,65 @@ namespace FolioXR.Books
         {
             int leather = Mathf.Clamp(BookLibrary.Leather(entry), 0, BookCover.LeatherColors.Length - 1);
             int first = _vertices.Count;
-            // Lomo (frente) y tapas en cuero; arriba se ve el canto de las hojas.
+            // Tapa (frente), lomo y contratapa en cuero; arriba se ve el canto de las hojas.
             Box(center - rotation * Vector3.forward * (size.z * 0.5f), rotation, size, leather, 8);
             var slot = new Slot { Entry = entry, Center = center, Rotation = rotation, Size = size, FirstVertex = first, Row = row, Along = along, Leather = leather };
-            // Título a lo largo del lomo, de abajo hacia arriba.
-            var go = new GameObject("Lomo · " + entry.title);
-            go.transform.SetParent(_titles, false);
-            go.transform.SetPositionAndRotation(center + rotation * Vector3.forward * 0.0012f,
-                rotation * Quaternion.Euler(0f, 180f, 90f));
-            var text = go.AddComponent<TextMesh>();
-            text.font = _font;
-            text.fontSize = 48;
-            // Un píxel de la fuente mide characterSize / 10 m: letras de ~65 % del ancho del lomo.
-            text.characterSize = Mathf.Clamp(size.x * 0.65f * 10f / 48f, 0.0018f, 0.003f);
-            text.anchor = TextAnchor.MiddleCenter;
-            text.alignment = TextAlignment.Center;
-            text.color = TitleColor(leather, _block);
-            text.text = Spine(entry.title, size.y);
-            var r = go.GetComponent<MeshRenderer>();
-            r.sharedMaterial = _textMaterial;
-            r.shadowCastingMode = ShadowCastingMode.Off;
-            slot.Title = text;
+            Texture2D cover = CoverThumbs.Get(entry.id);
+            if (cover != null)
+            {
+                // Portada del libro sobre la tapa, mirando a la sala.
+                var art = new GameObject("Portada · " + entry.title);
+                art.transform.SetParent(_titles, false);
+                art.transform.SetPositionAndRotation(center + rotation * Vector3.forward * CoverGap, rotation * Quaternion.Euler(0f, 180f, 0f));
+                art.transform.localScale = new Vector3(size.x, size.y, 1f);
+                art.AddComponent<MeshFilter>().sharedMesh = _coverQuad;
+                var renderer = art.AddComponent<MeshRenderer>();
+                slot.CoverMaterial = new Material(_material) { name = "FolioXR portada en estantería", mainTexture = cover, color = BlockLight(_block) };
+                renderer.sharedMaterial = slot.CoverMaterial;
+                renderer.shadowCastingMode = ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+                slot.Cover = art.transform;
+            }
+            else
+            {
+                // Sin miniatura todavía (el libro nunca se abrió): tapa de cuero con el título.
+                var go = new GameObject("Tapa · " + entry.title);
+                go.transform.SetParent(_titles, false);
+                go.transform.SetPositionAndRotation(center + rotation * (Vector3.forward * TitleGap + Vector3.up * size.y * 0.12f),
+                    rotation * Quaternion.Euler(0f, 180f, 0f));
+                var text = go.AddComponent<TextMesh>();
+                text.font = _font;
+                text.fontSize = 48;
+                text.text = Front(entry.title, out int longest);
+                // Un píxel de la fuente mide characterSize / 10 m y una letra ocupa cerca de medio cuadratín.
+                text.characterSize = Mathf.Clamp(size.x * 0.82f / (longest * 0.52f * 4.8f), 0.0016f, 0.0045f);
+                text.anchor = TextAnchor.MiddleCenter;
+                text.alignment = TextAlignment.Center;
+                text.color = TitleColor(leather, _block);
+                var r = go.GetComponent<MeshRenderer>();
+                r.sharedMaterial = _textMaterial;
+                r.shadowCastingMode = ShadowCastingMode.Off;
+                slot.Title = text;
+            }
             _slots.Add(slot);
         }
 
-        private static string Spine(string title, float height)
+        /// <summary>Título partido en renglones cortos para la tapa; longest: letras del renglón más largo.</summary>
+        private static string Front(string title, out int longest)
         {
             title = string.IsNullOrWhiteSpace(title) ? "Sin título" : title.Trim();
-            int max = Mathf.Max(8, Mathf.RoundToInt(height * 95f));
-            return title.Length <= max ? title : title.Substring(0, max - 1).TrimEnd() + "…";
+            var lines = new List<string>();
+            string line = string.Empty;
+            foreach (string word in title.Split(' '))
+            {
+                if (line.Length > 0 && line.Length + 1 + word.Length > 13) { lines.Add(line); line = word; }
+                else line = line.Length == 0 ? word : line + " " + word;
+            }
+            if (line.Length > 0) lines.Add(line);
+            if (lines.Count > 5) { lines.RemoveRange(5, lines.Count - 5); lines[4] += "…"; }
+            longest = 6;
+            foreach (string l in lines) longest = Mathf.Max(longest, l.Length);
+            return string.Join("\n", lines);
         }
 
         /// <summary>Caja centrada en center con la cara «frente» hacia +Z local.</summary>
@@ -667,7 +723,7 @@ namespace FolioXR.Books
             _bookWasGrabbed = grabbed;
             if (grabbed && library.Current != null)
             {
-                bool over = DropTarget(_book.transform.position, library.Current.id, SpineWidth(library.Current), out _, out Vector3 at, out Quaternion rotation);
+                bool over = DropTarget(_book.transform.position, library.Current.id, FaceWidth(library.Current), out _, out Vector3 at, out Quaternion rotation);
                 if (_marker != null)
                 {
                     _marker.SetActive(over);
@@ -677,7 +733,7 @@ namespace FolioXR.Books
             }
             if (!released || library.Current == null) return false;
             if (_marker != null) _marker.SetActive(false);
-            if (!DropTarget(_book.transform.position, library.Current.id, SpineWidth(library.Current), out int row, out _, out _)) return false;
+            if (!DropTarget(_book.transform.position, library.Current.id, FaceWidth(library.Current), out int row, out _, out _)) return false;
             Debug.Log("[FolioXR] Estantería: «" + library.Current.title + "» cerrado y guardado en la fila " + (row + 1) + ".");
             Settle(library.Current.id, row);
             library.CloseCurrent();
@@ -787,7 +843,8 @@ namespace FolioXR.Books
             for (int i = 0; i < count; i++) _vertices[s.FirstVertex + i] = vertices[i];
             _mesh.SetVertices(_vertices);
             _mesh.RecalculateBounds();
-            if (s.Title != null) s.Title.transform.position = s.Center + offset + r * Vector3.forward * 0.0012f;
+            if (s.Title != null) s.Title.transform.position = s.Center + offset + r * (Vector3.forward * TitleGap + Vector3.up * s.Size.y * 0.12f);
+            if (s.Cover != null) s.Cover.position = s.Center + offset + r * Vector3.forward * CoverGap;
         }
 
         private int Nearest(Vector3 point, float reach, out float distance)
@@ -885,6 +942,9 @@ namespace FolioXR.Books
             if (_material != null) Destroy(_material);
             if (_textMaterial != null) Destroy(_textMaterial);
             if (_atlas != null) Destroy(_atlas);
+            if (_markerMesh != null) Destroy(_markerMesh);
+            if (_coverQuad != null) Destroy(_coverQuad);
+            foreach (Slot s in _slots) if (s.CoverMaterial != null) Destroy(s.CoverMaterial);
         }
     }
 }

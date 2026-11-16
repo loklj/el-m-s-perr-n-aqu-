@@ -770,6 +770,119 @@ def vaciar_estantes(t, a):
     memoria()
 
 
+# ───────────── Agua cercana y hojas a oscuras (retoques sin hornear) ─────────────
+def _leer_malla(path):
+    b = open(path, 'rb').read()
+    nv, ni = (int(v) for v in np.frombuffer(b, np.uint32, 2, 4))
+    pos = np.frombuffer(b, np.float32, nv * 3, 12).reshape(-1, 3)
+    uv = np.frombuffer(b, np.float32, nv * 2, 12 + nv * 12).reshape(-1, 2)
+    idx = np.frombuffer(b, np.uint32, ni, 12 + nv * 20).reshape(-1, 3)
+    return pos, uv, idx
+
+
+def malla_de_agua(P, path, radio=147.0):
+    """Superficie del agua (lago, mar) desde la orilla hasta el cielo panorámico, en coordenadas de Unity.
+    El panorama solo es exacto mirado desde su centro: desde el balcón o el muelle, donde debía verse agua
+    se veía el suelo cercano. Unity pinta esta malla con el mismo panorama, proyectado desde su centro.
+    Devuelve los triángulos escritos (0 si el tema no tiene agua)."""
+    if not P.con_agua: return 0
+    radios = [5.0]
+    while radios[-1] < radio: radios.append(min(radio, radios[-1] * 1.07 + 0.05))
+    radios = np.array(radios)
+    ang = np.linspace(0, 2 * math.pi, 181)
+    R, A = np.meshgrid(radios, ang, indexing='ij')
+    x, z = np.cos(A) * R, np.sin(A) * R
+    bajo = P.altura(x, z) < paisaje.AGUA + 0.08          # Con un margen: el agua entra un poco bajo la orilla.
+    pos = np.stack([x, np.full_like(x, paisaje.GY + paisaje.AGUA), z], -1).reshape(-1, 3)
+    m = len(ang)
+    tri = []
+    for i in range(len(radios) - 1):
+        for j in range(m - 1):
+            if not (bajo[i, j] or bajo[i, j + 1] or bajo[i + 1, j] or bajo[i + 1, j + 1]): continue
+            a = i * m + j
+            tri += [(a, a + 1, a + m + 1), (a, a + m + 1, a + m)]
+    if not tri: return 0
+    tri = np.array(tri, np.uint32)
+    usados, inv = np.unique(tri, return_inverse=True)
+    pos = pos[usados]
+    with open(path, 'wb') as f:
+        f.write(b'FXM1')
+        f.write(np.array([len(pos), inv.size], np.uint32).tobytes())
+        f.write(pos.astype(np.float32).tobytes()); f.write(np.zeros((len(pos), 2), np.float32).tobytes())
+        f.write(inv.astype(np.uint32).tobytes())
+    return len(tri)
+
+
+def aclarar_hojas(malla, atlas_jpg, tam):
+    """Las hojas se hornean por una sola cara y Unity las muestra por las dos: la mitad quedaba negra
+    (su cara horneada miraba hacia adentro de la planta). Cada hoja muy oscura toma el color de las hojas
+    iluminadas de su misma planta, atenuado. Devuelve cuántas celdas cambió."""
+    pos, uv, idx = _leer_malla(malla)
+    t_uv = uv[idx] * tam                                            # (n, 3, 2) en texels
+    chico = (np.ptp(t_uv[..., 0], axis=1) < CELDA_PX) & (np.ptp(t_uv[..., 1], axis=1) < CELDA_PX)
+    cx = np.floor(t_uv[..., 0].mean(1) / CELDA_PX).astype(np.int64)
+    cy = np.floor(t_uv[..., 1].mean(1) / CELDA_PX).astype(np.int64)
+    # Las celdas de hoja llenan filas completas desde abajo; se descartan triángulos chicos de otras islas.
+    filas = 0
+    cols = tam // CELDA_PX
+    cuenta = np.bincount(cy[chico], minlength=cols)
+    while filas < cols and cuenta[filas] > cols * 0.5: filas += 1
+    if filas < cols and cuenta[filas] > 0 and filas > 0: filas += 1    # Última fila, a medio llenar.
+    hoja = chico & (cy < filas)
+    if not hoja.any(): return 0
+    img = cv2.imread(atlas_jpg)
+    if img is None or img.shape[0] != tam: return 0
+    arr = img[::-1].astype(np.float32)                                   # Fila 0 abajo, como las UV.
+    cxh, cyh = cx[hoja], cy[hoja]
+    col = (arr[cyh * CELDA_PX + 1, cxh * CELDA_PX + 1] + arr[cyh * CELDA_PX + 2, cxh * CELDA_PX + 2] +
+           arr[cyh * CELDA_PX + 1, cxh * CELDA_PX + 2] + arr[cyh * CELDA_PX + 2, cxh * CELDA_PX + 1]) / 4
+    lum = col.max(1)
+    centro = pos[idx[hoja]].mean(1)
+    planta = np.floor(centro / 1.6).astype(np.int64)
+    clave = planta[:, 0] * 73856093 ^ planta[:, 1] * 19349663 ^ planta[:, 2] * 83492791
+    orden = np.argsort(clave, kind='stable')
+    cortes = np.flatnonzero(np.diff(clave[orden])) + 1
+    # Color de hoja iluminada de todo el atlas, por si una planta entera quedó a oscuras.
+    general = col[lum >= np.percentile(lum, 90)].mean(0)
+    cambiadas = 0
+    for grupo in np.split(orden, cortes):
+        l = lum[grupo]
+        meta = col[grupo[l >= np.percentile(l, 88)]].mean(0)
+        if meta.max() < 0.45 * general.max(): meta = meta * 0.4 + general * 0.33
+        ml = float(meta.max())
+        if ml < 10: continue
+        oscuras = grupo[l < 0.38 * ml]
+        if not len(oscuras): continue
+        # Hoja en sombra: entre un 30 % y un 46 % de la iluminada, conservando algo de su variación.
+        f = 0.30 + 0.16 * np.clip(lum[oscuras] / (0.38 * ml), 0, 1)
+        nuevo = meta[None, :] * f[:, None]
+        for (x_, y_), c in zip(zip(cxh[oscuras], cyh[oscuras]), nuevo):
+            arr[y_ * CELDA_PX:(y_ + 1) * CELDA_PX, x_ * CELDA_PX:(x_ + 1) * CELDA_PX] = c
+        cambiadas += len(oscuras)
+    if cambiadas:
+        cv2.imwrite(atlas_jpg, np.clip(arr[::-1], 0, 255).astype(np.uint8), [cv2.IMWRITE_JPEG_QUALITY, 93])
+    return cambiadas
+
+
+def retocar(t, a):
+    """Retoques sobre un tema ya horneado, sin hornear nada: hojas a oscuras y malla del agua cercana."""
+    slug = t['slug']
+    out = os.path.join(SALIDA, slug)
+    datos = json.load(open(f'{out}/datos.json'))
+    tam = int(datos['atlas'])
+    if a.solo == 'hojas':
+        for parte in ('casa', 'cerca'):
+            if datos.get('hojas_' + parte): continue                     # Ya aclaradas: repetirlo las iría lavando.
+            n = aclarar_hojas(f'{out}/{parte}_malla.bytes', f'{out}/{parte}_luz.jpg', tam)
+            datos['hojas_' + parte] = int(n) + 1
+            log(f'{slug}: {n} hojas a oscuras aclaradas en {parte}_luz.jpg')
+    else:
+        ctx = escena(t, lejos=False)
+        n = malla_de_agua(ctx['P'], f'{out}/agua_malla.bytes')
+        log(f'{slug}: agua cercana, {n} triángulos')
+    with open(f'{out}/datos.json', 'w') as f: json.dump(datos, f, indent=1)
+
+
 def memoria():
     import resource
     log(f'memoria máxima: {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e6:.1f} GB')
@@ -820,6 +933,11 @@ def todo(t, a):
                  texels_casa=casa_ob['texels'], texels_cerca=cerca_ob['texels'],
                  sol=[float(v) for v in cielo.sol(t)[[0, 2, 1]]],
                  luz_estantes=luz_de_estantes(casa_ob, luz_casa, ctx['casa'], t, E, a.tam))
+    # Retoques que no dependen del horneado: hojas que quedaron a oscuras y agua desde la orilla.
+    for parte in ('casa', 'cerca'):
+        datos['hojas_' + parte] = aclarar_hojas(f'{out}/{parte}_malla.bytes', f'{out}/{parte}_luz.jpg', a.tam) + 1
+    if not malla_de_agua(ctx['P'], f'{out}/agua_malla.bytes') and os.path.exists(f'{out}/agua_malla.bytes'):
+        os.remove(f'{out}/agua_malla.bytes')
     with open(f'{out}/datos.json', 'w') as f: json.dump(datos, f, indent=1)
     comprobar(ctx, [(casa_ob, f'{out}/casa_luz.jpg'), (cerca_ob, f'{out}/cerca_luz.jpg')], f'{out}/cielo.jpg',
               a.vista.split(','), ojo)
@@ -832,7 +950,7 @@ if __name__ == '__main__':
     ap.add_argument('tema')
     ap.add_argument('--vista', default='sofa,terraza,cama,jardin')
     ap.add_argument('--todo', action='store_true')
-    ap.add_argument('--solo', choices=['casa', 'cerca', 'pano', 'estantes'],
+    ap.add_argument('--solo', choices=['casa', 'cerca', 'pano', 'estantes', 'hojas', 'agua'],
                     help='hornea solo ese atlas y termina (se guarda en caché); pano rehace el cielo; estantes vacía '
                          'las estanterías de un tema ya horneado')
     ap.add_argument('--tam', type=int, default=4096)
@@ -844,7 +962,8 @@ if __name__ == '__main__':
     a = ap.parse_args()
     os.makedirs(CACHE, exist_ok=True)
     tema = temas.POR_SLUG[a.tema]
-    if a.solo == 'estantes': vaciar_estantes(tema, a)
+    if a.solo in ('hojas', 'agua'): retocar(tema, a)
+    elif a.solo == 'estantes': vaciar_estantes(tema, a)
     elif a.todo or a.solo: todo(tema, a)
     else:
         ctx = escena(tema)

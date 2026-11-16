@@ -2,6 +2,9 @@
 // Blender, así que no se ilumina nada en el visor. Un ruido fino repetido («detalle») disimula
 // el desenfoque de la textura cuando se mira de muy cerca. No descarta caras traseras: las hojas
 // y las cortinas se ven por ambos lados sin duplicar triángulos.
+// Desvanecido (16 nov 2026): el terreno cercano termina a unos 34 m y más allá se ve el panorama. Para que
+// no se note el borde, sus últimos metros se van deshaciendo en puntos (cobertura de MSAA), sin mezclar
+// colores ni cambiar el orden de dibujo.
 Shader "FolioXR/Baked"
 {
     Properties
@@ -10,6 +13,7 @@ Shader "FolioXR/Baked"
         _DetailTex ("Detalle", 2D) = "gray" {}
         _DetailTiling ("Repeticiones del detalle", Float) = 0
         _DetailStrength ("Fuerza del detalle", Range(0, 1)) = 0
+        _Fade ("Desvanecer entre estos radios (inicio, fin; 0 = no; z = 1 sin MSAA)", Vector) = (0, 0, 0, 0)
     }
     SubShader
     {
@@ -18,6 +22,7 @@ Shader "FolioXR/Baked"
         ZWrite On
         Pass
         {
+            AlphaToMask On
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
@@ -36,6 +41,7 @@ Shader "FolioXR/Baked"
                 float4 pos : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 float2 detail : TEXCOORD1;
+                float2 flat : TEXCOORD2;   // Posición horizontal en la malla (metros desde el centro de la casa).
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
@@ -43,6 +49,7 @@ Shader "FolioXR/Baked"
             sampler2D _DetailTex;
             float _DetailTiling;
             float _DetailStrength;
+            float4 _Fade;
 
             v2f vert (appdata v)
             {
@@ -53,6 +60,7 @@ Shader "FolioXR/Baked"
                 o.pos = UnityObjectToClipPos(v.vertex);
                 o.uv = v.uv;
                 o.detail = v.uv * _DetailTiling;
+                o.flat = v.vertex.xz;
                 return o;
             }
 
@@ -61,7 +69,26 @@ Shader "FolioXR/Baked"
                 fixed3 c = tex2D(_MainTex, i.uv).rgb;
                 fixed d = tex2D(_DetailTex, i.detail).r;
                 c *= lerp(1.0, d * 2.0, _DetailStrength);
-                return fixed4(c, 1.0);
+                float alpha = 1.0;
+                if (_Fade.y > 0.0)
+                {
+                    alpha = saturate((_Fade.y - length(i.flat)) / max(0.01, _Fade.y - _Fade.x));
+                    alpha = alpha * alpha * (3.0 - 2.0 * alpha);
+                    // Ruido por píxel: reparte los escalones de la cobertura para que no se vean franjas.
+                    float n = frac(52.9829189 * frac(dot(i.pos.xy, float2(0.06711056, 0.00583715))));
+                    if (_Fade.z > 0.5)
+                    {
+                        // Sin MSAA no hay cobertura que repartir: el borde se deshace descartando píxeles.
+                        clip(alpha >= 0.999 ? 1.0 : alpha - n * 0.98 - 0.01);
+                        alpha = 1.0;
+                    }
+                    else
+                    {
+                        alpha = alpha >= 0.999 ? 1.0 : alpha + (n - 0.5) * 0.3;
+                        clip(alpha - 0.04);
+                    }
+                }
+                return fixed4(c, saturate(alpha));
             }
             ENDCG
         }

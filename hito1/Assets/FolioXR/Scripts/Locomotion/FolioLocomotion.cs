@@ -206,7 +206,7 @@ namespace FolioXR.Locomotion
         private void UpdateCapsule()
         {
             Vector3 head = _rig.transform.InverseTransformPoint(_rig.centerEyeAnchor.position);
-            Vector3 floor = _rig.transform.InverseTransformPoint(_rig.trackingSpace.position);
+            Vector3 floor = _rig.transform.InverseTransformPoint(_rig.trackingSpace.position + Vector3.up * FloorLift);
             _capsule.height = Mathf.Max(0.6f, head.y - floor.y + 0.10f);
             _capsule.center = new Vector3(head.x, floor.y + _capsule.height * 0.5f, head.z);
         }
@@ -392,8 +392,11 @@ namespace FolioXR.Locomotion
             _visuals?.ShowArc(_arc, count, _validTarget, _destination);
         }
 
+        /// <summary>El piso de la casa queda un poco por encima del real para bajar los ojos (FolioEnvironmentController).</summary>
+        private float FloorLift => _environment != null ? _environment.FloorLift : 0f;
+
         private Vector3 Feet() => new Vector3(_rig.centerEyeAnchor.position.x,
-            _rig.trackingSpace.position.y, _rig.centerEyeAnchor.position.z);
+            _rig.trackingSpace.position.y + FloorLift, _rig.centerEyeAnchor.position.z);
 
         private bool ValidateDestination(Vector3 point, out Vector3 landing)
         {
