@@ -218,7 +218,7 @@ namespace FolioXR.Menu
                 _hover.Clear();
                 _pressed = -1;
                 BuildLayout();
-                _clock.gameObject.SetActive(_drawnCategory == MenuCategory.Hora);
+                _clock.gameObject.SetActive(_drawnCategory == MenuCategory.Herramientas);
             }
             RefreshButtonTexts();
             UpdateButtons();
@@ -239,8 +239,8 @@ namespace FolioXR.Menu
                 AddButton(new Rect(-0.192f, Top - i * RowPitch - ButtonHeight, 0.148f, ButtonHeight), i, -1, false);
             AddButton(new Rect(0.148f, 0.094f, 0.044f, 0.04f), -1, -1, true);
             // La biblioteca usa dos columnas: con marcadores y seis libros llega a siete filas.
-            bool wide = _drawnCategory == MenuCategory.ImportarYNubes;
-            float top = _drawnCategory == MenuCategory.Hora ? Top - 0.056f : Top;
+            bool wide = _model.WideOptions;
+            float top = _drawnCategory == MenuCategory.Herramientas ? Top - 0.056f : Top;
             int rows = wide ? _model.Options.Count : (_model.Options.Count + 1) / 2;
             float pitch = Mathf.Min(RowPitch, (top + 0.134f) / Mathf.Max(1, rows));
             float height = Mathf.Min(ButtonHeight, pitch - 0.004f);

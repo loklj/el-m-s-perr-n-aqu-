@@ -415,11 +415,10 @@ namespace FolioXR.Menu
                             o + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (1.02f * u), w * 2.2f);
                     }
                     break;
-                case MenuCategory.ImportarYNubes: // Nube.
-                    Arc(angle, o + new Vector2(-0.5f, -0.15f) * u, 0.45f * u, 90f, 270f, w);
-                    Arc(angle, o + new Vector2(0f, 0.2f) * u, 0.6f * u, 15f, 165f, w);
-                    Arc(angle, o + new Vector2(0.6f, -0.15f) * u, 0.45f * u, -90f, 90f, w);
-                    Line(-0.5f, -0.6f, 0.6f, -0.6f);
+                case MenuCategory.Libro: // Libro abierto.
+                    Line(-1.15f, -0.65f, -1.15f, 0.75f); Line(-1.15f, 0.75f, 0f, 0.5f); Line(0f, 0.5f, 1.15f, 0.75f);
+                    Line(1.15f, 0.75f, 1.15f, -0.65f); Line(1.15f, -0.65f, 0f, -0.9f); Line(0f, -0.9f, -1.15f, -0.65f);
+                    Line(0f, 0.5f, 0f, -0.9f);
                     break;
             }
         }
@@ -552,7 +551,7 @@ namespace FolioXR.Menu
         private void AddCategory(float angle, MenuCategory category)
         {
             AddPatch(angle, -HalfWidth, HalfWidth, -HalfHeight, HalfHeight, TileRadius, Normal, 8, 4);
-            if (category == MenuCategory.Hora)
+            if (category == MenuCategory.Herramientas)
             {
                 // La casilla es el reloj: hora grande y batería debajo.
                 AddLabel(angle, DateTime.Now.ToString("HH:mm"), 0.008f, 0.064f, 0.02f, 0.015f, TextColor);
