@@ -5,6 +5,8 @@
 // Desvanecido (16 nov 2026): el terreno cercano termina a unos 34 m y más allá se ve el panorama. Para que
 // no se note el borde, sus últimos metros se van deshaciendo en puntos (cobertura de MSAA), sin mezclar
 // colores ni cambiar el orden de dibujo.
+// Linterna (17 nov 2026): la luz horneada no cambia, pero la linterna de la bandeja suma su haz con los
+// valores globales _FolioTorch* (TripleFlashlight). La normal sale de las derivadas de la posición.
 Shader "FolioXR/Baked"
 {
     Properties
@@ -42,6 +44,7 @@ Shader "FolioXR/Baked"
                 float2 uv : TEXCOORD0;
                 float2 detail : TEXCOORD1;
                 float2 flat : TEXCOORD2;   // Posición horizontal en la malla (metros desde el centro de la casa).
+                float3 world : TEXCOORD3;
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
@@ -50,6 +53,9 @@ Shader "FolioXR/Baked"
             float _DetailTiling;
             float _DetailStrength;
             float4 _Fade;
+            float4 _FolioTorchPos;     // xyz posición, w = 1 encendida.
+            float4 _FolioTorchDir;     // xyz dirección, w = coseno del borde del haz.
+            float4 _FolioTorchColor;   // rgb color, w = alcance en metros.
 
             v2f vert (appdata v)
             {
@@ -61,6 +67,7 @@ Shader "FolioXR/Baked"
                 o.uv = v.uv;
                 o.detail = v.uv * _DetailTiling;
                 o.flat = v.vertex.xz;
+                o.world = mul(unity_ObjectToWorld, v.vertex).xyz;
                 return o;
             }
 
@@ -69,6 +76,21 @@ Shader "FolioXR/Baked"
                 fixed3 c = tex2D(_MainTex, i.uv).rgb;
                 fixed d = tex2D(_DetailTex, i.detail).r;
                 c *= lerp(1.0, d * 2.0, _DetailStrength);
+                float3 facing = normalize(cross(ddy(i.world), ddx(i.world)));
+                if (_FolioTorchPos.w > 0.5)
+                {
+                    float3 toPoint = i.world - _FolioTorchPos.xyz;
+                    float dist = max(length(toPoint), 0.001);
+                    float3 dir = toPoint / dist;
+                    float cone = smoothstep(_FolioTorchDir.w, lerp(_FolioTorchDir.w, 1.0, 0.55), dot(dir, _FolioTorchDir.xyz));
+                    float reach = saturate(1.0 - dist / _FolioTorchColor.w);
+                    float falloff = reach * reach / (1.0 + 0.12 * dist * dist);
+                    float lambert = 0.3 + 0.7 * abs(dot(facing, dir));
+                    float lum = dot(c, float3(0.2126, 0.7152, 0.0722));
+                    // Más notoria donde está oscuro; de día apenas aclara.
+                    float k = cone * falloff * lambert * saturate(1.15 - lum * 1.4);
+                    c += _FolioTorchColor.rgb * k * (c * 4.0 + 0.5);
+                }
                 float alpha = 1.0;
                 if (_Fade.y > 0.0)
                 {

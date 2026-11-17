@@ -23,6 +23,8 @@ En la prueba del 11 de noviembre las ideas de los once estilos gustaron, pero la
 - El terreno visible ondula más allá de 15 m, pero el suelo caminable sigue siendo plano.
 - Cada estilo horneado pesa unos 20 MB en el repositorio y unos 27 MB en el APK.
 
+**Actualización (17 nov 2026):** quedan diez estilos; Casa del lago se quitó a pedido del usuario (fallas a la vista). Se camina sobre la forma del terreno y hay un límite invisible antes del borde y del agua (`herramientas/entornos/suelo.py`). Además, la persona puede crear entornos propios con una foto 360° (`CustomEnvironments`).
+
 ## Once estilos realistas (Claude, 11 de noviembre de 2026, sin probar en el visor)
 
 Pedido del usuario: entornos realistas tomando como ejemplo los de Meta. Son **originales**: se inspiran en su realismo (paisaje con relieve, cielo con sol, nubes y horizonte, luz coherente), pero no copian nombres, modelos ni texturas de Meta. Todo sigue siendo procedural, sin assets.
@@ -31,7 +33,7 @@ Pedido del usuario: entornos realistas tomando como ejemplo los de Meta. Son **o
 | --- | --- | --- |
 | Moderna cálida | Jardín, colinas, árboles y arbustos | Día |
 | Refugio alpino | Cordillera de 40 m con cumbres nevadas, pinos | Día despejado |
-| Casa del lago | Lago frente a la terraza con muelle caminable, montes | Atardecer con reflejo del sol en el agua |
+| ~~Casa del lago~~ | Quitada el 17 nov 2026: el lago a 12 m de la casa y su orilla, pintada en el panorama, no calzaban con el terreno al caminar | — |
 | Casa de playa | Arena, mar hacia el frente, palmeras | Día |
 | Cabaña nevada | Nieve, montañas, pinos | Nublado |
 | Casa del desierto | Dunas, mesetas rojas escalonadas, cactus, rocas | Atardecer dorado |

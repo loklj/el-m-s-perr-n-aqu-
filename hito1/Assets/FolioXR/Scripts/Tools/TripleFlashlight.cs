@@ -135,9 +135,40 @@ namespace FolioXR.Tools
             _dot.gameObject.SetActive(false);
         }
 
+        // Los entornos horneados no reciben luces de Unity (su textura ya trae la luz): FolioXR/Baked suma la de
+        // la linterna con estos valores globales (17 nov 2026: «la linterna está encendida y no ilumina nada»).
+        private static readonly int TorchPosition = Shader.PropertyToID("_FolioTorchPos");
+        private static readonly int TorchDirection = Shader.PropertyToID("_FolioTorchDir");
+        private static readonly int TorchColor = Shader.PropertyToID("_FolioTorchColor");
+        private static TripleFlashlight _lit;
+
+        private void PublishTorch()
+        {
+            bool on = Powered && _emitter != null && Mode != FlashlightMode.Laser && isActiveAndEnabled;
+            if (!on)
+            {
+                if (_lit == this) { Shader.SetGlobalVector(TorchPosition, Vector4.zero); _lit = null; }
+                return;
+            }
+            _lit = this;
+            bool uv = Mode == FlashlightMode.Ultraviolet;
+            Vector3 p = _emitter.position, d = _emitter.forward;
+            Shader.SetGlobalVector(TorchPosition, new Vector4(p.x, p.y, p.z, 1f));
+            // w: coseno del borde del haz (35° de apertura, como la luz de Unity).
+            Shader.SetGlobalVector(TorchDirection, new Vector4(d.x, d.y, d.z, Mathf.Cos(17.5f * Mathf.Deg2Rad)));
+            Color c = uv ? new Color(0.55f, 0.12f, 1f) * 0.5f : new Color(1f, 0.95f, 0.82f);
+            Shader.SetGlobalVector(TorchColor, new Vector4(c.r, c.g, c.b, uv ? 3f : 20f));
+        }
+
+        private void OnDisable()
+        {
+            if (_lit == this) { Shader.SetGlobalVector(TorchPosition, Vector4.zero); _lit = null; }
+        }
+
         private void LateUpdate()
         {
             CheckPipeline();
+            PublishTorch();
             if (!Powered || _emitter == null)
                 return;
             bool laser = Mode == FlashlightMode.Laser;

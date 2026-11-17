@@ -19,7 +19,7 @@ namespace FolioXR.Menu
             { "Español", "English", "中文", "Français", "Português", "Русский", "Bahasa Indonesia", "Deutsch", "日本語", "Türkçe", "Tiếng Việt" };
         // Frases que van seguidas de un dato (número de página, minutos…): se traduce solo el comienzo.
         private static readonly string[] Prefixes =
-            { "Nombrar marcador pág.", "Quitar marcador pág.", "Marcar pág.", "Pág.", "Avisar en", "Más libros", "Más entornos", "Más entradas", "Descargar" };
+            { "Nombrar marcador pág.", "Quitar marcador pág.", "Marcar pág.", "Pág.", "Avisar en", "Más libros", "Más entornos", "Más entradas", "Descargar", "Mi entorno" };
 
         public static event Action Changed;
         private static string _current;

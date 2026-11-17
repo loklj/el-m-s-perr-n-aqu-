@@ -272,13 +272,42 @@ namespace FolioXR.Books
         // de la casa tiene el suyo, teñido con la luz horneada que le llega.
         private static readonly float[] Shade = { 1f, 0.72f, 1.18f, 0.5f };
 
+        // Desde la columna 16, un color por libro con tapas propias (el del borde de su portada, como la tapa
+        // del libro en la mano). Pedido del usuario, 17 nov 2026.
+        private const int FixedColumns = 16;
+        private readonly List<Color> _bookColors = new List<Color>();
+        private readonly Dictionary<string, int> _columnById = new Dictionary<string, int>();
+        private int _columns = FixedColumns;
+
+        /// <summary>Columna del atlas para el lomo de ese libro: su color propio o el cuero elegido.</summary>
+        private int ColumnFor(BookEntry entry)
+        {
+            if (entry != null && entry.id != null && _columnById.TryGetValue(entry.id, out int column)) return column;
+            return Mathf.Clamp(entry != null ? BookLibrary.Leather(entry) : 0, 0, BookCover.LeatherColors.Length - 1);
+        }
+
+        private void CollectBookColors(List<BookEntry> books)
+        {
+            _bookColors.Clear();
+            _columnById.Clear();
+            foreach (BookEntry entry in books)
+            {
+                if (entry == null || entry.id == null || !BookLibrary.OwnCovers(entry)) continue;
+                // Sin color guardado todavía (nunca se abrió): el mismo gris oscuro de la tapa en la mano.
+                Color color = CoverThumbs.TryGetColor(entry.id, out Color c) ? c : new Color(0.22f, 0.21f, 0.2f);
+                _columnById[entry.id] = FixedColumns + _bookColors.Count;
+                _bookColors.Add(color);
+            }
+            _columns = FixedColumns + _bookColors.Count;
+        }
+
         private void BuildAtlas()
         {
             _blocks = _lines.Count + 1;
-            if (_atlas == null || _atlas.height != 4 * _blocks)
+            if (_atlas == null || _atlas.height != 4 * _blocks || _atlas.width != _columns)
             {
                 if (_atlas != null) Destroy(_atlas);
-                _atlas = new Texture2D(16, 4 * _blocks, TextureFormat.RGBA32, false)
+                _atlas = new Texture2D(_columns, 4 * _blocks, TextureFormat.RGBA32, false)
                 { name = "FolioXR colores de estantería", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
                 _material.mainTexture = _atlas;
             }
@@ -288,10 +317,12 @@ namespace FolioXR.Books
                 new Color(0.86f, 0.82f, 0.72f), // papel (cantos)
                 new Color(0.95f, 0.78f, 0.35f)  // resaltado
             };
+            while (colors.Count < FixedColumns) colors.Add(Color.gray);
+            colors.AddRange(_bookColors);
             for (int y = 0; y < 4 * _blocks; y++)
             {
                 Color light = BlockLight(y / 4);
-                for (int x = 0; x < 16; x++)
+                for (int x = 0; x < _columns; x++)
                 {
                     Color c = (x < colors.Count ? colors[x] : Color.gray) * Shade[y % 4] * light;
                     c.a = 1f;
@@ -322,11 +353,18 @@ namespace FolioXR.Books
         }
 
         private Vector2 Texel(int column, int shade, int block) =>
-            new Vector2((column + 0.5f) / 16f, (block * 4 + shade + 0.5f) / (4f * _blocks));
+            new Vector2((column + 0.5f) / _columns, (block * 4 + shade + 0.5f) / (4f * _blocks));
 
         private Color TitleColor(int leather, int block)
         {
-            Color c = (leather == 6 ? new Color(0.25f, 0.16f, 0.08f) : new Color(0.93f, 0.8f, 0.45f)) * BlockLight(block, 0.6f);
+            // Letras oscuras sobre lomos claros (cuero miel o un color propio claro), doradas sobre los oscuros.
+            bool light = leather == 6;
+            if (leather >= FixedColumns && leather - FixedColumns < _bookColors.Count)
+            {
+                Color b = _bookColors[leather - FixedColumns];
+                light = b.r * 0.2126f + b.g * 0.7152f + b.b * 0.0722f > 0.5f;
+            }
+            Color c = (light ? new Color(0.18f, 0.12f, 0.06f) : new Color(0.93f, 0.8f, 0.45f)) * BlockLight(block, 0.6f);
             c.a = 1f;
             return c;
         }
@@ -363,6 +401,7 @@ namespace FolioXR.Books
 
             // Todos los libros, en el orden del menú: así se reparten los que todavía no tienen lugar.
             List<BookEntry> books = BookCollections.View(library.Books, true);
+            CollectBookColors(books);
             _lines.Clear();
             _houseShown = rows != null;
             // Filas como (izquierda, derecha, hacia la sala), en coordenadas del mundo.
@@ -494,7 +533,7 @@ namespace FolioXR.Books
 
         private void AddBook(BookEntry entry, Vector3 center, Quaternion rotation, Vector3 size, int row, float along)
         {
-            int leather = Mathf.Clamp(BookLibrary.Leather(entry), 0, BookCover.LeatherColors.Length - 1);
+            int leather = ColumnFor(entry);
             int first = _vertices.Count;
             // Lomo (frente) y tapas en cuero; arriba se ve el canto de las hojas.
             Box(center - rotation * Vector3.forward * (size.z * 0.5f), rotation, size, leather, 8);

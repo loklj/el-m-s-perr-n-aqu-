@@ -314,9 +314,16 @@ namespace FolioXR.Environments
             return true;
         }
 
+        private void Awake()
+        {
+            // Entornos propios (fotos 360°): viven junto al controlador y se quitan al entrar a una casa.
+            if (GetComponent<CustomEnvironments>() == null) gameObject.AddComponent<CustomEnvironments>();
+        }
+
         private void EnterEnvironment()
         {
             if (!ResolveScene()) return;
+            CustomEnvironments.Instance?.Hide();                       // Antes de guardar cómo estaba la cámara.
             try
             {
                 // Si la construcción falla, el passthrough y la cámara siguen como estaban.

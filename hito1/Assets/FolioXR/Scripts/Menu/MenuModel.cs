@@ -79,6 +79,8 @@ namespace FolioXR.Menu
         private const int BooksPerPage = 6;
         private int _libraryPage;
         private int _themePage, _pointCursor;
+        private bool _ownEnvironments, _removingEnvironment; // Entornos → Mis entornos (fotos 360°).
+        private string _removeEnvironment;
 
         /// <summary>Parte un nombre largo en dos líneas por el espacio más cercano al centro.</summary>
         private static string TwoLines(string text)
@@ -99,6 +101,7 @@ namespace FolioXR.Menu
             FolioAccessibility.Changed += () => { if (SelectedCategory == MenuCategory.Ajustes) RebuildOptions(); };
             LicenseViewer.Changed += () => { if (SelectedCategory == MenuCategory.Ajustes && _settingsGroup == 5) RebuildOptions(); };
             BookCollections.Changed += () => { if (SelectedCategory == MenuCategory.Biblioteca) RebuildOptions(); };
+            CustomEnvironments.Changed += () => { if (SelectedCategory == MenuCategory.Entornos) RebuildOptions(); };
             _book = book;
             _environment = environment;
             _sphereStyle = sphereStyle;
@@ -673,6 +676,36 @@ namespace FolioXR.Menu
             _timerEnd = Time.realtimeSinceStartupAsDouble + minutes * 60.0;
         }
 
+        /// <summary>Entornos propios: una foto 360° de la persona alrededor, en vez de la habitación.</summary>
+        private void AddOwnEnvironments(List<MenuOption> options, CustomEnvironments own)
+        {
+            options.Add(new MenuOption("Volver", () => { _ownEnvironments = _removingEnvironment = false; _removeEnvironment = null; RebuildOptions(); }));
+            if (own == null) return;
+            if (own.Notice.Length > 0) options.Add(new MenuOption(own.Notice));
+            options.Add(new MenuOption("+ Nuevo entorno\n(foto 360°)", () => { _removingEnvironment = false; own.Pick(); },
+                () => !own.Picking));
+            List<string> files = CustomEnvironments.Files();
+            // Las cinco más nuevas (el menú tiene lugar para ocho).
+            for (int i = Mathf.Max(0, files.Count - 5); i < files.Count; i++)
+            {
+                string file = files[i];
+                string name = "Mi entorno " + (i + 1);
+                options.Add(new MenuOption(_removeEnvironment == file ? "¿Borrar? Toca\notra vez" : name, () =>
+                {
+                    if (!_removingEnvironment) { own.Show(file); return; }
+                    if (_removeEnvironment != file) { _removeEnvironment = file; RebuildOptions(); return; }
+                    own.Remove(file);
+                    _removeEnvironment = null;
+                    _removingEnvironment = false;
+                    RebuildOptions();
+                }, marked: () => own.Shown == file));
+            }
+            if (files.Count == 0) options.Add(new MenuOption("Usa una foto 360°\n(panorámica 2:1)"));
+            else options.Add(new MenuOption(_removingEnvironment ? "Elige el entorno\na borrar" : "Borrar un entorno",
+                () => { _removingEnvironment = !_removingEnvironment; _removeEnvironment = null; RebuildOptions(); },
+                marked: () => _removingEnvironment));
+        }
+
         /// <summary>Página, letra y tamaño del libro abierto (antes Ajustes → Lectura).</summary>
         private void AddPageOptions(List<MenuOption> options)
         {
@@ -839,13 +872,19 @@ namespace FolioXR.Menu
                 }
                 case MenuCategory.Entornos:
                 {
-                    // Once estilos (docs/ENTORNOS.md), en páginas de ocho; el marcado es el activo.
+                    // Diez estilos (docs/ENTORNOS.md), en páginas de ocho; el marcado es el activo.
                     const int themesPerPage = 8;
                     var themes = EnvironmentThemes.All;
-                    int themePages = (themes.Count + themesPerPage - 1) / themesPerPage;
+                    int themePages = Mathf.Max(1, (themes.Count + themesPerPage - 1) / themesPerPage);
                     _themePage = Mathf.Clamp(_themePage, 0, themePages - 1);
-                    options.Add(new MenuOption("Passthrough", () => _environment.Leave(),
-                        () => _environment != null, () => _environment != null && !_environment.IsActive));
+                    CustomEnvironments own = CustomEnvironments.Instance;
+                    if (_ownEnvironments) { AddOwnEnvironments(options, own); break; }
+                    options.Add(new MenuOption("Passthrough", () => { own?.Hide(); _environment.Leave(); },
+                        () => _environment != null,
+                        () => _environment != null && !_environment.IsActive && (own == null || !own.Showing)));
+                    // Pedido del usuario (17 nov 2026): crear un entorno propio con una foto 360°.
+                    options.Add(new MenuOption("Mis entornos\n(fotos 360°)", () => { _ownEnvironments = true; RebuildOptions(); },
+                        () => own != null, () => own != null && own.Showing));
                     if (_environment != null && _environment.IsActive && _environment.PointNames.Count > 0)
                     {
                         int next = (_pointCursor + 1) % _environment.PointNames.Count;

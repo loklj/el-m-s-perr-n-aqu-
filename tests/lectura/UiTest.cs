@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using FolioXR.Books;
+using FolioXR.Environments;
 using FolioXR.Menu;
 using FolioXR.Reading;
 using UnityEngine;
@@ -54,6 +55,16 @@ class UiTest {
   Check((int)typeof(BookLibrary).GetField("_relocatePage",BindingFlags.NonPublic|BindingFlags.Instance).GetValue(library)==3,"Repaginación no redondea antes de GoToPage");
   Call(library,"Update");Check(book.Destination==3,"Reubicación entrega destino real");
   var wifi=JsonUtility.FromJson<WifiStatus>("{\"copied\":4294967297,\"total\":8589934592}");Check(wifi.copied==4294967297L&&wifi.total==8589934592L,"Progreso Wi-Fi de 64 bits");
+  // Entornos propios (17 nov 2026): fotos 360° en Entornos → Mis entornos.
+  menu.Select(MenuCategory.Entornos);menu.Invoke(menu.Options.ToList().FindIndex(x=>x.Text.StartsWith("Mis entornos")));
+  Check(menu.Options.Any(x=>x.Text.StartsWith("+ Nuevo entorno"))&&menu.Options.Any(x=>x.Text.StartsWith("Usa una foto 360")),"Mis entornos vacío");
+  CustomEnvironments.Picked.Add("/a/entorno-1.jpg");CustomEnvironments.Picked.Add("/a/entorno-2.jpg");CustomEnvironments.Raise();
+  menu.Invoke(menu.Options.ToList().FindIndex(x=>x.Text=="Mi entorno 2"));Check(CustomEnvironments.Instance.Shown=="/a/entorno-2.jpg","Elegir un entorno propio");
+  menu.Invoke(menu.Options.ToList().FindIndex(x=>x.Text=="Borrar un entorno"));menu.Invoke(menu.Options.ToList().FindIndex(x=>x.Text=="Mi entorno 1"));
+  Check(menu.Options.Any(x=>x.Text.StartsWith("¿Borrar?")),"Borrar pide confirmación");menu.Invoke(menu.Options.ToList().FindIndex(x=>x.Text.StartsWith("¿Borrar?")));
+  Check(CustomEnvironments.Picked.Count==1,"Entorno propio borrado");
+  menu.Invoke(menu.Options.ToList().FindIndex(x=>x.Text=="Volver"));menu.Invoke(menu.Options.ToList().FindIndex(x=>x.Text=="Passthrough"));
+  Check(!CustomEnvironments.Instance.Showing,"Passthrough quita la foto");
   // Idiomas (16 nov 2026): tabla real, detección y textos compuestos.
   Resources.IdiomasPath=argv[0];
   Check(Loc.Current=="es"&&Loc.Menu("Marcar pág. 12")=="Marcar pág. 12","Español sin tocar");

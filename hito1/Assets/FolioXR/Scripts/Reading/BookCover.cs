@@ -287,6 +287,9 @@ namespace FolioXR.Reading
             if (_frontMaterial != null) _frontMaterial.mainTexture = front;
             if (_backMaterial != null) _backMaterial.mainTexture = back;
             _artColor = EdgeColor(front);
+            // La estantería pinta el lomo de este libro con el mismo color (CoverThumbs).
+            if (_artColor.HasValue && _book != null && !string.IsNullOrEmpty(_book.DocumentId))
+                CoverThumbs.SetColor(_book.DocumentId, _artColor.Value);
             UpdateMaterial();
             _frontImage.enabled = _own && front != null;
             _backImage.enabled = _own && back != null;

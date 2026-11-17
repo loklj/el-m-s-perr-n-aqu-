@@ -789,8 +789,10 @@ def malla_de_agua(P, path, radio=147.0, cerca=36.0):
     panorama, llega hasta la orilla. Unity lo pinta con reflejo del cielo (FolioXRWater.shader).
     Devuelve los triángulos escritos (0 si el tema no tiene agua)."""
     if not P.con_agua: return 0
+    y = paisaje.GY + paisaje.AGUA
+    # Cerca (hasta «cerca» m): celdas de una grilla polar, con margen; el terreno tapa lo que sobre.
     radios = [3.0]
-    while radios[-1] < radio: radios.append(min(radio, radios[-1] + max(0.8, radios[-1] * 0.03)))
+    while radios[-1] < cerca: radios.append(min(cerca, radios[-1] + 0.8))
     radios = np.array(radios)
     ang = np.linspace(0, 2 * math.pi, 361)
     R, A = np.meshgrid(radios, ang, indexing='ij')
@@ -800,14 +802,46 @@ def malla_de_agua(P, path, radio=147.0, cerca=36.0):
     Rm, Am = np.meshgrid(rm, am, indexing='ij')
     centro = P.altura(np.cos(Am) * Rm, np.sin(Am) * Rm)
     minimo = np.minimum(np.minimum(alto[:-1, :-1], alto[:-1, 1:]), np.minimum(alto[1:, :-1], alto[1:, 1:]))
-    # Cerca: con margen (el terreno tapa lo que sobre). Lejos: solo donde de verdad hay agua.
-    pone = np.where(Rm < cerca, np.minimum(minimo, centro) < paisaje.AGUA + 0.3, centro < paisaje.AGUA - 0.02)
-    pos = np.stack([x, np.full_like(x, paisaje.GY + paisaje.AGUA), z], -1).reshape(-1, 3)
+    pone = np.minimum(minimo, centro) < paisaje.AGUA + 0.3
+    pos = [np.stack([x, np.full_like(x, y), z], -1).reshape(-1, 3)]
     m = len(ang)
     ii, jj = np.nonzero(pone)
-    if not len(ii): return 0
     a = ii * m + jj
-    tri = np.concatenate([np.stack([a, a + 1, a + m + 1], 1), np.stack([a, a + m + 1, a + m], 1)]).astype(np.uint32)
+    tri = [np.stack([a, a + 1, a + m + 1], 1), np.stack([a, a + m + 1, a + m], 1)]
+    # Lejos: donde la tierra solo está pintada en el panorama, el agua llega justo hasta la orilla. Antes eran
+    # celdas sueltas y la orilla salía en escalones (17 nov 2026): ahora, en cada dirección, se
+    # busca la orilla con precisión de 10 cm (720 direcciones) y la franja de agua termina ahí.
+    na = 720
+    ang2 = np.linspace(0, 2 * math.pi, na + 1)[:-1]
+    paso = 0.1
+    rr = np.arange(cerca, radio + paso, paso)
+    Rr, Aa = np.meshgrid(rr, ang2, indexing='ij')
+    tierra = P.altura(np.cos(Aa) * Rr, np.sin(Aa) * Rr) >= paisaje.AGUA - 0.02
+    # En cada dirección, el primer tramo de agua después de «cerca»: desde donde empieza hasta la orilla
+    # siguiente (o el final). Así también se cubre el mar que corre paralelo a la costa.
+    agua = ~tierra
+    hay = agua.any(0)
+    ini = np.where(hay, agua.argmax(0), 0)
+    despues = tierra & (np.arange(len(rr))[:, None] > ini[None, :])
+    fin_i = np.where(despues.any(0), despues.argmax(0), len(rr) - 1)
+    desde = np.where(hay, rr[np.maximum(ini - 1, 0)], cerca)
+    fin = np.where(hay, rr[fin_i], cerca)
+    k = 14                                                             # Puntos por franja.
+    t = np.linspace(0, 1, k)
+    r2 = desde[None, :] + (fin - desde)[None, :] * (t[:, None] ** 1.5)  # Más puntos del lado de la casa.
+    x2, z2 = np.cos(ang2)[None, :] * r2, np.sin(ang2)[None, :] * r2
+    base = len(pos[0])
+    pos.append(np.stack([x2, np.full_like(x2, y), z2], -1).reshape(-1, 3))
+    fila, col = np.meshgrid(np.arange(k - 1), np.arange(na), indexing='ij')
+    sig = (col + 1) % na
+    usar = (hay[col] | hay[sig]).ravel()
+    p00 = (base + fila * na + col).ravel()[usar]; p01 = (base + fila * na + sig).ravel()[usar]
+    p10 = (base + (fila + 1) * na + col).ravel()[usar]; p11 = (base + (fila + 1) * na + sig).ravel()[usar]
+    # Mismo sentido de giro que las celdas cercanas (de ángulo a ángulo + 1, de radio a radio + 1).
+    tri += [np.stack([p00, p01, p11], 1), np.stack([p00, p11, p10], 1)]
+    pos = np.concatenate(pos)
+    tri = np.concatenate(tri).astype(np.uint32)
+    if not len(tri): return 0
     usados, inv = np.unique(tri, return_inverse=True)
     pos = pos[usados]
     with open(path, 'wb') as f:
@@ -1045,6 +1079,8 @@ def todo(t, a):
     if not malla_de_agua(ctx['P'], f'{out}/agua_malla.bytes') and os.path.exists(f'{out}/agua_malla.bytes'):
         os.remove(f'{out}/agua_malla.bytes')
     with open(f'{out}/datos.json', 'w') as f: json.dump(datos, f, indent=1)
+    import suelo
+    suelo.tema(slug)                                                   # Suelo caminable y límite (escribe datos.json).
     comprobar(ctx, [(casa_ob, f'{out}/casa_luz.jpg'), (cerca_ob, f'{out}/cerca_luz.jpg')], f'{out}/cielo.jpg',
               a.vista.split(','), ojo)
     log(f'{slug} listo en {(time.time() - t0) / 60:.1f} min')

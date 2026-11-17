@@ -77,6 +77,8 @@ namespace FolioXR.Reading
                 small.ReadPixels(new Rect(0, 0, width, Height), 0, 0);
                 small.Apply(false, false);
                 File.WriteAllBytes(FileFor(id), small.EncodeToJPG(86));
+                // Si la tapa todavía no dio su color (BookCover), sirve el borde de la miniatura.
+                if (!TryGetColor(id, out _)) SetColor(id, Edge(small.GetPixels32(), width, Height), false);
             }
             catch (Exception e)
             {
@@ -93,10 +95,62 @@ namespace FolioXR.Reading
             Changed?.Invoke();
         }
 
+        // ───────────── Color del libro (17 nov 2026) ─────────────
+        // Pedido del usuario: en la estantería cada libro con su color, el mismo del libro en la mano (un
+        // Condorito gris, otro amarillo…). Con tapas propias, la tapa toma el color del borde de la portada
+        // (BookCover); ese color se guarda aquí y la estantería lo usa para el lomo.
+        private const string ColorPrefix = "folioxr.book.color.";
+
+        public static bool TryGetColor(string id, out Color color)
+        {
+            color = Color.gray;
+            if (string.IsNullOrEmpty(id)) return false;
+            string text = PlayerPrefs.GetString(ColorPrefix + id, string.Empty);
+            if (text.Length != 6) return false;
+            try
+            {
+                int v = Convert.ToInt32(text, 16);
+                color = new Color(((v >> 16) & 255) / 255f, ((v >> 8) & 255) / 255f, (v & 255) / 255f, 1f);
+                return true;
+            }
+            catch (Exception) { return false; }
+        }
+
+        /// <summary>Guarda el color del libro; avisa a la estantería si cambió de verdad.</summary>
+        public static void SetColor(string id, Color color, bool notify = true)
+        {
+            if (string.IsNullOrEmpty(id)) return;
+            int r = Mathf.Clamp(Mathf.RoundToInt(color.r * 255f), 0, 255), g = Mathf.Clamp(Mathf.RoundToInt(color.g * 255f), 0, 255),
+                b = Mathf.Clamp(Mathf.RoundToInt(color.b * 255f), 0, 255);
+            string text = ((r << 16) | (g << 8) | b).ToString("x6");
+            if (PlayerPrefs.GetString(ColorPrefix + id, string.Empty) == text) return;
+            PlayerPrefs.SetString(ColorPrefix + id, text);
+            PlayerPrefs.Save();
+            if (notify) Changed?.Invoke();
+        }
+
+        /// <summary>Promedio del borde de una imagen (3 % de cada lado), un poco más oscuro como el canto de la tapa.</summary>
+        internal static Color Edge(Color32[] pixels, int width, int height)
+        {
+            int band = Mathf.Max(1, Mathf.RoundToInt(Mathf.Min(width, height) * 0.03f));
+            long r = 0, g = 0, b = 0, count = 0;
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                {
+                    if (x >= band && x < width - band && y >= band && y < height - band) { x = width - band - 1; continue; }
+                    Color32 p = pixels[y * width + x];
+                    r += p.r; g += p.g; b += p.b; count++;
+                }
+            if (count == 0) return new Color(0.22f, 0.21f, 0.2f);
+            const float shade = 0.9f / 255f;
+            return new Color(r * shade / count, g * shade / count, b * shade / count, 1f);
+        }
+
         /// <summary>El libro salió de la biblioteca: su miniatura ya no hace falta.</summary>
         public static void Forget(string id)
         {
             if (string.IsNullOrEmpty(id)) return;
+            PlayerPrefs.DeleteKey(ColorPrefix + id);
             if (Loaded.TryGetValue(id, out Texture2D old) && old != null) UnityEngine.Object.Destroy(old);
             Loaded.Remove(id);
             try { File.Delete(FileFor(id)); } catch (Exception) { }

@@ -24,6 +24,7 @@ namespace FolioXR.Environments
             public float texels_cerca = 60f;
             public float[] agua;           // Color del agua (sRGB) en los temas que tienen.
             public float[] luz_estantes;   // Por estantería y fila (desde abajo): rojo, verde y azul.
+            public float[] limite;         // Radios caminables, uno cada 5° desde +Z hacia +X (suelo.py).
         }
 
         internal static bool Exists(EnvironmentTheme theme)
@@ -100,11 +101,60 @@ namespace FolioXR.Environments
                     waterMaterial.SetColor("_Color", new Color(data.agua[0], data.agua[1], data.agua[2], 1f));
                 Part(result, "Agua cercana", ReadMesh(water, "FolioXR agua"), waterMaterial, Vector3.zero);
             }
+            Ground(result, Resources.Load<TextAsset>(path + "suelo_malla"), data.limite);
             Part(result, "Cielo panorámico", SkySphere(HouseGenerator.SkyRadius),
                  Material(result, shader, unlitFallback, sky, null, 0f, 0f, "Cielo panorámico"), eye);
             result.MaterialCount = 3;
             Debug.Log("[FolioXR] Entorno horneado «" + theme.Baked + "»: atlas " + houseLight.width + " px, cielo " +
                       sky.width + "x" + sky.height + ", sombreador " + (shader != null ? "FolioXR/Baked" : "URP Unlit") + ".");
+        }
+
+        /// <summary>
+        /// Suelo caminable y límite (17 nov 2026). La tabla plana de 120 m de HouseGenerator dejaba a la persona
+        /// enterrada en las dunas o flotando sobre los bajos, y la dejaba salir del terreno cercano (34 m), donde
+        /// solo queda el panorama: en el desierto se veía una franja oscura cruzando el suelo. Ahora se camina
+        /// sobre la forma del terreno (suelo_malla, de herramientas/entornos/suelo.py) y una pared invisible
+        /// detiene a la persona unos metros antes del borde y antes del agua.
+        /// </summary>
+        private static void Ground(HouseBuildResult result, TextAsset ground, float[] limit)
+        {
+            if (ground == null) return;
+            Mesh mesh = ReadMesh(ground, "FolioXR suelo caminable");   // Legible: el colisionador la necesita.
+            result.Own(mesh);
+            var floor = new GameObject("Suelo caminable (sin renderer)");
+            floor.transform.SetParent(result.Root.transform, false);
+            var collider = floor.AddComponent<MeshCollider>();
+            collider.sharedMesh = mesh;
+            result.TeleportFloors.Add(collider);
+            // Fuera la tabla plana: con el suelo verdadero solo estorba (asomaría sobre los bajos).
+            var flat = new System.Collections.Generic.List<Collider>();
+            foreach (Collider c in result.TeleportFloors)
+                if (c is BoxCollider box && box.size.x >= 100f && box.size.z >= 100f) flat.Add(c);
+            foreach (Collider c in flat)
+            {
+                result.TeleportFloors.Remove(c);
+                UnityEngine.Object.Destroy(c.gameObject);
+            }
+            if (limit == null || limit.Length < 8) return;
+            var walls = new GameObject("Límite caminable (sin renderer)");
+            walls.transform.SetParent(result.Root.transform, false);
+            int n = limit.Length;
+            for (int k = 0; k < n; k++)
+            {
+                Vector3 a = Edge(k, n, limit[k]), b = Edge(k + 1, n, limit[(k + 1) % n]);
+                var wall = new GameObject("Pared " + k);
+                wall.transform.SetParent(walls.transform, false);
+                Vector3 along = b - a;
+                wall.transform.localPosition = (a + b) * 0.5f + Vector3.up * 1.5f;
+                wall.transform.localRotation = Quaternion.LookRotation(along.normalized, Vector3.up);
+                wall.AddComponent<BoxCollider>().size = new Vector3(0.4f, 7f, along.magnitude + 0.4f);
+            }
+        }
+
+        private static Vector3 Edge(int k, int n, float radius)
+        {
+            float a = 2f * Mathf.PI * k / n;
+            return new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a)) * radius;
         }
 
         private static void Configure(Texture2D texture, bool sky)
@@ -192,6 +242,9 @@ namespace FolioXR.Environments
         }
 
         /// <summary>Esfera con UV equirectangular: u = 0,5 + atan2(x, z)/2π, v = 0,5 + asin(y)/π (igual que el panorama).</summary>
+        /// <summary>Esfera del cielo (también para los entornos propios: CustomEnvironments).</summary>
+        internal static Mesh Sphere(float radius) => SkySphere(radius);
+
         private static Mesh SkySphere(float radius)
         {
             const int segments = 96, rings = 48;

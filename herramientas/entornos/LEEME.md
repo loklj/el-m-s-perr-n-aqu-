@@ -42,9 +42,9 @@ Guarda los archivos originales en `/tmp/bl/cache/original/<tema>/` y se puede re
 ## Retoques sobre un tema ya horneado
 
 ```bash
-python3 generar.py casa-del-lago --solo agua
-python3 generar.py casa-del-lago --solo hojas
-python3 generar.py casa-del-lago --solo escalera
+python3 generar.py casa-de-playa --solo agua
+python3 generar.py casa-de-playa --solo hojas
+python3 generar.py casa-de-playa --solo escalera
 ```
 
 - `--solo agua` crea `agua_malla.bytes`: un plano a la altura del agua. Hasta 36 m cubre todo lo que pueda quedar bajo el agua (el terreno lo tapa donde asoma, así la orilla sale sola); más lejos llega hasta la orilla pintada en el panorama. Unity lo pinta con reflejo del cielo y ondas (`FolioXRWater.shader`) y con el color `agua` que este paso deja en `datos.json`. Solo en los temas con agua (lago, playa, isla); en los demás no escribe nada.
@@ -53,6 +53,15 @@ python3 generar.py casa-del-lago --solo escalera
 - `--solo escalera` repone en `casa_malla.bytes` las contrahuellas que el horneado quita por error de la mitad de la escalera hacia arriba; cada una toma el color de la última que sí está. Se puede repetir (no agrega dos veces).
 
 Un horneado completo hace los tres pasos al final.
+
+## Suelo caminable y límite
+
+```bash
+python3 suelo.py                  # todos los temas
+python3 suelo.py casa-del-desierto
+```
+
+No necesita Blender: lee `cerca_malla.bytes` ya exportado y escribe `suelo_malla.bytes` (grilla de 0,5 m con la altura del terreno; Unity la usa como colisionador para caminar y teletransportarse) y `limite` en `datos.json` (72 radios, uno cada 5° desde +Z hacia +X, hasta 26 m, 8 m antes del borde del terreno cercano y 1 m antes del agua; Unity levanta ahí una pared invisible). Un horneado completo lo hace al final.
 
 ## Qué produce
 
@@ -63,6 +72,7 @@ En `hito1/Assets/FolioXR/Resources/Entornos/<tema>/`:
 | `casa_malla.bytes` y `casa_luz.jpg` | Casa y muebles, con su atlas de color y luz |
 | `cerca_malla.bytes` y `cerca_luz.jpg` | Terreno hasta 34 m, árboles, arbustos, rocas y pasto |
 | `cielo.jpg` | Panorama de 360° con el cielo y todo el paisaje lejano |
+| `suelo_malla.bytes` | Suelo caminable (solo colisión, sin textura); `datos.json` → `limite` con los radios de la pared invisible |
 | `agua_malla.bytes` | Solo en temas con agua: superficie del agua, sin atlas (refleja el panorama) |
 | `datos.json` | Exposición, centro del panorama, densidad de texels y luz de cada fila de las estanterías |
 

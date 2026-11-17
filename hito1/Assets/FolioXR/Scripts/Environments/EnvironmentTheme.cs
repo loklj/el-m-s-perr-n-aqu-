@@ -113,19 +113,8 @@ namespace FolioXR.Environments
                 MountainHeight = 42f,
                 Leaves = new[] { C(0x1F4429), C(0x264D2E), C(0x2D5733), C(0x1C3B26) }
             },
-            new EnvironmentTheme
-            {
-                Name = "Casa del lago", Baked = "casa-del-lago", Seed = 4402,
-                Wall = C(0xEFE6D6), Wood = C(0xB9895A), Fabric = C(0x3F5E6E), Metal = C(0x272A2C),
-                Foliage = C(0x4C6B34), BookPalette = WarmBooks,
-                SkyHorizon = C(0xF7B47A), SkyZenith = C(0x4A5C92),
-                AmbientSky = C(0xB49AA0), AmbientEquator = C(0xC08A64), AmbientGround = C(0x4A3A30),
-                Exterior = ExteriorKind.Lake, Sky = SkyKind.Sunset, SunAzimuth = 262f, SunElevation = 9f,
-                SunColor = C(0xFFB070), SunIntensity = 0.9f, CloudCover = 0.4f, CloudColor = C(0xFFC9A0),
-                Ground = C(0x4D6630), GroundAlt = C(0x6B7238), Rock = C(0x6E675E), Water = C(0x23455A),
-                MountainHeight = 20f,
-                Leaves = new[] { C(0x2E4A24), C(0x3A5A2A), C(0x23402A), C(0x445E2C) }
-            },
+            // «Casa del lago» se quitó el 17 nov 2026 (pedido del usuario: fuera los entornos con fallas a la vista):
+            // el lago queda a 12 m de la casa y, al caminar, la orilla pintada en el panorama no calzaba con el terreno.
             new EnvironmentTheme
             {
                 Name = "Casa de playa", Baked = "casa-de-playa", Seed = 9120, HouseWidth = 13f,
